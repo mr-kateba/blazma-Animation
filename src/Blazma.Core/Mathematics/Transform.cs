@@ -1,6 +1,7 @@
 namespace Blazma.Core.Mathematics;
 
 /// <summary>Translation-rotation-scale transform; points map as T + R * (S ⊙ p).</summary>
+[System.Text.Json.Serialization.JsonConverter(typeof(Blazma.Core.Serialization.TransformJsonConverter))]
 public readonly record struct Transform(Vec3 Translation, Quat Rotation, Vec3 Scale)
 {
     /// <summary>No translation, identity rotation, unit scale.</summary>

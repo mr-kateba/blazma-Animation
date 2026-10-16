@@ -8,7 +8,7 @@ namespace Blazma.Rigging;
 /// The built-in humanoid mannequin (1.80 m, 75 kg, T-pose, identity rest rotations so every
 /// bone's local axes match model axes). Masses follow Winter's segment fractions
 /// (Biomechanics and Motor Control of Human Movement) and are approximations.
-/// Joint limits: only the clearly anatomical ones (knees, elbows) for now.
+/// Joint limits: only the clearly anatomical ones (knee and elbow hinges) for now.
 /// </summary>
 public static class MannequinFactory
 {
@@ -44,14 +44,21 @@ public static class MannequinFactory
             Add(H.Toe(side), H.Foot(side), 0, -0.04, 0.13, 0.0025);
         }
 
-        // Knees hinge forward only (positive X rotation swings the shin backwards).
         foreach (var side in new[] { Side.Left, Side.Right })
         {
-            byName[H.Calf(side)].Limits = new JointLimits { MinDegrees = new Vec3(0, -5, -5), MaxDegrees = new Vec3(150, 5, 5) };
-            // Elbows: the forearm folds towards the front (+Z). Left arm points +X, so that is −Y; right is +Y.
-            byName[H.LowerArm(side)].Limits = side == Side.Left
-                ? new JointLimits { MinDegrees = new Vec3(-90, -150, -5), MaxDegrees = new Vec3(90, 0, 5) }
-                : new JointLimits { MinDegrees = new Vec3(-90, 0, -5), MaxDegrees = new Vec3(90, 150, 5) };
+            // Knees: hinge about X; positive X swings the shin backwards. Little twist allowed.
+            byName[H.Calf(side)].Limits = new JointLimits
+            {
+                Hinge = new HingeLimit { Axis = Vec3.UnitX, MinDegrees = 0, MaxDegrees = 150, MaxSwingDegrees = 10 },
+            };
+            // Elbows: hinge about Y; the forearm folds to the front (+Z), which is −Y for the left arm
+            // (pointing +X) and +Y for the right. The swing cone also allows forearm twist (approximation).
+            byName[H.LowerArm(side)].Limits = new JointLimits
+            {
+                Hinge = side == Side.Left
+                    ? new HingeLimit { Axis = Vec3.UnitY, MinDegrees = -150, MaxDegrees = 0, MaxSwingDegrees = 90 }
+                    : new HingeLimit { Axis = Vec3.UnitY, MinDegrees = 0, MaxDegrees = 150, MaxSwingDegrees = 90 },
+            };
         }
 
         RigSetup.AddStandardIk(rig);

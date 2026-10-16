@@ -162,3 +162,57 @@ public sealed class FrameRateJsonConverter : JsonConverter<FrameRate>
         writer.WriteEndObject();
     }
 }
+
+/// <summary>
+/// Transform as {"translation":[x,y,z],"rotation":[x,y,z,w],"scale":[x,y,z]}. Missing parts default
+/// to identity (a missing scale must not become 0 and collapse a skeleton); rotations are normalized;
+/// a zero-length rotation or a zero scale component is rejected.
+/// </summary>
+public sealed class TransformJsonConverter : JsonConverter<Transform>
+{
+    /// <inheritdoc />
+    public override Transform Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject)
+            throw new JsonException("Transform must be a JSON object.");
+        var t = Vec3.Zero;
+        var r = Quat.Identity;
+        var s = Vec3.One;
+        var vec = new Vec3JsonConverter();
+        var quat = new QuatJsonConverter();
+        while (reader.Read())
+        {
+            if (reader.TokenType == JsonTokenType.EndObject)
+            {
+                if (r.Length() < 1e-12) throw new JsonException("Transform rotation has zero length.");
+                if (s.X == 0 || s.Y == 0 || s.Z == 0) throw new JsonException("Transform scale must not contain 0.");
+                // Only renormalize when needed, so saved data round-trips bit-exactly.
+                return new Transform(t, Math.Abs(r.Length() - 1) > 1e-12 ? r.Normalized() : r, s);
+            }
+            if (reader.TokenType != JsonTokenType.PropertyName) throw new JsonException("Invalid Transform.");
+            var name = reader.GetString();
+            reader.Read();
+            switch (name)
+            {
+                case "translation": t = vec.Read(ref reader, typeof(Vec3), options); break;
+                case "rotation": r = quat.Read(ref reader, typeof(Quat), options); break;
+                case "scale": s = vec.Read(ref reader, typeof(Vec3), options); break;
+                default: reader.Skip(); break;
+            }
+        }
+        throw new JsonException("Unterminated Transform.");
+    }
+
+    /// <inheritdoc />
+    public override void Write(Utf8JsonWriter writer, Transform value, JsonSerializerOptions options)
+    {
+        writer.WriteStartObject();
+        writer.WritePropertyName("translation");
+        new Vec3JsonConverter().Write(writer, value.Translation, options);
+        writer.WritePropertyName("rotation");
+        new QuatJsonConverter().Write(writer, value.Rotation, options);
+        writer.WritePropertyName("scale");
+        new Vec3JsonConverter().Write(writer, value.Scale, options);
+        writer.WriteEndObject();
+    }
+}

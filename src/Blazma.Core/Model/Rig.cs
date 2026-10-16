@@ -42,8 +42,14 @@ public sealed class RigSource
 {
     public RigSourceKind Kind { get; set; } = RigSourceKind.Builtin;
 
-    /// <summary>Asset path relative to the project file for imported rigs.</summary>
+    /// <summary>Original file name/path the rig was imported from (informational).</summary>
     public string? AssetPath { get; set; }
+
+    /// <summary>Embedded model file (see <see cref="Project.Assets"/>); empty for built-in rigs.</summary>
+    public ObjectId Asset { get; set; }
+
+    /// <summary>Bone id → glTF node index in the embedded file, used to drive the rendered skeleton.</summary>
+    public Dictionary<string, int> NodeIndex { get; set; } = new();
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<RigSourceKind>))]
@@ -66,11 +72,24 @@ public sealed class Bone
     public JointLimits? Limits { get; set; }
 }
 
-/// <summary>Per-axis limits in degrees on the local rotation relative to rest, as intrinsic Euler XYZ.</summary>
+/// <summary>
+/// Limits on a bone's local rotation relative to rest. If <see cref="Hinge"/> is set it is used
+/// (swing-twist, robust for knees/elbows beyond 90°); otherwise per-axis intrinsic Euler XYZ limits.
+/// </summary>
 public sealed class JointLimits
 {
     public Vec3 MinDegrees { get; set; }
     public Vec3 MaxDegrees { get; set; }
+    public HingeLimit? Hinge { get; set; }
+}
+
+/// <summary>Rotation about <see cref="Axis"/> (bone-local, relative to rest) limited to [Min, Max] degrees; any other rotation limited to a cone of <see cref="MaxSwingDegrees"/>.</summary>
+public sealed class HingeLimit
+{
+    public Vec3 Axis { get; set; } = Vec3.UnitX;
+    public double MinDegrees { get; set; }
+    public double MaxDegrees { get; set; }
+    public double MaxSwingDegrees { get; set; }
 }
 
 public sealed class RigControl

@@ -40,6 +40,8 @@ public static class ProjectArchive
             entries[$"rigs/{rig.Id}.json"] = JsonSerializer.SerializeToUtf8Bytes(rig, JsonOptions);
         foreach (var pose in project.PoseLibrary)
             entries[$"poses/{pose.Id}.json"] = JsonSerializer.SerializeToUtf8Bytes(pose, JsonOptions);
+        foreach (var asset in project.Assets)
+            entries[asset.ArchivePath] = asset.Data;
         entries[SceneEntry] = JsonSerializer.SerializeToUtf8Bytes(new JsonObject
         {
             ["characters"] = JsonSerializer.SerializeToNode(project.Characters, JsonOptions),
@@ -62,6 +64,7 @@ public static class ProjectArchive
             ["rigs"] = new JsonArray(project.Rigs.Select(r => (JsonNode?)r.Id.ToString()).ToArray()),
             ["poses"] = new JsonArray(project.PoseLibrary.Select(p => (JsonNode?)p.Id.ToString()).ToArray()),
             ["scene"] = SceneEntry,
+            ["assets"] = JsonSerializer.SerializeToNode(project.Assets, JsonOptions),
             ["metadata"] = JsonSerializer.SerializeToNode(project.Metadata, JsonOptions),
             ["files"] = files,
         };
@@ -93,7 +96,8 @@ public static class ProjectArchive
                 var actual = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
                 if (!string.Equals(actual, (string?)hashNode, StringComparison.OrdinalIgnoreCase))
                     throw new ProjectFormatException("integrity", $"Checksum mismatch for '{path}'. The file is damaged.");
-                doc.Entries[path] = ParseObject(bytes, path);
+                if (path.StartsWith("assets/", StringComparison.Ordinal)) doc.Binary[path] = bytes;
+                else doc.Entries[path] = ParseObject(bytes, path);
             }
 
             SchemaMigrations.MigrateToCurrent(doc);
@@ -122,6 +126,13 @@ public static class ProjectArchive
                 if (!doc.Entries.TryGetValue(scenePath, out var sceneNode))
                     throw new ProjectFormatException("missing_entry", $"Scene entry '{scenePath}' is missing.");
                 project.Characters.AddRange(sceneNode["characters"].Deserialize<List<Character>>(JsonOptions) ?? new());
+            }
+            foreach (var asset in r["assets"].Deserialize<List<ProjectAsset>>(JsonOptions) ?? new())
+            {
+                if (!doc.Binary.TryGetValue(asset.ArchivePath, out var data))
+                    throw new ProjectFormatException("missing_entry", $"Embedded asset '{asset.ArchivePath}' is missing.");
+                asset.Data = data;
+                project.Assets.Add(asset);
             }
             Validate(project);
             if (project.Id.IsEmpty)
@@ -160,6 +171,9 @@ public static class ProjectArchive
                     throw new ProjectFormatException("invalid_json", $"Rig '{rig.Name}': duplicate bone id {bone.Id}.");
             }
         }
+        foreach (var rig in p.Rigs)
+            if (!rig.Source.Asset.IsEmpty && p.FindAsset(rig.Source.Asset) is null)
+                throw new ProjectFormatException("invalid_json", $"Rig '{rig.Name}' refers to a missing embedded asset.");
         foreach (var c in p.Characters)
             if (p.FindRig(c.Rig) is null)
                 throw new ProjectFormatException("invalid_json", $"Character '{c.Name}' refers to a missing rig.");
@@ -209,4 +223,5 @@ public sealed class ArchiveDocument(JsonObject root)
 {
     public JsonObject Root { get; } = root;
     public Dictionary<string, JsonObject> Entries { get; } = new(StringComparer.Ordinal);
+    public Dictionary<string, byte[]> Binary { get; } = new(StringComparer.Ordinal);
 }

@@ -45,28 +45,52 @@ public static class PoseSolver
     public static IkChain? ChainForControl(Rig rig, ObjectId controlId) =>
         rig.IkChains.Find(c => c.Target == controlId || c.Pole == controlId);
 
+    /// <summary>
+    /// Model-space transform of a control. IK targets are stored in model space (pinned feet stay
+    /// planted when the body moves); poles are stored in the space of the rig's first bone, so
+    /// they travel with the character.
+    /// </summary>
+    public static Transform ControlModel(Rig rig, Pose pose, RigControl control, Transform[] model)
+    {
+        var t = StateOf(rig, pose, control.Id).Transform;
+        return control.Kind == ControlKind.Pole && model.Length > 0 ? model[0] * t : t;
+    }
+
+    /// <summary>Inverse of <see cref="ControlModel"/>: the value to store for a model-space transform.</summary>
+    public static Transform ToControlSpace(RigControl control, Transform modelSpace, Transform[] model) =>
+        control.Kind == ControlKind.Pole && model.Length > 0 ? RigEvaluator.LocalFromModel(model[0], modelSpace) : modelSpace;
+
     static void SolveChain(RigEvaluator ev, Pose pose, IkChain chain)
     {
         var rig = ev.Rig;
         int iu = ev.IndexOf(chain.Upper), il = ev.IndexOf(chain.Lower), ie = ev.IndexOf(chain.End);
         if (iu < 0 || il < 0 || ie < 0 || ev.ParentOf(il) != iu || ev.ParentOf(ie) != il) return;
 
+        // Pure function of target, pole and parents: always start from the chain's rest rotations.
         var locals = ev.Locals(pose);
+        locals[iu] = locals[iu] with { Rotation = rig.Bones[iu].Rest.Rotation };
+        locals[il] = locals[il] with { Rotation = rig.Bones[il].Rest.Rotation };
+        locals[ie] = locals[ie] with { Rotation = rig.Bones[ie].Rest.Rotation };
         var model = ev.Model(locals);
+
         var target = StateOf(rig, pose, chain.Target).Transform;
-        // Poles live in the space of the rig's top bone, so they travel with the character;
-        // IK targets live in model space, so pinned feet stay planted when the body moves.
-        Vec3? pole = chain.Pole.IsEmpty ? null
-            : model[0].TransformPoint(StateOf(rig, pose, chain.Pole).Transform.Translation);
+        Vec3? pole = chain.Pole.IsEmpty || rig.FindControl(chain.Pole) is not { } poleControl ? null
+            : ControlModel(rig, pose, poleControl, model).Translation;
+
+        // The default bend is defined at rest; carry it along with the upper bone's parent.
+        var parent = ev.ParentOf(iu);
+        var restModel = ev.RestModel();
+        var carry = parent < 0 ? Quat.Identity : (model[parent].Rotation * restModel[parent].Rotation.Inverse()).Normalized();
+        var bend = carry.Rotate(chain.DefaultBend);
 
         var r = TwoBoneIk.Solve(model[iu].Translation, model[il].Translation, model[ie].Translation,
-            target.Translation, pole, chain.DefaultBend);
+            target.Translation, pole, bend);
 
-        var parentOfUpper = ev.ParentOf(iu) < 0 ? Transform.Identity : model[ev.ParentOf(iu)];
+        var parentModel = parent < 0 ? Transform.Identity : model[parent];
         var upperRot = (r.UpperDelta * model[iu].Rotation).Normalized();
         var lowerRot = (r.LowerDelta * r.UpperDelta * model[il].Rotation).Normalized();
 
-        locals[iu] = locals[iu] with { Rotation = (parentOfUpper.Rotation.Inverse() * upperRot).Normalized() };
+        locals[iu] = locals[iu] with { Rotation = (parentModel.Rotation.Inverse() * upperRot).Normalized() };
         locals[il] = locals[il] with { Rotation = (upperRot.Inverse() * lowerRot).Normalized() };
         locals[ie] = locals[ie] with { Rotation = (lowerRot.Inverse() * target.Rotation).Normalized() };
 

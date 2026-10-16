@@ -43,8 +43,10 @@ public readonly record struct Quat(double X, double Y, double Z, double W)
         double r22 = 1 - 2 * (q.X * q.X + q.Y * q.Y);
         double r01 = 2 * (q.X * q.Y - q.Z * q.W);
         double r00 = 1 - 2 * (q.Y * q.Y + q.Z * q.Z);
-        double y = Math.Asin(Math.Clamp(r02, -1.0, 1.0));
-        if (Math.Abs(r02) < 0.9999999)
+        // atan2 keeps Y accurate right up to the gimbal; asin loses precision near ±1.
+        double cosY = Math.Sqrt(r00 * r00 + r01 * r01);
+        double y = Math.Atan2(r02, cosY);
+        if (cosY > 1e-9)
         {
             return new Vec3(Math.Atan2(-r12, r22), y, Math.Atan2(-r01, r00));
         }

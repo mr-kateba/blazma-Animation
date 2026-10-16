@@ -39,9 +39,9 @@ public static partial class PoseMirror
             // Translation: mirror the source bone's offset from its rest, expressed in model space.
             var srcBone = rig.Bones[src];
             var srcParent = ev.ParentOf(src);
-            var srcParentRot = srcParent < 0 ? Quat.Identity : model[srcParent].Rotation;
-            var offsetModel = srcParentRot.Rotate(locals[src].Translation - srcBone.Rest.Translation);
-            var localTranslation = bone.Rest.Translation + parentModel.Rotation.Inverse().Rotate(MirrorVector(offsetModel));
+            var srcParentModel = srcParent < 0 ? Transform.Identity : model[srcParent];
+            var offsetModel = srcParentModel.Rotation.Rotate(Mul(srcParentModel.Scale, locals[src].Translation - srcBone.Rest.Translation));
+            var localTranslation = bone.Rest.Translation + Div(parentModel.Rotation.Inverse().Rotate(MirrorVector(offsetModel)), parentModel.Scale);
 
             var local = new Transform(localTranslation, (parentModel.Rotation.Inverse() * rot).Normalized(), locals[src].Scale);
             newModel[i] = parentModel * local;
@@ -63,6 +63,9 @@ public static partial class PoseMirror
         }
         return result;
     }
+
+    static Vec3 Mul(Vec3 s, Vec3 v) => new(s.X * v.X, s.Y * v.Y, s.Z * v.Z);
+    static Vec3 Div(Vec3 v, Vec3 s) => new(v.X / s.X, v.Y / s.Y, v.Z / s.Z);
 
     static bool SameTransform(Transform a, Transform b) =>
         a.Translation.ApproxEquals(b.Translation, 1e-9) && a.Scale.ApproxEquals(b.Scale, 1e-9) && a.Rotation.ApproxEquals(b.Rotation, 1e-9);

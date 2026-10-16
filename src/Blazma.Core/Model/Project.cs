@@ -21,6 +21,9 @@ public sealed class Project
     public List<Rig> Rigs { get; set; } = new();
     public List<Character> Characters { get; set; } = new();
     public List<PoseAsset> PoseLibrary { get; set; } = new();
+
+    /// <summary>Binary files embedded in the project (imported models), so a project is self-contained.</summary>
+    public List<ProjectAsset> Assets { get; set; } = new();
     public Dictionary<string, string> Metadata { get; set; } = new();
 
     public Rig? FindRig(ObjectId id) => Rigs.Find(r => r.Id == id);
@@ -28,6 +31,7 @@ public sealed class Project
     public Character? FindCharacter(ObjectId id) => Characters.Find(c => c.Id == id);
     public Character GetCharacter(ObjectId id) => FindCharacter(id) ?? throw new KeyNotFoundException($"Character '{id}' does not exist.");
     public PoseAsset? FindPose(ObjectId id) => PoseLibrary.Find(p => p.Id == id);
+    public ProjectAsset? FindAsset(ObjectId id) => Assets.Find(a => a.Id == id);
 
     public Clip? FindClip(ObjectId id) => Clips.Find(c => c.Id == id);
 
@@ -48,4 +52,17 @@ public sealed class Project
 public sealed class ProjectSettings
 {
     public FrameRate DefaultFrameRate { get; set; } = FrameRate.Fps30;
+}
+
+/// <summary>An embedded file, stored as "assets/&lt;id&gt;/&lt;fileName&gt;" in the archive.</summary>
+public sealed class ProjectAsset
+{
+    public ObjectId Id { get; set; } = ObjectId.New();
+    public string FileName { get; set; } = "";
+    public string MediaType { get; set; } = "application/octet-stream";
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public byte[] Data { get; set; } = Array.Empty<byte>();
+
+    public string ArchivePath => $"assets/{Id}/{FileName}";
 }

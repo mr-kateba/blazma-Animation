@@ -221,7 +221,11 @@ public sealed class SetBone(ObjectId characterId, string bone, Vec3 eulerDegrees
     {
         if (next is not SetBone n || n.CharacterId != CharacterId || n._bone != _bone) return false;
         _euler = n._euler;
-        _translation = n._translation ?? _translation;
+        if (n._translation is { } nt)
+        {
+            var old = _translation ?? new Vec3(double.NaN, double.NaN, double.NaN);
+            _translation = new Vec3(double.IsNaN(nt.X) ? old.X : nt.X, double.IsNaN(nt.Y) ? old.Y : nt.Y, double.IsNaN(nt.Z) ? old.Z : nt.Z);
+        }
         return true;
     }
 }
@@ -240,8 +244,11 @@ public sealed class SetControl(ObjectId characterId, string control, Vec3 positi
     {
         var c = PoseCommands.ResolveControl(rig, _control);
         var state = PoseSolver.StateOf(rig, pose, c.Id).Clone();
-        var rotation = _euler is { } e ? Quat.FromEulerXYZ(e * (Math.PI / 180)).Normalized() : state.Transform.Rotation;
-        state.Transform = new Transform(_position, rotation, Vec3.One);
+        var model = new RigEvaluator(rig).Model(pose);
+        var current = PoseSolver.ControlModel(rig, pose, c, model);
+        var rotation = _euler is { } e ? Quat.FromEulerXYZ(e * (Math.PI / 180)).Normalized() : current.Rotation;
+        // Arguments are model space; poles are stored relative to the first bone.
+        state.Transform = PoseSolver.ToControlSpace(c, new Transform(_position, rotation, Vec3.One), model);
         if (_pinned is { } p) state.Pinned = p;
         pose.Controls[c.Id.ToString()] = state;
         var chain = PoseSolver.ChainForControl(rig, c.Id);
@@ -565,7 +572,8 @@ public sealed class GetPose(ObjectId characterId) : ICommand
         foreach (var c in rig.Controls)
         {
             var s = PoseSolver.StateOf(rig, character.Pose, c.Id);
-            controls.Add(new JsonObject { ["name"] = c.Name, ["position"] = InspectRig.Vec(s.Transform.Translation), ["pinned"] = s.Pinned });
+            var m = PoseSolver.ControlModel(rig, character.Pose, c, model);
+            controls.Add(new JsonObject { ["name"] = c.Name, ["kind"] = c.Kind.ToString(), ["position"] = InspectRig.Vec(m.Translation), ["pinned"] = s.Pinned });
         }
         return new(Array.Empty<Change>(), new JsonObject
         {

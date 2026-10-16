@@ -50,11 +50,13 @@ public static class RigSetup
             var reach = (rest[il].Translation - rest[iu].Translation).Length() + (rest[ie].Translation - rest[il].Translation).Length();
 
             var target = new RigControl { Name = targetName, Kind = ControlKind.IkTarget, Rest = rest[ie] with { Scale = Vec3.One } };
+            // Poles are stored in the space of the first bone (see PoseSolver.ControlModel).
+            var poleModel = new Transform(rest[il].Translation + bend * (0.6 * reach), Quat.Identity, Vec3.One);
             var pole = new RigControl
             {
                 Name = poleName,
                 Kind = ControlKind.Pole,
-                Rest = new Transform(rest[il].Translation + bend * (0.6 * reach), Quat.Identity, Vec3.One),
+                Rest = RigEvaluator.LocalFromModel(rest[0], poleModel),
             };
             rig.Controls.Add(target);
             rig.Controls.Add(pole);
@@ -70,20 +72,49 @@ public static class RigSetup
 /// <summary>Applies <see cref="JointLimits"/> to a local rotation.</summary>
 public static class JointLimiter
 {
+    const double Deg = Math.PI / 180;
+
     /// <summary>Clamps <paramref name="local"/> (relative to the bone's rest) to the bone's limits.</summary>
     public static Quat Clamp(Bone bone, Quat local, out bool clamped)
     {
         clamped = false;
         if (bone.Limits is not { } lim) return local;
         var rel = (bone.Rest.Rotation.Inverse() * local).Normalized();
-        var e = rel.ToEulerXYZ();
-        const double d = Math.PI / 180;
-        var c = new Vec3(
-            Math.Clamp(e.X, lim.MinDegrees.X * d, lim.MaxDegrees.X * d),
-            Math.Clamp(e.Y, lim.MinDegrees.Y * d, lim.MaxDegrees.Y * d),
-            Math.Clamp(e.Z, lim.MinDegrees.Z * d, lim.MaxDegrees.Z * d));
-        if (c.ApproxEquals(e, 1e-12)) return local;
+        var limited = lim.Hinge is { } h ? ClampHinge(rel, h) : ClampEuler(rel, lim);
+        if (Quat.AngleBetween(limited, rel) < 1e-12) return local;
         clamped = true;
-        return (bone.Rest.Rotation * Quat.FromEulerXYZ(c)).Normalized();
+        return (bone.Rest.Rotation * limited).Normalized();
+    }
+
+    static Quat ClampEuler(Quat rel, JointLimits lim)
+    {
+        var e = rel.ToEulerXYZ();
+        var c = new Vec3(
+            Math.Clamp(e.X, lim.MinDegrees.X * Deg, lim.MaxDegrees.X * Deg),
+            Math.Clamp(e.Y, lim.MinDegrees.Y * Deg, lim.MaxDegrees.Y * Deg),
+            Math.Clamp(e.Z, lim.MinDegrees.Z * Deg, lim.MaxDegrees.Z * Deg));
+        return c.ApproxEquals(e, 1e-12) ? rel : Quat.FromEulerXYZ(c);
+    }
+
+    /// <summary>Swing-twist: rel = swing · twist, twist about the hinge axis.</summary>
+    static Quat ClampHinge(Quat rel, HingeLimit h)
+    {
+        var axis = h.Axis.Normalized();
+        if (rel.W < 0) rel = new Quat(-rel.X, -rel.Y, -rel.Z, -rel.W);
+        var v = new Vec3(rel.X, rel.Y, rel.Z);
+        var along = Vec3.Dot(v, axis);
+        var twistAngle = 2 * Math.Atan2(along, rel.W);
+        var twist = Quat.FromAxisAngle(axis, twistAngle);
+        var swing = (rel * twist.Inverse()).Normalized();
+
+        var clampedTwist = Quat.FromAxisAngle(axis, Math.Clamp(twistAngle, h.MinDegrees * Deg, h.MaxDegrees * Deg));
+        var swingAngle = 2 * Math.Acos(Math.Clamp(Math.Abs(swing.W), 0, 1));
+        var maxSwing = h.MaxSwingDegrees * Deg;
+        if (swingAngle > maxSwing)
+        {
+            var sAxis = new Vec3(swing.X, swing.Y, swing.Z) * Math.Sign(swing.W == 0 ? 1 : swing.W);
+            swing = sAxis.LengthSquared() < 1e-24 ? Quat.Identity : Quat.FromAxisAngle(sAxis, maxSwing);
+        }
+        return (swing * clampedTwist).Normalized();
     }
 }
