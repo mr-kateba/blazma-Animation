@@ -4,13 +4,13 @@ namespace Blazma.UI.Views;
 
 /// <summary>
 /// The 3D stage: own World3D, ground grid, soft light and an orbit camera.
-/// Mouse: MMB or RMB drag = orbit, Shift+MMB (or Shift+RMB) = pan, wheel = zoom, F = reset.
+/// Mouse: MMB or RMB drag = orbit, Shift+MMB (or Shift+RMB) = pan, wheel = zoom, F = frame character, Home = reset.
 /// Always left-to-right, even when the rest of the UI is mirrored for Arabic.
 /// </summary>
 public partial class ViewportView : SubViewportContainer
 {
-    const float DefaultYaw = 35f, DefaultPitch = -22f, DefaultDistance = 8f;
-    static readonly Vector3 DefaultTarget = new(0, 0.9f, 0);
+    public const float DefaultYaw = 35f, DefaultPitch = -22f, DefaultDistance = 8f;
+    public static readonly Vector3 DefaultTarget = new(0, 0.9f, 0);
 
     readonly SubViewport _vp = new();
     readonly Camera3D _cam = new();
@@ -23,6 +23,11 @@ public partial class ViewportView : SubViewportContainer
     Vector3 _target = DefaultTarget;
 
     public Camera3D Camera => _cam;
+    /// <summary>Root of the stage's own 3D world (characters are added here).</summary>
+    public Node World => _vp;
+    public SubViewport Viewport3D => _vp;
+    /// <summary>Receives left-button / key input before the camera controls (picking, gizmo drags).</summary>
+    public IStageInput? Tools { get; set; }
     public float Yaw => _yaw;
     public float Pitch => _pitch;
     public float Distance => _distance;
@@ -134,6 +139,16 @@ public partial class ViewportView : SubViewportContainer
         ApplyCamera();
     }
 
+    /// <summary>Move the camera so that <paramref name="box"/> fills the view, keeping the current orbit angles.</summary>
+    public void Frame(Aabb box)
+    {
+        _target = box.GetCenter();
+        var radius = Mathf.Max(box.Size.Length() * 0.5f, 0.3f);
+        var halfFov = Mathf.DegToRad(_cam.Fov) * 0.5f;
+        _distance = Mathf.Clamp(radius / Mathf.Sin(halfFov) * 0.92f, 0.6f, 120f);
+        ApplyCamera();
+    }
+
     public void Orbit(float dxPixels, float dyPixels)
     {
         _yaw -= dxPixels * 0.4f;
@@ -165,6 +180,9 @@ public partial class ViewportView : SubViewportContainer
 
     public override void _GuiInput(InputEvent e)
     {
+        // Take focus first so a half-typed inspector value is committed before a click changes the selection.
+        if (e is InputEventMouseButton { Pressed: true }) GrabFocus();
+        if (Tools is not null && Tools.HandleInput(e)) { AcceptEvent(); return; }
         switch (e)
         {
             case InputEventMouseButton { Pressed: true } mb:
@@ -179,12 +197,24 @@ public partial class ViewportView : SubViewportContainer
                 else Orbit(mm.Relative.X, mm.Relative.Y);
                 AcceptEvent();
                 break;
-            case InputEventKey { Pressed: true, Echo: false, Keycode: Key.F, CtrlPressed: false, AltPressed: false }:
+            case InputEventKey { Pressed: true, Echo: false, Keycode: Key.F, CtrlPressed: false, AltPressed: false, ShiftPressed: false }:
+                if (Tools is null || !Tools.FrameSelection()) ResetView();
+                AcceptEvent();
+                break;
+            case InputEventKey { Pressed: true, Echo: false, Keycode: Key.Home, CtrlPressed: false, AltPressed: false }:
                 ResetView();
                 AcceptEvent();
                 break;
         }
     }
+}
+
+/// <summary>Viewport tools (selection, gizmos). Return true from <see cref="HandleInput"/> to consume the event.</summary>
+public interface IStageInput
+{
+    bool HandleInput(InputEvent e);
+    /// <summary>F: frame the selected character. Returns false if there is none (the view is reset instead).</summary>
+    bool FrameSelection();
 }
 
 /// <summary>Small X/Y/Z orientation readout drawn in a corner of the stage.</summary>

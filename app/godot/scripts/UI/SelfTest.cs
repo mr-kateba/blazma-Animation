@@ -259,8 +259,8 @@ public partial class SelfTest : Node
             GetViewport().PushInput(new InputEventMouseButton { Position = center, GlobalPosition = center, ButtonIndex = MouseButton.WheelUp, Pressed = true, Factor = 1 }, false);
             if (st.Distance >= dist0) return "wheel did not zoom in";
             st.GrabFocus();
-            GetViewport().PushInput(new InputEventKey { Keycode = Godot.Key.F, PhysicalKeycode = Godot.Key.F, Pressed = true }, false);
-            return Mathf.IsEqualApprox(st.Yaw, yaw0) && Mathf.IsEqualApprox(st.Distance, dist0) && st.Target.IsEqualApprox(tgt0) ? null : "F did not reset the view";
+            GetViewport().PushInput(new InputEventKey { Keycode = Godot.Key.Home, PhysicalKeycode = Godot.Key.Home, Pressed = true }, false);
+            return Mathf.IsEqualApprox(st.Yaw, ViewportView.DefaultYaw) && Mathf.IsEqualApprox(st.Distance, ViewportView.DefaultDistance) && st.Target.IsEqualApprox(ViewportView.DefaultTarget) ? null : "Home did not reset the view";
         });
 
         _w.SelectClip(walk);
@@ -312,10 +312,14 @@ public partial class SelfTest : Node
         App.SetLanguage("ar"); App.SetTheme("dark"); App.SetAdvancedMode(false);
         await Settle();
         await ShotMenu(0, "ar-dark-menu-project");
-        await ShotMenu(3, "ar-dark-menu-settings");
+        await ShotMenu(4, "ar-dark-menu-settings");
+        await ShotMenu(3, "ar-dark-menu-rigging");
         App.SetLanguage("en");
         await Settle();
         await ShotMenu(1, "en-dark-menu-edit");
+
+        // Phase 2: characters, posing, IK, pose library, import and bone mapping.
+        await RunPhase2();
 
         // Restore the user's settings.
         App.SetLanguage(backup.Language); App.SetTheme(backup.Theme); App.SetAdvancedMode(backup.AdvancedMode);

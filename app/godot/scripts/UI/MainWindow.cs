@@ -19,6 +19,8 @@ public partial class MainWindow : Control
     const int MNew = 1, MOpen = 2, MSave = 3, MSaveAs = 4, MQuit = 5, MClearRecent = 99, MRecentBase = 100;
     const int MUndo = 10, MRedo = 11;
     const int MNewClip = 20, MRenameClip = 21, MDeleteClip = 22;
+    const int MAddMannequin = 30, MImport = 31, MMapping = 32, MMirror = 33, MResetBone = 34, MResetPose = 35, MCopy = 36, MPaste = 37,
+        MPinFeet = 38, MUnpinAll = 39, MShowSkeleton = 40, MOverlayAll = 41, MRemoveChar = 42, MFrame = 43, MPinSelected = 44;
 
     static AppController App => AppController.Instance;
 
@@ -29,7 +31,7 @@ public partial class MainWindow : Control
     Panel _backdrop = null!;
     PanelContainer _brandMark = null!;
     MenuBar _menuBar = null!;
-    PopupMenu _mProject = null!, _mEdit = null!, _mAnim = null!, _mSettings = null!;
+    PopupMenu _mProject = null!, _mEdit = null!, _mAnim = null!, _mSettings = null!, _mRigging = null!;
     PopupMenu _mRecent = null!, _mLang = null!, _mTheme = null!, _mAuto = null!, _mMode = null!;
     Segmented _segMode = null!, _segLang = null!, _segTheme = null!;
     PanelContainer _chip = null!;
@@ -90,6 +92,7 @@ public partial class MainWindow : Control
         RestoreWindowAndLayout();
         OnSettingsChanged();
         SelectFirstIfNone();
+        InitCharacters();
         RefreshAll();
 
         CallDeferred(nameof(StartupChecks));
@@ -125,8 +128,8 @@ public partial class MainWindow : Control
         else if (what == NotificationTranslationChanged && IsNodeReady()) { UpdateMenus(); UpdateStatus(); UpdateChip(); }
     }
 
-    /// <summary>Top-level menu popup by index (Project, Edit, Animation, Settings); used by screenshot tests.</summary>
-    public PopupMenu MenuPopup(int index) => index switch { 0 => _mProject, 1 => _mEdit, 2 => _mAnim, _ => _mSettings };
+    /// <summary>Top-level menu popup by index (Project, Edit, Animation, Rigging, Settings); used by screenshot tests.</summary>
+    public PopupMenu MenuPopup(int index) => index switch { 0 => _mProject, 1 => _mEdit, 2 => _mAnim, 3 => _mRigging, _ => _mSettings };
 
     // ---- UI construction ---------------------------------------------------------------------
 
@@ -158,6 +161,7 @@ public partial class MainWindow : Control
         };
         W.Fill(Stage);
         _center.AddChild(Stage);
+        BuildStageLayers();
         _frame = new Panel { MouseFilter = MouseFilterEnum.Ignore };
         W.Fill(_frame);
         _center.AddChild(_frame);
@@ -166,7 +170,7 @@ public partial class MainWindow : Control
         Gizmo.OffsetLeft = 10; Gizmo.OffsetBottom = -8; Gizmo.OffsetTop = -84; Gizmo.OffsetRight = 86;
         _center.AddChild(Gizmo);
 
-        _hint = W.Label("Orbit: middle or right mouse drag  ·  Pan: Shift + drag  ·  Zoom: wheel  ·  Reset view: F", "MonoFaint");
+        _hint = W.Label("Orbit: middle or right mouse drag  ·  Pan: Shift + drag  ·  Zoom: wheel  ·  Frame: F", "MonoFaint");
         _hint.MouseFilter = MouseFilterEnum.Ignore;
         _hint.SetAnchorsPreset(LayoutPreset.BottomRight);
         _hint.GrowHorizontal = GrowDirection.Begin;
@@ -175,6 +179,7 @@ public partial class MainWindow : Control
         _hint.LayoutDirection = LayoutDirectionEnum.Locale;
         _center.AddChild(_hint);
 
+        _center.AddChild(Rail);
         _center.AddChild(Inspector);
 
         _splitInner = new HSplitContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
@@ -183,8 +188,8 @@ public partial class MainWindow : Control
         _splitInner.AddChild(HistoryPanel);
 
         _splitOuter = new HSplitContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
-        OutlinePanel.SizeFlagsHorizontal = SizeFlags.Fill;
-        _splitOuter.AddChild(OutlinePanel);
+        Dock = new LeftDock(this, OutlinePanel) { SizeFlagsHorizontal = SizeFlags.Fill };
+        _splitOuter.AddChild(Dock);
         _splitOuter.AddChild(_splitInner);
 
         _splitDock = new VSplitContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
@@ -308,8 +313,10 @@ public partial class MainWindow : Control
         _mProject = new PopupMenu { Name = "Project" };
         _mEdit = new PopupMenu { Name = "Edit" };
         _mAnim = new PopupMenu { Name = "Animation" };
+        _mRigging = new PopupMenu { Name = "Rigging" };
         _mSettings = new PopupMenu { Name = "Settings" };
-        foreach (var m in new[] { _mProject, _mEdit, _mAnim, _mSettings }) _menuBar.AddChild(m);
+        foreach (var m in new[] { _mProject, _mEdit, _mAnim, _mRigging, _mSettings }) _menuBar.AddChild(m);
+        BuildRiggingMenu();
 
         _mProject.AddItem("New", MNew);
         _mProject.AddItem("Open…", MOpen);
@@ -383,6 +390,7 @@ public partial class MainWindow : Control
             case MRenameClip: if (SelectedClipId is { } r) PromptRenameClip(r); break;
             case MDeleteClip: if (SelectedClipId is { } d) ConfirmDeleteClip(d); break;
             case MClearRecent: App.Settings.RecentFiles.Clear(); App.Settings.Save(); break;
+            case >= MAddMannequin and <= MPinSelected: OnRiggingMenu(id); break;
             case >= MRecentBase:
                 var i = id - MRecentBase;
                 if (i < App.Settings.RecentFiles.Count)
@@ -427,7 +435,9 @@ public partial class MainWindow : Control
         _menuBar.SetMenuTitle(0, Tr("Project"));
         _menuBar.SetMenuTitle(1, Tr("Edit"));
         _menuBar.SetMenuTitle(2, Tr("Animation"));
-        _menuBar.SetMenuTitle(3, Tr("Settings"));
+        _menuBar.SetMenuTitle(3, Tr("Rigging"));
+        _menuBar.SetMenuTitle(4, Tr("Settings"));
+        UpdateRiggingMenu();
     }
 
     static void SetItemText(PopupMenu m, int id, string text, bool disabled)
@@ -484,6 +494,7 @@ public partial class MainWindow : Control
         _errorDialog = new AcceptDialog { Title = "Something went wrong", OkButtonText = "OK", Exclusive = true };
         _errorDialog.AutoTranslateMode = AutoTranslateModeEnum.Disabled;
         AddChild(_errorDialog);
+        BuildRigDialogs();
     }
 
     /// <summary>Text is translated here, then the dialog's own auto-translation is off so user content is never "translated".</summary>
@@ -688,7 +699,11 @@ public partial class MainWindow : Control
     {
         var onlySaveState = args.Changes.All(c => c.Kind == Change.SaveStateChanged);
         if (onlySaveState) { UpdateStatus(); UpdateChip(); UpdateMenus(); return; }
-        ValidateSelection(args.Changes.Any(c => c.Kind == Change.ProjectReplaced));
+        var replaced = args.Changes.Any(c => c.Kind == Change.ProjectReplaced);
+        ValidateSelection(replaced);
+        // Pose edits (gizmo drags fire one per mouse step) only touch the 3D view, the inspector and the status.
+        var poseOnly = args.Changes.All(c => c.Kind is Change.PoseChanged or Change.SaveStateChanged);
+        if (OnRigSessionChanged(args, replaced, poseOnly)) return;
         RefreshAll();
     }
 
@@ -699,6 +714,7 @@ public partial class MainWindow : Control
         Strip.Rebuild();
         Inspector.Refresh();
         if (advanced) { OutlinePanel.Rebuild(); HistoryPanel.Rebuild(); }
+        RefreshRigUi(true);
         UpdateStatus();
         UpdateChip();
         UpdateMenus();
@@ -744,6 +760,9 @@ public partial class MainWindow : Control
         _brandMark.AddThemeStyleboxOverride("panel", BlazmaTheme.Box(_palette.Accent, null, 4, 0, 0, 0, 0, 0));
         Stage.ApplyPalette(_palette);
         Gizmo.Bind(Stage.Camera, _palette);
+        Overlay.SetPalette(_palette);
+        Characters.SetPalette(_palette);
+        Inspector.ApplyPaletteToFields(_palette);
 
         _segMode.SetIndex(s.AdvancedMode ? 1 : 0);
         _segLang.SetIndex(s.Language == "ar" ? 1 : 0);
@@ -753,9 +772,12 @@ public partial class MainWindow : Control
         CheckOnly(_mAuto, s.AutosaveMinutes);
         CheckOnly(_mMode, s.AdvancedMode ? 1 : 0);
 
-        OutlinePanel.Visible = s.AdvancedMode;
+        Dock.Visible = s.AdvancedMode;
         HistoryPanel.Visible = s.AdvancedMode;
         PlaceInspector();
+        PlaceRail();
+        ApplyStripMode();
+        UpdateRiggingMenu();
         RefreshAll();
     }
 
@@ -795,6 +817,7 @@ public partial class MainWindow : Control
     {
         _lastError = message;
         if (_suppressToast) return;
+        if (App.LastErrorCode == "driven_by_ik") { ShowDrivenToast(); return; }
         _toast.Notify(FriendlyError(message), _palette.Err);
     }
 
@@ -852,6 +875,14 @@ public partial class MainWindow : Control
         if (!k.IsCommandOrControlPressed() || k.AltPressed) return;
         switch (k.Keycode)
         {
+            case Godot.Key.C:
+                if (inText || k.ShiftPressed) return;
+                CopyPose();
+                break;
+            case Godot.Key.V:
+                if (inText || k.ShiftPressed) return;
+                PastePose();
+                break;
             case Godot.Key.N: RequestNew(); break;
             case Godot.Key.O: RequestOpen(); break;
             case Godot.Key.S:
@@ -872,6 +903,7 @@ public partial class MainWindow : Control
 
     public override void _UnhandledKeyInput(InputEvent e)
     {
+        if (HandleToolKey(e)) { GetViewport().SetInputAsHandled(); return; }
         if (e is InputEventKey { Pressed: true, Echo: false, Keycode: Godot.Key.Delete } && SelectedClipId is { } id)
         {
             ConfirmDeleteClip(id);

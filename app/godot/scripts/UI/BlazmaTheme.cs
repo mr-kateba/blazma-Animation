@@ -85,6 +85,19 @@ public static class BlazmaTheme
         return ImageTexture.CreateFromImage(img);
     }
 
+    /// <summary>Small switch graphic (track + knob) for CheckButton.</summary>
+    static ImageTexture Pill(Color track, Color knob, bool on, Color? border = null)
+    {
+        var b = border ?? track;
+        var cx = on ? 21 : 9;
+        var svg = $"<svg xmlns='http://www.w3.org/2000/svg' width='30' height='18' viewBox='0 0 30 18'>" +
+                  $"<rect x='1' y='1' width='28' height='16' rx='8' fill='#{track.ToHtml(false)}' stroke='#{b.ToHtml(false)}' stroke-width='1'/>" +
+                  $"<circle cx='{cx}' cy='9' r='5.5' fill='#{knob.ToHtml(false)}'/></svg>";
+        var img = new Image();
+        img.LoadSvgFromString(svg, 1.0f);
+        return ImageTexture.CreateFromImage(img);
+    }
+
     static void Colors(Theme t, string type, params (string, Color)[] items)
     {
         foreach (var (n, c) in items) t.SetColor(n, type, c);
@@ -194,6 +207,43 @@ public static class BlazmaTheme
         Colors(t, "Seg", ("font_color", p.Text2), ("font_hover_color", p.Text), ("font_pressed_color", p.Text),
             ("font_hover_pressed_color", p.Text), ("font_focus_color", p.Text2));
 
+        // Tool rail buttons (icon above a small label) --------------------------------------------
+        t.SetTypeVariation("Rail", "Button");
+        t.SetStylebox("normal", "Rail", Box(Colors0, Colors0, 6, 1, 2, 6, 2, 4));
+        t.SetStylebox("hover", "Rail", Box(p.Panel2, Colors0, 6, 1, 2, 6, 2, 4));
+        t.SetStylebox("pressed", "Rail", Box(p.AccentSoft, p.Accent, 6, 1, 2, 6, 2, 4));
+        t.SetStylebox("hover_pressed", "Rail", Box(p.AccentSoft, p.Accent, 6, 1, 2, 6, 2, 4));
+        t.SetStylebox("disabled", "Rail", Box(Colors0, Colors0, 6, 1, 2, 6, 2, 4));
+        t.SetStylebox("focus", "Rail", Empty());
+        Colors(t, "Rail", ("font_color", p.Text2), ("font_hover_color", p.Text), ("font_pressed_color", p.Text),
+            ("font_hover_pressed_color", p.Text), ("font_focus_color", p.Text2), ("font_disabled_color", p.Text3),
+            ("icon_normal_color", p.Text2), ("icon_hover_color", p.Text), ("icon_pressed_color", p.Accent),
+            ("icon_hover_pressed_color", p.Accent), ("icon_focus_color", p.Text2), ("icon_disabled_color", p.Text3));
+        t.SetFontSize("font_size", "Rail", 11);
+        t.SetConstant("h_separation", "Rail", 0);
+        t.SetConstant("icon_max_width", "Rail", 22);
+
+        // Switch (CheckButton) ---------------------------------------------------------------------
+        var swOn = Pill(p.Accent, p.OnAccent, true);
+        var swOff = Pill(p.Panel2, p.Text3, false, p.LineStrong);
+        t.SetIcon("checked", "CheckButton", swOn);
+        t.SetIcon("checked_mirrored", "CheckButton", swOn);
+        t.SetIcon("unchecked", "CheckButton", swOff);
+        t.SetIcon("unchecked_mirrored", "CheckButton", swOff);
+        t.SetIcon("checked_disabled", "CheckButton", swOn);
+        t.SetIcon("checked_disabled_mirrored", "CheckButton", swOn);
+        t.SetIcon("unchecked_disabled", "CheckButton", swOff);
+        t.SetIcon("unchecked_disabled_mirrored", "CheckButton", swOff);
+        Colors(t, "CheckButton", ("font_color", p.Text), ("font_hover_color", p.Text), ("font_pressed_color", p.Text),
+            ("font_hover_pressed_color", p.Text), ("font_focus_color", p.Text), ("font_disabled_color", p.Text3));
+        t.SetStylebox("normal", "CheckButton", Empty());
+        t.SetStylebox("hover", "CheckButton", Empty());
+        t.SetStylebox("pressed", "CheckButton", Empty());
+        t.SetStylebox("hover_pressed", "CheckButton", Empty());
+        t.SetStylebox("disabled", "CheckButton", Empty());
+        t.SetStylebox("focus", "CheckButton", Empty());
+        t.SetConstant("h_separation", "CheckButton", 10);
+
         // Menus ---------------------------------------------------------------------------------
         t.SetStylebox("normal", "MenuBar", Box(Colors0, null, 5, 0, 10, 4, 10, 4));
         t.SetStylebox("hover", "MenuBar", Box(p.Panel2, null, 5, 0, 10, 4, 10, 4));
@@ -291,6 +341,10 @@ public static class BlazmaTheme
         Colors(t, "ItemList", ("font_color", p.Text2), ("font_selected_color", p.Text), ("font_hovered_color", p.Text),
             ("font_hovered_selected_color", p.Text), ("guide_color", p.Line));
         t.SetConstant("v_separation", "ItemList", 4);
+
+        // Progress bar -----------------------------------------------------------------------------
+        t.SetStylebox("background", "ProgressBar", Box(p.Panel2, p.LineStrong, 4, 1, 0, 0, 0, 0));
+        t.SetStylebox("fill", "ProgressBar", Box(p.Accent, null, 4, 0, 0, 0, 0, 0));
 
         // Scroll bars -----------------------------------------------------------------------------
         foreach (var sb in new[] { "HScrollBar", "VScrollBar" })

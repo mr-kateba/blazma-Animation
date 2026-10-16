@@ -11,6 +11,9 @@ public sealed class AppSettings
     public string Language { get; set; } = "en";
     public string Theme { get; set; } = "dark";
     public bool AdvancedMode { get; set; }
+    public bool ShowSkeleton { get; set; } = true;
+    /// <summary>Draw the skeleton overlay on every character instead of only the selected one.</summary>
+    public bool OverlayAll { get; set; }
     public int AutosaveMinutes { get; set; } = 3;
     public List<string> RecentFiles { get; } = new();
 
@@ -24,6 +27,8 @@ public sealed class AppSettings
         Language = (string)cfg.GetValue("ui", "language", Language) is "ar" ? "ar" : "en";
         Theme = (string)cfg.GetValue("ui", "theme", Theme) is "light" ? "light" : "dark";
         AdvancedMode = (bool)cfg.GetValue("ui", "advanced", AdvancedMode);
+        ShowSkeleton = (bool)cfg.GetValue("ui", "show_skeleton", ShowSkeleton);
+        OverlayAll = (bool)cfg.GetValue("ui", "overlay_all", OverlayAll);
         AutosaveMinutes = Math.Clamp((int)cfg.GetValue("files", "autosave_minutes", AutosaveMinutes), 0, 60);
         RecentFiles.Clear();
         RecentFiles.AddRange(((string[])cfg.GetValue("files", "recent", Array.Empty<string>())).Take(MaxRecent));
@@ -38,6 +43,8 @@ public sealed class AppSettings
         cfg.SetValue("ui", "language", Language);
         cfg.SetValue("ui", "theme", Theme);
         cfg.SetValue("ui", "advanced", AdvancedMode);
+        cfg.SetValue("ui", "show_skeleton", ShowSkeleton);
+        cfg.SetValue("ui", "overlay_all", OverlayAll);
         cfg.SetValue("files", "autosave_minutes", AutosaveMinutes);
         cfg.SetValue("files", "recent", RecentFiles.ToArray());
         foreach (var (k, v) in Layout) cfg.SetValue("layout", k, v);

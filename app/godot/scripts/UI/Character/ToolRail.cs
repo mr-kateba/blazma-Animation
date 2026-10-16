@@ -1,0 +1,84 @@
+using Godot;
+
+namespace Blazma.UI.Views;
+
+/// <summary>
+/// Floating tool rail on the inline-start edge of the stage (mockup B): Select, Rotate, Move, IK pin | Mirror, Reset.
+/// The buttons only call MainWindow actions; the selection state owns the active tool.
+/// </summary>
+public partial class ToolRail : PanelContainer
+{
+    public Button Select { get; }
+    public Button Rotate { get; }
+    public Button Move { get; }
+    public Button Pin { get; }
+    public Button Mirror { get; }
+    public Button Reset { get; }
+
+    readonly ButtonGroup _tools = new();
+    readonly List<(Button b, string svg)> _icons = new();
+
+    public ToolRail(MainWindow host, SelectionState sel)
+    {
+        ThemeTypeVariation = "Floating";
+        var v = new VBoxContainer();
+        v.AddThemeConstantOverride("separation", 2);
+        AddChild(W.Margin(v, 5, 5, 5, 5));
+
+        Select = Add(v, "Select", "Select (Q)", "<path d='M6 3l12 9-5.5 1 3 6-2.5 1-3-6L6 18z'/>", true);
+        Rotate = Add(v, "Rotate", "Rotate the selected bone (E)", "<path d='M19 12a7 7 0 1 1-2.5-5.4'/><path d='M19 4v4h-4'/>", true);
+        Move = Add(v, "Move", "Move an IK control or the pelvis (W)", "<path d='M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3'/>", true);
+        Pin = Add(v, "IK pin", "Pin or unpin the selected hand or foot (P)", "<path d='M12 14v7'/><path d='M8 21h8'/><circle cx='12' cy='8' r='4'/><circle cx='12' cy='8' r='1' fill='white'/>", false);
+        v.AddChild(new HSeparator());
+        Mirror = Add(v, "Mirror", "Mirror the pose left and right (M)", "<path d='M12 3v18' stroke-dasharray='2 2.5'/><path d='M9 7L3 12l6 5z'/><path d='M15 7l6 5-6 5z'/>", false);
+        Reset = Add(v, "Reset", "Reset the selected bone, or the whole pose when nothing is selected", "<path d='M4 12a8 8 0 1 0 2.5-5.8'/><path d='M4 4v4.5h4.5'/>", false);
+
+        Select.Pressed += () => sel.SetTool(StageTool.Select);
+        Rotate.Pressed += () => sel.SetTool(StageTool.Rotate);
+        Move.Pressed += () => sel.SetTool(StageTool.Move);
+        Pin.Pressed += host.TogglePinSelected;
+        Mirror.Pressed += () => host.MirrorPose();
+        Reset.Pressed += host.ResetSelected;
+        sel.ToolChanged += SyncTool;
+        SyncTool_(sel);
+
+        void SyncTool_(SelectionState s)
+        {
+            // SetPressedNoSignal does not update the ButtonGroup, so every member is set explicitly.
+            Select.SetPressedNoSignal(s.Tool == StageTool.Select);
+            Rotate.SetPressedNoSignal(s.Tool == StageTool.Rotate);
+            Move.SetPressedNoSignal(s.Tool == StageTool.Move);
+        }
+        void SyncTool() => SyncTool_(sel);
+    }
+
+    Button Add(VBoxContainer parent, string text, string tip, string svgBody, bool toggle)
+    {
+        var b = new Button
+        {
+            Text = text, TooltipText = tip, ThemeTypeVariation = "Rail", ToggleMode = true,
+            IconAlignment = HorizontalAlignment.Center, VerticalIconAlignment = VerticalAlignment.Top,
+            CustomMinimumSize = new Vector2(54, 50), FocusMode = FocusModeEnum.None, ExpandIcon = false,
+            ClipText = false,
+        };
+        if (toggle) b.ButtonGroup = _tools;
+        else b.ToggleMode = text == "IK pin";
+        var svg = $"<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='white' " +
+                  $"stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'>{svgBody}</svg>";
+        var img = new Image();
+        img.LoadSvgFromString(svg, 1.0f);
+        b.Icon = ImageTexture.CreateFromImage(img);
+        parent.AddChild(b);
+        _icons.Add((b, svgBody));
+        return b;
+    }
+
+    /// <summary>Enable/disable according to the selection (called by MainWindow after every selection or pose change).</summary>
+    public void Update(bool hasCharacter, bool canPin, bool pinned, bool canReset)
+    {
+        Select.Disabled = Rotate.Disabled = Move.Disabled = Mirror.Disabled = !hasCharacter;
+        Pin.Disabled = !canPin;
+        Pin.SetPressedNoSignal(pinned && canPin);
+        Reset.Disabled = !canReset;
+    }
+}

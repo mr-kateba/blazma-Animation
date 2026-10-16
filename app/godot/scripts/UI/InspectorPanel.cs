@@ -1,12 +1,14 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using Blazma.Core.Model;
 using Blazma.Core.Timing;
+using Blazma.Rigging;
 using Blazma.UI.App;
 using Godot;
 
 namespace Blazma.UI.Views;
 
-/// <summary>Floating inspector: project settings and the selected clip. Every edit is a command.</summary>
+/// <summary>Floating inspector: character, selected bone / IK control, project settings and the selected clip. Every edit is a command.</summary>
 public partial class InspectorPanel : PanelContainer
 {
     static readonly (string Label, int Num, int Den)[] Rates =
@@ -25,6 +27,9 @@ public partial class InspectorPanel : PanelContainer
     readonly VBoxContainer _clipBox = new();
     readonly Label _clipHeader = W.Label("Selected clip", "Section");
     bool _busy, _typingProject, _typingClip;
+    readonly ScrollContainer _scroll;
+    readonly Control _scrollContent;
+    float _lastAvail = -1, _lastNeed = -1;
 
     static AppController App => AppController.Instance;
 
@@ -38,7 +43,14 @@ public partial class InspectorPanel : PanelContainer
 
         var root = new VBoxContainer();
         root.AddThemeConstantOverride("separation", 10);
-        AddChild(W.Margin(root, 12, 10, 12, 12));
+        _scroll = new ScrollContainer { HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, SizeFlagsVertical = SizeFlags.ExpandFill };
+        _scroll.AddChild(W.Margin(root, 12, 10, 12, 12));
+        _scrollContent = (Control)_scroll.GetChild(0);
+        _scrollContent.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        AddChild(_scroll);
+        root.CustomMinimumSize = new Vector2(240, 0);
+
+        BuildRigSections(root);
 
         // Project -------------------------------------------------------------------------------
         root.AddChild(W.Label("Project", "Section"));
@@ -96,8 +108,20 @@ public partial class InspectorPanel : PanelContainer
 
     Project Proj => App.Session.Project;
 
+    public override void _Process(double delta)
+    {
+        // Fit the scroll area to its content, limited by the space the stage offers.
+        var parentH = GetParentControl()?.Size.Y ?? 0;
+        var avail = Mathf.Max(parentH - 28, 120);
+        var need = _scrollContent.GetCombinedMinimumSize().Y;
+        if (Mathf.IsEqualApprox(avail, _lastAvail) && Mathf.IsEqualApprox(need, _lastNeed)) return;
+        _lastAvail = avail; _lastNeed = need;
+        _scroll.CustomMinimumSize = new Vector2(0, Mathf.Min(need, avail));
+    }
+
     public void Refresh(bool force = false)
     {
+        RefreshRig(force);
         _busy = true;
         try
         {

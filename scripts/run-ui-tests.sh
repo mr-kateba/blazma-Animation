@@ -33,6 +33,10 @@ run_godot selftest -- --selftest="$SHOTS"; RC=$?
 grep -E "SELFTEST|SCRIPT ERROR|ERROR:" "$OUT/selftest.log" | grep -v "ALSA"
 grep -q "SELFTEST RESULT PASS" "$OUT/selftest.log" && [ $RC -eq 0 ] || { echo "selftest FAILED (exit $RC)"; FAIL=1; }
 
+step "phase 2: rendered skeleton vs core model (must stay below 1e-4 m)"
+grep "max skeleton error" "$OUT/selftest.log"
+grep -E "rotate drag expected|pelvis y =|IK hand target moved|auto-mapping" "$OUT/selftest.log"
+
 step "crashtest phase 1 (process is killed on purpose)"
 run_godot crash1 -- --crashtest-phase1="$SHOTS"; RC=$?
 grep -E "CRASHTEST|SELFTEST" "$OUT/crash1.log"
@@ -45,6 +49,10 @@ grep -E "SELFTEST|recovery rows|SCRIPT ERROR|ERROR:" "$OUT/crash2.log" | grep -v
 grep -q "SELFTEST RESULT PASS" "$OUT/crash2.log" && [ $RC -eq 0 ] || { echo "crashtest phase 2 FAILED (exit $RC)"; FAIL=1; }
 
 echo
+echo "Phase 2 screenshots (1440x900 unless a dialog):"
+ls -1 "$SHOTS"/p2-*.png 2>/dev/null
+echo
+echo "All screenshots:"
 ls -1 "$SHOTS"/*.png 2>/dev/null
 if [ $FAIL -eq 0 ]; then echo "ALL UI TESTS PASSED"; else echo "UI TESTS FAILED (logs in $OUT)"; fi
 exit $FAIL

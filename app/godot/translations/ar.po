@@ -181,8 +181,8 @@ msgstr "حُفظ تلقائيًا {0}"
 msgid "Not saved to a file yet"
 msgstr "لم يُحفظ في ملف بعد"
 
-msgid "Orbit: middle or right mouse drag  ·  Pan: Shift + drag  ·  Zoom: wheel  ·  Reset view: F"
-msgstr "تدوير: اسحب بزر الفأرة الأوسط أو الأيمن  ·  تحريك: Shift + سحب  ·  تقريب: العجلة  ·  إعادة ضبط العرض: F"
+msgid "Orbit: middle or right mouse drag  ·  Pan: Shift + drag  ·  Zoom: wheel  ·  Frame: F"
+msgstr "تدوير: اسحب بزر الفأرة الأوسط أو الأيمن  ·  تحريك: Shift + سحب  ·  تقريب: العجلة  ·  إظهار الشخصية: F"
 
 msgid "Cancel"
 msgstr "إلغاء"
@@ -267,3 +267,360 @@ msgstr "يجب ألا تقل القيمة عن {0}."
 
 msgid "The length must be between 1 and 10,000,000 frames."
 msgstr "يجب أن تكون المدة بين 1 و10,000,000 إطار."
+
+msgid "Rigging"
+msgstr "الهيكلة"
+
+msgid "Add Mannequin"
+msgstr "إضافة مجسّم بشري"
+
+msgid "Import Character…"
+msgstr "استيراد شخصية…"
+
+msgid "Remove Character…"
+msgstr "حذف الشخصية…"
+
+msgid "Bone Mapping…"
+msgstr "مطابقة العظام…"
+
+msgid "Mirror Pose"
+msgstr "عكس الوضعية"
+
+msgid "Reset Selected Bone"
+msgstr "إعادة ضبط العظمة المحددة"
+
+msgid "Reset Pose…"
+msgstr "إعادة ضبط الوضعية…"
+
+msgid "Copy Pose"
+msgstr "نسخ الوضعية"
+
+msgid "Paste Pose"
+msgstr "لصق الوضعية"
+
+msgid "Pin or Unpin Selected Hand or Foot"
+msgstr "تثبيت اليد أو القدم المحددة أو إلغاء تثبيتها"
+
+msgid "Pin Both Feet"
+msgstr "تثبيت القدمين"
+
+msgid "Unpin All"
+msgstr "إلغاء كل التثبيت"
+
+msgid "Frame Character"
+msgstr "إظهار الشخصية"
+
+msgid "Show Skeleton"
+msgstr "إظهار الهيكل العظمي"
+
+msgid "Skeleton on All Characters"
+msgstr "الهيكل العظمي لكل الشخصيات"
+
+msgid "Select"
+msgstr "تحديد"
+
+msgid "Rotate"
+msgstr "تدوير"
+
+msgid "Move"
+msgstr "تحريك"
+
+msgid "IK pin"
+msgstr "تثبيت IK"
+
+msgid "Mirror"
+msgstr "عكس"
+
+msgid "Reset"
+msgstr "إعادة ضبط"
+
+msgid "Select (Q)"
+msgstr "تحديد (Q)"
+
+msgid "Rotate the selected bone (E)"
+msgstr "تدوير العظمة المحددة (E)"
+
+msgid "Move an IK control or the pelvis (W)"
+msgstr "تحريك نقطة تحكم IK أو الحوض (W)"
+
+msgid "Pin or unpin the selected hand or foot (P)"
+msgstr "تثبيت اليد أو القدم المحددة أو إلغاء تثبيتها (P)"
+
+msgid "Mirror the pose left and right (M)"
+msgstr "عكس الوضعية بين اليسار واليمين (M)"
+
+msgid "Reset the selected bone, or the whole pose when nothing is selected"
+msgstr "إعادة ضبط العظمة المحددة، أو الوضعية كلها إن لم يكن هناك تحديد"
+
+msgid "Character"
+msgstr "الشخصية"
+
+msgid "Rig"
+msgstr "الهيكل"
+
+msgid "Bones"
+msgstr "العظام"
+
+msgid "This project has no character yet. Use Rigging > Add Mannequin."
+msgstr "لا توجد شخصية في هذا المشروع بعد. استخدم القائمة الهيكلة ثم إضافة مجسّم بشري."
+
+msgid "Selected bone"
+msgstr "العظمة المحددة"
+
+msgid "Rotation (degrees, local)"
+msgstr "التدوير (بالدرجات، محلي)"
+
+msgid "Position (metres, local)"
+msgstr "الموضع (بالأمتار، محلي)"
+
+msgid "IK pinned"
+msgstr "تثبيت IK"
+
+msgid "Unpin"
+msgstr "إلغاء التثبيت"
+
+msgid "Driven by IK chain “{0}”"
+msgstr "تتحكم بها سلسلة IK «{0}»"
+
+msgid "Not mapped to a standard bone"
+msgstr "غير مطابقة لعظمة قياسية"
+
+msgid "Joint limit: hinge about {0}, {1}° to {2}°"
+msgstr "حد المفصل: مفصلة حول {0} من {1}° إلى {2}°"
+
+msgid "Joint limits: X {0}° to {1}°, Y {2}° to {3}°, Z {4}° to {5}°"
+msgstr "حدود المفصل: X من {0}° إلى {1}°، وY من {2}° إلى {3}°، وZ من {4}° إلى {5}°"
+
+msgid "Selected control"
+msgstr "نقطة التحكم المحددة"
+
+msgid "Position (metres, model space)"
+msgstr "الموضع (بالأمتار، فضاء النموذج)"
+
+msgid "Pinned"
+msgstr "مثبّتة"
+
+msgid "IK target"
+msgstr "هدف IK"
+
+msgid "Bend direction (pole)"
+msgstr "اتجاه الثني"
+
+msgid "A pinned hand or foot stays where it is when the body moves."
+msgstr "اليد أو القدم المثبّتة تبقى في مكانها عند تحريك الجسم."
+
+msgid "Moves the knee or elbow towards this point."
+msgstr "يوجّه الركبة أو المرفق نحو هذه النقطة."
+
+msgid "Click a joint in the viewport, or pick a bone in the Rig panel."
+msgstr "انقر على مفصل في العرض، أو اختر عظمة من لوحة الهيكل."
+
+msgid "The value was limited to the joint range."
+msgstr "تم تقييد القيمة بنطاق حركة المفصل."
+
+msgid "Bone"
+msgstr "العظمة"
+
+msgid "Standard"
+msgstr "القياسي"
+
+msgid "IK controls"
+msgstr "نقاط تحكم IK"
+
+msgid "target"
+msgstr "هدف"
+
+msgid "pole"
+msgstr "اتجاه الثني"
+
+msgid "Has joint limits"
+msgstr "لها حدود حركة"
+
+msgid "Poses"
+msgstr "الوضعيات"
+
+msgid "Poses for {0}"
+msgstr "وضعيات {0}"
+
+msgid "Save current pose…"
+msgstr "حفظ الوضعية الحالية…"
+
+msgid "Save current pose"
+msgstr "حفظ الوضعية الحالية"
+
+msgid "Apply"
+msgstr "تطبيق"
+
+msgid "No saved poses for this rig yet. Pose the character, then save it here."
+msgstr "لا توجد وضعيات محفوظة لهذا الهيكل بعد. اضبط وضعية الشخصية ثم احفظها هنا."
+
+msgid "Click a pose to select it, double-click to apply it"
+msgstr "انقر على وضعية لتحديدها، وانقر مرتين لتطبيقها"
+
+msgid "Reset pose"
+msgstr "إعادة ضبط الوضعية"
+
+msgid "Reset the whole pose of “{0}” to rest? You can bring it back with Edit > Undo."
+msgstr "هل تريد إعادة وضعية «{0}» كلها إلى وضع الراحة؟ يمكنك استعادتها من القائمة تحرير ثم تراجع."
+
+msgid "Pose copied"
+msgstr "تم نسخ الوضعية"
+
+msgid "Nothing copied yet. Copy a pose first (Ctrl+C)."
+msgstr "لم تُنسخ أي وضعية بعد. انسخ وضعية أولًا (Ctrl+C)."
+
+msgid "That pose was copied from a different rig."
+msgstr "نُسخت هذه الوضعية من هيكل مختلف."
+
+msgid "This bone is driven by a pinned hand or foot. Move that target, or unpin it first."
+msgstr "هذه العظمة تتحكم بها يد أو قدم مثبّتة. حرّك هدفها، أو ألغِ التثبيت أولًا."
+
+msgid "Save Pose"
+msgstr "حفظ الوضعية"
+
+msgid "Rename Pose"
+msgstr "إعادة تسمية الوضعية"
+
+msgid "Delete pose"
+msgstr "حذف الوضعية"
+
+msgid "Delete the pose “{0}”? You can bring it back with Edit > Undo."
+msgstr "هل تريد حذف الوضعية «{0}»؟ يمكنك استعادتها من القائمة تحرير ثم تراجع."
+
+msgid "Import Character"
+msgstr "استيراد شخصية"
+
+msgid "Remove “{0}” from the scene? You can bring it back with Edit > Undo."
+msgstr "هل تريد حذف «{0}» من المشهد؟ يمكنك استعادتها من القائمة تحرير ثم تراجع."
+
+msgid "Remove"
+msgstr "حذف"
+
+msgid "The built-in mannequin is already fully mapped."
+msgstr "المجسّم البشري المدمج مطابق بالكامل."
+
+msgid "Bone Mapping"
+msgstr "مطابقة العظام"
+
+msgid "Done"
+msgstr "تم"
+
+msgid "Match your character's bones to the standard humanoid. Posing tools, mirroring and IK need every required bone."
+msgstr "طابق عظام شخصيتك مع الهيكل البشري القياسي. تحتاج أدوات التحريك والعكس وIK إلى كل العظام المطلوبة."
+
+msgid "Coverage {0}%"
+msgstr "التغطية {0}%"
+
+msgid "Ready to pose"
+msgstr "جاهز للتحريك"
+
+msgid "Not usable yet"
+msgstr "غير صالح بعد"
+
+msgid "Required bones still missing: {0}"
+msgstr "العظام المطلوبة الناقصة: {0}"
+
+msgid "— none —"
+msgstr "— بدون —"
+
+msgid "Standard bone"
+msgstr "العظمة القياسية"
+
+msgid "Status"
+msgstr "الحالة"
+
+msgid "Your bone"
+msgstr "عظمتك"
+
+msgid "required, missing"
+msgstr "مطلوبة وناقصة"
+
+msgid "required"
+msgstr "مطلوبة"
+
+msgid "optional"
+msgstr "اختيارية"
+
+msgid "A mapped bone is not below its expected parent in the skeleton."
+msgstr "عظمة مطابقة ليست تحت العظمة الأم المتوقعة في الهيكل."
+
+msgid "No clear spine path was found between the pelvis and the head."
+msgstr "لم يُعثر على مسار واضح للعمود الفقري بين الحوض والرأس."
+
+msgid "Some spine bones are not mapped; the spine is simplified."
+msgstr "بعض عظام العمود الفقري غير مطابقة، فسيُبسَّط العمود الفقري."
+
+msgid "The character seems to face −Z; Blazma expects +Z as forward."
+msgstr "تبدو الشخصية متجهة نحو −Z، بينما يتوقع Blazma أن يكون الأمام +Z."
+
+msgid "A left bone sits on the right side of the body, or the other way round."
+msgstr "عظمة يسرى تقع في الجانب الأيمن من الجسم أو العكس."
+
+msgid "(joint limit)"
+msgstr "(حد المفصل)"
+
+msgid "Rotate bone"
+msgstr "تدوير عظمة"
+
+msgid "Move bone"
+msgstr "تحريك عظمة"
+
+msgid "Move IK control"
+msgstr "تحريك نقطة تحكم IK"
+
+msgid "Pin IK target"
+msgstr "تثبيت هدف IK"
+
+msgid "Unpin IK target"
+msgstr "إلغاء تثبيت هدف IK"
+
+msgid "Reset bone"
+msgstr "إعادة ضبط عظمة"
+
+msgid "Mirror pose"
+msgstr "عكس الوضعية"
+
+msgid "Paste pose"
+msgstr "لصق الوضعية"
+
+msgid "Apply library pose"
+msgstr "تطبيق وضعية من المكتبة"
+
+msgid "Add mannequin"
+msgstr "إضافة مجسّم بشري"
+
+msgid "Remove character"
+msgstr "حذف الشخصية"
+
+msgid "Save pose"
+msgstr "حفظ الوضعية"
+
+msgid "Rename pose"
+msgstr "إعادة تسمية الوضعية"
+
+msgid "Import character"
+msgstr "استيراد شخصية"
+
+msgid "Map bone"
+msgstr "مطابقة عظمة"
+
+msgid "Map bones"
+msgstr "مطابقة العظام"
+
+msgid "Pin both feet"
+msgstr "تثبيت القدمين"
+
+msgid "Unpin all"
+msgstr "إلغاء كل التثبيت"
+
+msgid "The 3D model could not be shown: {0}"
+msgstr "تعذّر عرض النموذج ثلاثي الأبعاد: {0}"
+
+msgid "The model file is missing from the project."
+msgstr "ملف النموذج غير موجود داخل المشروع."
+
+msgid "The model has no skeleton."
+msgstr "لا يحتوي النموذج على هيكل عظمي."
+
+msgid "The model contains no 3D scene."
+msgstr "لا يحتوي النموذج على مشهد ثلاثي الأبعاد."

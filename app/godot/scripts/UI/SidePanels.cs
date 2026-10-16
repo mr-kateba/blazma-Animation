@@ -5,7 +5,7 @@ using Godot;
 namespace Blazma.UI.Views;
 
 /// <summary>Advanced mode, left: project outline (project -> clips) synced with the clip strip.</summary>
-public partial class ProjectTreePanel : PanelContainer
+public partial class ProjectTreePanel : VBoxContainer
 {
     readonly MainWindow _host;
     public Tree Tree { get; } = new();
@@ -14,10 +14,8 @@ public partial class ProjectTreePanel : PanelContainer
     public ProjectTreePanel(MainWindow host)
     {
         _host = host;
-        ThemeTypeVariation = "Card";
-        CustomMinimumSize = new Vector2(220, 0);
-        var v = new VBoxContainer();
-        v.AddThemeConstantOverride("separation", 6);
+        AddThemeConstantOverride("separation", 6);
+        var v = this;
         v.AddChild(W.Label("Project", "Section"));
         Tree.SizeFlagsVertical = SizeFlags.ExpandFill;
         Tree.HideRoot = false;
@@ -29,7 +27,6 @@ public partial class ProjectTreePanel : PanelContainer
         };
         Tree.AllowRmbSelect = true;
         v.AddChild(Tree);
-        AddChild(W.Margin(v, 12, 10, 8, 10));
     }
 
     public void Rebuild()

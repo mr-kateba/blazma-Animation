@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Blazma.Commands;
 using Blazma.Core.Model;
 using Blazma.Core.Persistence;
+using Blazma.Rigging;
 using Godot;
 
 namespace Blazma.UI.App;
@@ -47,7 +48,7 @@ public partial class AppController : Node
         Settings.Load();
         Recovery = new RecoveryStore(Godot.ProjectSettings.GlobalizePath("user://recovery"));
         var log = new JsonlOpLog(Godot.ProjectSettings.GlobalizePath("user://logs/oplog.jsonl"));
-        Session = new ProjectSession(Project.CreateNew("Untitled"), null, log);
+        Session = new ProjectSession(NewDefaultProject("Untitled"), null, log);
         Session.Changed += OnSessionChanged;
         _recovery = Recovery.BeginSession(Session.Project, null);
         GetTree().AutoAcceptQuit = false; // MainWindow asks about unsaved changes first
@@ -86,10 +87,16 @@ public partial class AppController : Node
     public CommandResult Undo() => Report(Session.Undo(CommandOrigin.Ui), quietCodes: "nothing_to_undo");
     public CommandResult Redo() => Report(Session.Redo(CommandOrigin.Ui), quietCodes: "nothing_to_redo");
 
+    /// <summary>Error code of the most recent failure that was reported through <see cref="ErrorRaised"/>.</summary>
+    public string? LastErrorCode { get; private set; }
+
     CommandResult Report(CommandResult r, string? quietCodes = null)
     {
         if (!r.Ok && r.Error is { } e && e.Code != quietCodes)
+        {
+            LastErrorCode = e.Code;
             ErrorRaised?.Invoke(e.Message);
+        }
         return r;
     }
 
@@ -105,8 +112,17 @@ public partial class AppController : Node
     public void NewProject(string name = "Untitled")
     {
         CloseCurrent();
-        Session.ReplaceProject(Project.CreateNew(string.IsNullOrWhiteSpace(name) ? "Untitled" : name), null);
+        // The mannequin is added before the session sees the project: a new project is ready to pose and not dirty.
+        Session.ReplaceProject(NewDefaultProject(string.IsNullOrWhiteSpace(name) ? "Untitled" : name), null);
         _recovery = Recovery.BeginSession(Session.Project, null);
+    }
+
+    /// <summary>A new project that already holds the default mannequin (outside the undo history).</summary>
+    static Project NewDefaultProject(string name)
+    {
+        var project = Project.CreateNew(name);
+        MannequinFactory.AddTo(project);
+        return project;
     }
 
     public bool Open(string path)
@@ -278,6 +294,20 @@ public partial class AppController : Node
     public void SetAdvancedMode(bool advanced)
     {
         Settings.AdvancedMode = advanced;
+        Settings.Save();
+        SettingsChanged?.Invoke();
+    }
+
+    public void SetShowSkeleton(bool show)
+    {
+        Settings.ShowSkeleton = show;
+        Settings.Save();
+        SettingsChanged?.Invoke();
+    }
+
+    public void SetOverlayAll(bool all)
+    {
+        Settings.OverlayAll = all;
         Settings.Save();
         SettingsChanged?.Invoke();
     }
