@@ -162,7 +162,7 @@ public class ProjectFileTests
             using (var r = new StreamReader(entry.Open())) text = r.ReadToEnd();
             entry.Delete();
             using var w = new StreamWriter(zip.CreateEntry("project.json").Open());
-            w.Write(text.Replace("\"schemaVersion\": 2", "\"schemaVersion\": 99"));
+            w.Write(text.Replace("\"schemaVersion\": 3", "\"schemaVersion\": 99"));
         }
         Assert.Equal("schema_too_new", Assert.Throws<ProjectFormatException>(() => ProjectFile.Load(path)).Code);
     }
@@ -205,6 +205,25 @@ public class ProjectFileTests
 
 public class SchemaMigrationTests
 {
+    [Fact]
+    public void V2File_FromPhase2Release_OpensWithPosesRigsAndEmbeddedModel()
+    {
+        var p = ProjectFile.Load(Fixture("schema-v2/project-v2.blazanim"));
+        Assert.Equal("Schema v2 fixture", p.Name);
+        Assert.Equal(2, p.Rigs.Count);
+        Assert.Equal(2, p.Characters.Count);
+        Assert.Single(p.PoseLibrary);
+        Assert.Single(p.Assets);
+        Assert.True(p.Characters[0].Pose.Bones.Count > 0);
+        Assert.Empty(p.Clips[0].Markers);
+
+        using var dir = new TempDir();
+        var path = dir.File("v3.blazanim");
+        ProjectFile.Save(p, path);
+        var again = ProjectFile.Load(path);
+        Assert.True(p.Characters[0].Pose.ContentEquals(again.Characters[0].Pose, 0));
+    }
+
     static string Fixture(string name) =>
         Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "fixtures", name);
 

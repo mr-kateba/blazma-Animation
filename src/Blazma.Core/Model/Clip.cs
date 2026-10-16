@@ -21,6 +21,9 @@ public sealed class Clip
     public List<Track> Tracks { get; set; } = new();
     public List<AnimationEvent> Events { get; set; } = new();
 
+    /// <summary>Authoring markers on the timeline, including the key-pose phases (Anticipation, Contact, …).</summary>
+    public List<Marker> Markers { get; set; } = new();
+
     /// <summary>True for AI or tool drafts that have not been approved yet.</summary>
     public bool IsDraft { get; set; }
 
@@ -50,6 +53,9 @@ public sealed class Track
     public List<Keyframe> Keys { get; set; } = new();
     public bool Locked { get; set; }
     public string? Group { get; set; }
+
+    /// <summary>Muted tracks are kept but not evaluated.</summary>
+    public bool Muted { get; set; }
 }
 
 public static class TrackChannels
@@ -57,6 +63,9 @@ public static class TrackChannels
     public const string Translation = "translation";
     public const string Rotation = "rotation";
     public const string Scale = "scale";
+
+    /// <summary>IK target pinned state (1 = pinned), always stepped.</summary>
+    public const string Pinned = "pinned";
     public const string CustomPrefix = "custom:";
 
     /// <summary>Number of components for a channel value, or 0 if the channel name is invalid.</summary>
@@ -64,6 +73,7 @@ public static class TrackChannels
     {
         Translation or Scale => 3,
         Rotation => 4,
+        Pinned => 1,
         _ when channel.StartsWith(CustomPrefix, StringComparison.Ordinal) && channel.Length > CustomPrefix.Length => 1,
         _ => 0,
     };
@@ -99,3 +109,18 @@ public sealed class AnimationEvent
     public string Name { get; set; } = "";
     public Dictionary<string, string> Data { get; set; } = new();
 }
+
+/// <summary>A named point on a clip's timeline.</summary>
+public sealed class Marker
+{
+    public ObjectId Id { get; set; } = ObjectId.New();
+    public Flicks Time { get; set; }
+    public string Name { get; set; } = "";
+
+    /// <summary>Which key-pose phase this marker represents, if any.</summary>
+    public KeyPhase Phase { get; set; } = KeyPhase.None;
+}
+
+/// <summary>The pose-to-pose phases of an action (docs: product philosophy §2.1).</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<KeyPhase>))]
+public enum KeyPhase { None, Initial, Anticipation, MainAction, Contact, FollowThrough, Recovery, Final }

@@ -13,7 +13,17 @@ public static class SchemaMigrations
     static readonly Action<ArchiveDocument>[] Steps =
     {
         V1ToV2,
+        V2ToV3,
     };
+
+    /// <summary>
+    /// v3 adds clip markers and animated IK "pinned" tracks. Both are new optional data, so the
+    /// JSON is unchanged; the bump exists so that older builds refuse v3 files instead of
+    /// silently dropping the markers when re-saving.
+    /// </summary>
+    static void V2ToV3(ArchiveDocument doc)
+    {
+    }
 
     /// <summary>v2 adds rigs, the pose library and the scene (characters). v1 files have none of them.</summary>
     static void V1ToV2(ArchiveDocument doc)

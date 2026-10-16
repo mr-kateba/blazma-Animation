@@ -11,7 +11,7 @@ namespace Blazma.Core.Model;
 public sealed class Project
 {
     /// <summary>Schema version written by this build. See docs/DATA_FORMAT.md §4.</summary>
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     public ObjectId Id { get; set; } = ObjectId.New();
     public string Name { get; set; } = "Untitled";

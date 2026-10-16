@@ -178,6 +178,18 @@ public sealed class ProjectSession
         Raise(Array.Empty<Change>(), CommandOrigin.Ui, wasDirty, forceSaveState: true);
     }
 
+    /// <summary>
+    /// Display-only change, e.g. showing another frame while scrubbing or playing: not recorded in
+    /// history and does not change the saved/dirty state. Only use it for state that is derived
+    /// from the document (an evaluated pose), never for real edits.
+    /// </summary>
+    public void ApplyPreview(Action<Project> apply, IReadOnlyList<Change> changes, CommandOrigin origin)
+    {
+        if (_open is not null) throw new InvalidOperationException("Cannot preview during a transaction.");
+        apply(Project);
+        if (changes.Count > 0) Changed?.Invoke(new SessionChangedArgs(changes, origin));
+    }
+
     /// <summary>New/Open: swap the project and clear history. Not undoable by design.</summary>
     public void ReplaceProject(Project project, string? filePath, bool startDirty = false)
     {

@@ -48,6 +48,7 @@ public sealed class CommandRegistry
         BuiltinCommands.Register(r);
         PoseCommands.Register(r);
         RigCommands.Register(r);
+        KeyCommands.Register(r);
         return r;
     }
 }
