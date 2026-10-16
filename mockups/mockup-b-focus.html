@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blazma Animation — Focus Canvas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+  .app { grid-template-rows: 38px minmax(0, 1fr); }
+  .topbar { overflow: hidden; }
+  .menu { min-width: 0; flex: 0 1 auto; }
+  .stage { position: absolute; inset: 0 0 var(--dock-h) 0; }
+  .stage svg.scene { position: absolute; inset: 0; width: 100%; height: 100%; }
+  :root { --dock-h: 236px; --shadow: 0 2px 8px rgba(0,0,0,.18); }
+  .float { position: absolute; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); z-index: 5; }
+
+  /* Tool rail */
+  .rail { inset-inline-start: 12px; top: 50%; transform: translateY(-62%); display: flex; flex-direction: column; gap: 2px; padding: 5px; }
+  .rail button { width: 52px; padding: 6px 2px 4px; background: none; border: 1px solid transparent; border-radius: 6px; color: var(--text-2); display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; font-size: 10.5px; line-height: 1.2; }
+  .rail button:hover { background: var(--panel-2); color: var(--text); }
+  .rail button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+  .rail button.on svg { color: var(--accent); }
+  .rail svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .rail hr { width: 30px; border: 0; border-top: 1px solid var(--line); margin: 3px auto; }
+  :root[lang="ar"] .rail button { font-size: 11.5px; }
+
+  /* Inspector */
+  .insp { inset-inline-end: 12px; top: 48px; width: 232px; }
+  .insp-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  .insp-h .bone { font-family: var(--mono); font-size: 12px; color: var(--text); direction: ltr; }
+  .insp-h .sub { font-size: 11px; color: var(--text-3); }
+  .insp-b { padding: 8px 10px 10px; }
+  .insp .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 0 0; color: var(--text-2); }
+  .insp h4 { margin: 0 0 6px; font-size: 11.5px; font-weight: 500; color: var(--text-2); }
+  .vec-l { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; direction: ltr; }
+  .switch { width: 30px; height: 16px; border-radius: 999px; background: var(--accent); position: relative; flex: none; }
+  .switch::after { content: ""; position: absolute; top: 2px; inset-inline-end: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--panel); }
+  .status { display: flex; gap: 8px; align-items: flex-start; padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); margin-top: 10px; }
+  .status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-top: 5px; flex: none; }
+  .status b { font-weight: 600; }
+  .status small { display: block; color: var(--text-3); font-size: 11px; }
+  .insp .tbtn { width: 100%; margin-top: 10px; }
+
+  /* Dock */
+  .dock { inset-inline: 12px; bottom: 12px; padding: 8px 10px 8px; direction: ltr; height: calc(var(--dock-h) - 12px); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  :root[lang="ar"] .dock .l { direction: rtl; }
+  .dock-h { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .dock-h .ttl { color: var(--text-2); font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+  :root[lang="ar"] .dock-h .ttl { text-transform: none; letter-spacing: 0; font-size: 12.5px; }
+  .dock-h .hint { color: var(--text-3); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .strip { display: flex; align-items: stretch; overflow-x: auto; padding: 2px 0 4px; flex: none; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+  .strip > * { flex: none; }
+  .pose { width: 118px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); padding: 4px; cursor: pointer; }
+  .pose.sel { border-color: var(--accent); background: var(--accent-soft); }
+  .pose .viewport { height: 70px; border-radius: 4px; }
+  .pose .viewport svg.scene { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .pose .meta { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; padding: 4px 2px 0; font-size: 11.5px; }
+  .pose .meta .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .pose.sel .meta .nm { color: var(--text); font-weight: 600; }
+  .pose .meta .fr { font-family: var(--mono); font-size: 10.5px; color: var(--text-3); direction: ltr; }
+  .pose.sel .meta .fr { color: var(--accent); }
+  .conn { width: 54px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--text-3); font-size: 10.5px; }
+  .conn .ln { width: 100%; height: 9px; position: relative; }
+  .conn .ln::before { content: ""; position: absolute; inset-inline: 0; top: 4px; border-top: 1px dashed var(--line-strong); }
+  .conn .ln i { position: absolute; top: 2px; width: 5px; height: 5px; border-radius: 50%; background: var(--text-3); }
+  .conn .ln i:nth-child(1) { left: 22%; } .conn .ln i:nth-child(2) { left: 46%; } .conn .ln i:nth-child(3) { left: 70%; }
+  .conn.hold .ln::before { border-top-style: solid; }
+  .conn.hold .ln i { display: none; }
+  .conn span.t { white-space: nowrap; }
+  .add { width: 64px; border: 1px dashed var(--line-strong); border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--text-2); font-size: 11px; cursor: pointer; margin-inline-start: 6px; }
+  .add b { font-size: 20px; font-weight: 400; line-height: 1; color: var(--accent); }
+  .tl-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .play { display: flex; gap: 3px; flex: none; align-items: center; }
+  .play button { width: 28px; height: 26px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; color: var(--text); cursor: pointer; display: grid; place-items: center; padding: 0; }
+  .play button.on { color: var(--accent); border-color: var(--accent); }
+  .play svg { width: 13px; height: 13px; fill: currentColor; }
+  .play .cur { font-family: var(--mono); font-size: 11.5px; color: var(--text-2); margin-inline-start: 6px; white-space: nowrap; }
+  .play .cur b { color: var(--accent); font-weight: 500; }
+  .timeline { flex: 1; min-width: 120px; padding: 0 8px; }
+  .tl-track { position: relative; }
+  .ruler span { left: calc(var(--f) / 48 * 100%); }
+  .ruler .tick { position: absolute; top: 15px; width: 1px; height: 6px; background: var(--line-strong); }
+  .tl-row .key { left: calc(var(--f) / 48 * 100%); }
+  .playhead { left: calc(18 / 48 * 100%); }
+  .tl-row { border-bottom: 0; }
+
+  .mock-note { inset-inline-end: 12px; bottom: auto; top: 46px; z-index: 20; }
+  .insp { top: 88px; }
+
+  /* Narrow screens */
+  @media (max-width: 760px) {
+    :root { --dock-h: 292px; }
+    .topbar { overflow-x: auto; scrollbar-width: none; }
+    .topbar > * { flex: none; }
+    .menu { overflow: visible; order: 9; margin-inline-start: 6px; }
+    .spacer { display: none; }
+    .chip { order: 10; margin-inline-start: 6px; }
+    .brand { margin-inline-end: 6px; }
+    .rail { top: 76px; transform: none; flex-direction: row; inset-inline-start: 8px; inset-inline-end: 8px; padding: 3px; justify-content: space-between; }
+    .rail button { width: auto; flex: 1; min-width: 0; padding: 4px 1px 3px; font-size: 9.5px; }
+    .rail svg { width: 17px; height: 17px; }
+    .rail hr { display: none; }
+    .insp { display: none; }
+    .mock-note { inset-inline: 8px; top: 42px; font-size: 10.5px; padding: 3px 6px; justify-content: space-between; }
+    .stage { inset: 112px 0 var(--dock-h) 0; }
+    .dock { inset-inline: 8px; bottom: 8px; height: calc(var(--dock-h) - 8px); }
+    .dock-h .hint { display: none; }
+    .dock-h { flex-wrap: wrap; }
+    .tl-wrap { flex-wrap: wrap; gap: 4px; }
+    .timeline { flex-basis: 100%; order: 2; }
+    .pose { width: 104px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand"><span class="mark"></span><span>Blazma Animation</span></div>
+    <nav class="menu">
+      <button><span class="lang-en">Project</span><span class="lang-ar">المشروع</span></button>
+      <button><span class="lang-en">Edit</span><span class="lang-ar">تحرير</span></button>
+      <button><span class="lang-en">Animation</span><span class="lang-ar">الحركة</span></button>
+      <button><span class="lang-en">Rigging</span><span class="lang-ar">الهيكل</span></button>
+      <button><span class="lang-en">Physics</span><span class="lang-ar">الفيزياء</span></button>
+      <button><span class="lang-en">AI</span><span class="lang-ar">الذكاء الاصطناعي</span></button>
+      <button><span class="lang-en">Export</span><span class="lang-ar">تصدير</span></button>
+      <button><span class="lang-en">Settings</span><span class="lang-ar">الإعدادات</span></button>
+    </nav>
+    <span class="spacer"></span>
+    <div class="seg"><button class="on"><span class="lang-en">Simple</span><span class="lang-ar">بسيط</span></button><button><span class="lang-en">Advanced</span><span class="lang-ar">متقدم</span></button></div>
+    <div class="seg"><button data-set-lang="en">EN</button><button data-set-lang="ar">عربي</button></div>
+    <div class="seg"><button data-set-theme="dark"><span class="lang-en">Dark</span><span class="lang-ar">داكن</span></button><button data-set-theme="light"><span class="lang-en">Light</span><span class="lang-ar">فاتح</span></button></div>
+    <span class="chip"><span class="dot"></span><span>Jump Attack · 30 fps</span></span>
+  </header>
+
+  <main class="viewport">
+    <div class="stage"><svg class="scene" data-scene data-pose="action" data-onion data-trail data-com data-gizmo data-sel="elR"></svg></div>
+
+    <!-- Tool rail -->
+    <div class="float rail">
+      <button><svg viewBox="0 0 24 24"><path d="M6 3l12 9-5.5 1 3 6-2.5 1-3-6L6 18z"/></svg><span><span class="lang-en">Select</span><span class="lang-ar">تحديد</span></span></button>
+      <button class="on"><svg viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2.5-5.4"/><path d="M19 4v4h-4"/></svg><span><span class="lang-en">Rotate</span><span class="lang-ar">تدوير</span></span></button>
+      <button><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg><span><span class="lang-en">Move</span><span class="lang-ar">تحريك</span></span></button>
+      <button><svg viewBox="0 0 24 24"><path d="M12 14v7"/><path d="M8 21h8"/><circle cx="12" cy="8" r="4"/><circle cx="12" cy="8" r="1" fill="currentColor"/></svg><span><span class="lang-en">IK pin</span><span class="lang-ar">تثبيت IK</span></span></button>
+      <hr>
+      <button><svg viewBox="0 0 24 24"><path d="M12 3v18" stroke-dasharray="2 2.5"/><path d="M9 7L3 12l6 5z"/><path d="M15 7l6 5-6 5z"/></svg><span><span class="lang-en">Mirror</span><span class="lang-ar">عكس الوضعية</span></span></button>
+      <button><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4.5h4.5"/></svg><span><span class="lang-en">Reset</span><span class="lang-ar">إعادة ضبط</span></span></button>
+    </div>
+
+    <!-- Contextual inspector -->
+    <aside class="float insp">
+      <div class="insp-h"><span class="bone">lower_arm_r</span><span class="sub"><span class="lang-en">Selected bone</span><span class="lang-ar">العظمة المحددة</span></span></div>
+      <div class="insp-b">
+        <h4><span class="lang-en">Rotation</span><span class="lang-ar">التدوير</span></h4>
+        <div class="vec-l"><div class="num x">12.5°</div><div class="num y">-4.0°</div><div class="num z">38.2°</div></div>
+        <div class="row"><span><span class="lang-en">IK pinned</span><span class="lang-ar">تثبيت IK</span></span><span class="switch"></span></div>
+        <div class="status"><span class="dot"></span><div><b><span class="lang-en">Balance: OK</span><span class="lang-ar">التوازن: سليم</span></b><small><span class="lang-en">Centre of mass is inside the support area</span><span class="lang-ar">مركز الكتلة داخل منطقة الارتكاز</span></small></div></div>
+        <button class="tbtn"><span class="lang-en">Auto-balance…</span><span class="lang-ar">موازنة تلقائية…</span></button>
+      </div>
+    </aside>
+
+    <!-- Bottom dock -->
+    <section class="float dock">
+      <div class="dock-h">
+        <span class="ttl l"><span class="lang-en">Key poses</span><span class="lang-ar">الوضعيات الرئيسية</span></span>
+        <span class="hint l"><span class="lang-en">Set the poses — in-betweens are generated for you</span><span class="lang-ar">حدّد الوضعيات وسيُولَّد ما بينها تلقائيًا</span></span>
+        <span class="spacer"></span>
+        <button class="tbtn l"><span class="lang-en">Preview</span><span class="lang-ar">معاينة</span></button>
+        <button class="tbtn primary l"><span class="lang-en">Generate in-betweens</span><span class="lang-ar">توليد الحركة الوسيطة</span></button>
+      </div>
+
+      <div class="strip">
+        <div class="pose"><div class="viewport"><svg class="scene" data-scene data-pose="idle" data-scale="1.15"></svg></div><div class="meta"><span class="nm l"><span class="lang-en">Initial Pose</span><span class="lang-ar">الوضعية الأولية</span></span><span class="fr">0</span></div></div>
+        <div class="conn"><span class="ln"><i></i><i></i><i></i></span><span class="t l"><span class="lang-en">Ease</span><span class="lang-ar">تسهيل</span></span></div>
+        <div class="pose"><div class="viewport"><svg class="scene" data-scene data-pose="idle" data-scale="1.15" data-offset="-0.06"></svg></div><div class="meta"><span class="nm l"><span class="lang-en">Anticipation</span><span class="lang-ar">التمهيد</span></span><span class="fr">6</span></div></div>
+        <div class="conn"><span class="ln"><i></i><i></i><i></i></span><span class="t l"><span class="lang-en">Ease</span><span class="lang-ar">تسهيل</span></span></div>
+        <div class="pose sel"><div class="viewport"><svg class="scene" data-scene data-pose="action" data-scale="1.15" data-sel="elR"></svg></div><div class="meta"><span class="nm l"><span class="lang-en">Main Action</span><span class="lang-ar">الحركة الرئيسية</span></span><span class="fr">14</span></div></div>
+        <div class="conn"><span class="ln"><i></i><i></i><i></i></span><span class="t l"><span class="lang-en">Linear</span><span class="lang-ar">خطي</span></span></div>
+        <div class="pose"><div class="viewport"><svg class="scene" data-scene data-pose="action" data-scale="1.15" data-offset="0.06"></svg></div><div class="meta"><span class="nm l"><span class="lang-en">Contact / Impact</span><span class="lang-ar">التلامس / الضربة</span></span><span class="fr">18</span></div></div>
+        <div class="conn hold"><span class="ln"><i></i></span><span class="t l"><span class="lang-en">Hold</span><span class="lang-ar">تثبيت</span></span></div>
+        <div class="pose"><div class="viewport"><svg class="scene" data-scene data-pose="action" data-scale="1.15" data-offset="-0.04"></svg></div><div class="meta"><span class="nm l"><span class="lang-en">Follow-through</span><span class="lang-ar">المتابعة</span></span><span class="fr">24</span></div></div>
+        <div class="conn"><span class="ln"><i></i><i></i><i></i></span><span class="t l"><span class="lang-en">Ease</span><span class="lang-ar">تسهيل</span></span></div>
+        <div class="pose"><div class="viewport"><svg class="scene" data-scene data-pose="idle" data-scale="1.15" data-offset="0.04"></svg></div><div class="meta"><span class="nm l"><span class="lang-en">Recovery</span><span class="lang-ar">التعافي</span></span><span class="fr">32</span></div></div>
+        <div class="conn"><span class="ln"><i></i><i></i><i></i></span><span class="t l"><span class="lang-en">Ease</span><span class="lang-ar">تسهيل</span></span></div>
+        <div class="pose"><div class="viewport"><svg class="scene" data-scene data-pose="idle" data-scale="1.15"></svg></div><div class="meta"><span class="nm l"><span class="lang-en">Final Pose</span><span class="lang-ar">الوضعية النهائية</span></span><span class="fr">48</span></div></div>
+        <div class="add"><b>+</b><span class="l"><span class="lang-en">Add pose</span><span class="lang-ar">إضافة</span></span></div>
+      </div>
+
+      <div class="tl-wrap">
+        <div class="play">
+          <button aria-label="Previous key"><svg viewBox="0 0 12 12"><path d="M2 2h1.5v8H2zM10 2v8L4.5 6z"/></svg></button>
+          <button class="on" aria-label="Play"><svg viewBox="0 0 12 12"><path d="M3 1.5v9l7.5-4.5z"/></svg></button>
+          <button aria-label="Next key"><svg viewBox="0 0 12 12"><path d="M8.5 2H10v8H8.5zM2 2l5.5 4L2 10z"/></svg></button>
+          <span class="cur">f <b>18</b> / 48</span>
+        </div>
+        <div class="timeline">
+          <div class="tl-track">
+            <div class="ruler">
+              <span style="--f:0">0</span><span style="--f:6">6</span><span style="--f:12">12</span><span style="--f:18">18</span><span style="--f:24">24</span><span style="--f:30">30</span><span style="--f:36">36</span><span style="--f:42">42</span><span style="--f:48">48</span>
+            </div>
+            <div class="tl-row">
+              <i class="key" style="--f:0"></i><i class="key" style="--f:6"></i><i class="key sel" style="--f:14"></i><i class="key" style="--f:18"></i><i class="key" style="--f:24"></i><i class="key" style="--f:32"></i><i class="key" style="--f:48"></i>
+            </div>
+            <div class="playhead"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="mock-note"><span><span class="lang-en">Mockup B — Focus Canvas · static, no app logic</span><span class="lang-ar">النموذج B — مساحة التركيز · ثابت، بلا منطق برمجي</span></span><a href="index.html"><span class="lang-en">All mockups</span><span class="lang-ar">كل النماذج</span></a></div>
+  </main>
+</div>
+<script src="shared.js"></script>
+</body>
+</html>

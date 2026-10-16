@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blazma Animation — Mockup C · Agent Split</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+  .app { grid-template-rows: auto minmax(0, 1fr); }
+  .topbar { flex-wrap: nowrap; }
+  .topbar .menu { min-width: 0; }
+  .topbar .right { display: flex; align-items: center; gap: 8px; flex: none; }
+  .main { display: grid; grid-template-columns: 210px minmax(0, 1fr) 380px; min-height: 0; min-width: 0; gap: 1px; background: var(--line); }
+  .main > * { background: var(--panel); }
+  .ltr { direction: ltr; unicode-bidi: isolate; }
+  code.ltr, .mono { font-family: var(--mono); }
+  .sub { color: var(--text-3); font-size: 11.5px; }
+  .tree .indent1 { padding-inline-start: 18px; }
+  .tree .indent2 { padding-inline-start: 30px; }
+  .tree .indent3 { padding-inline-start: 42px; }
+  .tree .grow { flex: 1; }
+  .chip.sm { font-size: 10.5px; padding: 1px 7px; }
+  .sec-t { margin: 12px 0 6px; font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; padding-inline: 6px; }
+  :root[lang="ar"] .sec-t { text-transform: none; letter-spacing: 0; font-size: 12px; }
+
+  /* center */
+  .center { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg); }
+  .compare { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); direction: ltr; }
+  .compare .viewport { min-height: 0; }
+  .compare .vp-overlay { top: 10px; left: 10px; align-items: center; }
+  .compare .vp-overlay.r { left: auto; right: 10px; }
+  .vp-tag { font-size: 12px; font-weight: 500; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 2px 8px; }
+  .vp-tag.draft { border-color: var(--accent); color: var(--accent); }
+  .compare .foot { position: absolute; left: 10px; bottom: 8px; }
+  .tl { flex: none; background: var(--panel); border-top: 1px solid var(--line); direction: ltr; display: grid; grid-template-columns: 96px 1fr; }
+  .tl .lab { height: 22px; display: flex; align-items: center; padding-inline: 10px; border-bottom: 1px solid var(--line); font-size: 11.5px; color: var(--text-2); direction: ltr; white-space: nowrap; }
+  .tl .lab.d { color: var(--accent); }
+  .tl .track { position: relative; }
+  .tl .ruler span:first-child { transform: none; left: 4px !important; }
+  .tl .ruler span:last-child { transform: translateX(-100%); }
+  .tl .tl-row.d { background: var(--accent-soft); }
+  .tl .key.d { background: var(--accent); }
+  .tl .key.rem { background: transparent; border: 1.5px solid var(--err); }
+  .tl .playhead { z-index: 2; }
+  .tl .playhead.full { top: 0; bottom: 0; }
+  .hitstop { position: absolute; top: 0; bottom: 0; background: var(--accent-soft); border-inline: 1px dashed var(--accent); }
+  .tl-col { position: relative; }
+  .tl-head { display: flex; align-items: center; justify-content: space-between; height: 22px; padding-inline: 10px; border-bottom: 1px solid var(--line); }
+
+  /* AI workspace */
+  .ai { min-width: 0; }
+  .ai .panel-h .tab { padding: 0 6px; }
+  .ai .panel-h .end { margin-inline-start: auto; }
+  .task { padding: 4px 0 10px; border-bottom: 1px solid var(--line); }
+  .task .prompt { font-size: 13.5px; line-height: 1.5; color: var(--text); margin: 4px 0 10px; }
+  .task-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .status { display: inline-flex; align-items: center; gap: 6px; color: var(--warn); font-weight: 500; font-size: 12.5px; }
+  .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
+  .bar { display: flex; gap: 3px; margin-top: 10px; align-items: center; direction: ltr; }
+  .bar i { flex: 1; height: 4px; border-radius: 2px; background: var(--line-strong); }
+  .bar i.ok { background: var(--accent); }
+  .bar i.wait { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+  .bar b { font: 500 11.5px var(--mono); color: var(--text-2); margin-inline-start: 6px; }
+  .section { padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .section:last-child { border-bottom: 0; }
+  .section h4 { margin: 0 0 8px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .steps { list-style: none; margin: 0; padding: 0; }
+  .steps li { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 5px 0; }
+  .steps .st { font-family: var(--mono); font-size: 12px; text-align: center; }
+  .steps .ok { color: var(--ok); } .steps .wait { color: var(--accent); }
+  .steps code { font-family: var(--mono); font-size: 12px; color: var(--text); overflow-wrap: anywhere; }
+  .steps code em { font-style: normal; color: var(--text-3); }
+  .steps .ms { font-family: var(--mono); font-size: 11px; color: var(--text-3); direction: ltr; white-space: nowrap; }
+  .steps .note { grid-column: 2 / 4; font-size: 12px; color: var(--text-2); }
+  .steps .note.warn { color: var(--warn); }
+  .steps .note.warn b { font-weight: 500; }
+  .steps li.pending code { color: var(--accent); }
+  .kv { display: grid; grid-template-columns: 1fr auto; gap: 5px 12px; font-size: 12.5px; color: var(--text-2); align-items: baseline; }
+  .kv .v { font-family: var(--mono); font-size: 12px; color: var(--text); direction: ltr; text-align: end; }
+  .kv .v.ok::after { content: " ✓"; color: var(--ok); }
+  .kv .v.t { font-family: var(--font); direction: inherit; font-size: 12.5px; }
+  .diff { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+  .diff li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; padding: 3px 0; align-items: baseline; }
+  .diff code { font-family: var(--mono); font-size: 11.5px; color: var(--text-2); overflow-wrap: anywhere; }
+  .diff .p { font-family: var(--mono); color: var(--ok); direction: ltr; }
+  .diff .m { font-family: var(--mono); color: var(--err); direction: ltr; }
+  .ai-foot { flex: none; border-top: 1px solid var(--line); padding: 10px 10px 54px; background: var(--panel); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .actions .tbtn { padding: 6px 14px; }
+  .actions .tbtn.reject { color: var(--err); border-color: var(--err); background: transparent; }
+  .restore { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--text-2); flex-wrap: wrap; }
+  .restore a { color: var(--accent); margin-inline-start: auto; text-decoration: underline; cursor: default; }
+  .guard { margin-top: 8px; font-size: 11.5px; color: var(--text-3); display: flex; gap: 6px; align-items: flex-start; }
+  .guard::before { content: "⛨"; color: var(--text-3); }
+
+  .mock-note { z-index: 20; }
+  .mock-note a { white-space: nowrap; }
+
+  @media (max-width: 1100px) {
+    .main { grid-template-columns: 180px minmax(0, 1fr) 340px; }
+  }
+  @media (max-width: 900px) {
+    body { overflow-y: auto; overflow-x: hidden; height: auto; }
+    html { height: auto; }
+    .app { height: auto; display: block; }
+    .topbar { flex-wrap: wrap; height: auto; padding: 6px 10px; row-gap: 6px; }
+    .topbar .menu { order: 3; flex: 1 1 100%; }
+    .topbar .spacer { display: none; }
+    .topbar .brand { margin-inline-end: auto; }
+    .topbar .right { order: 2; flex-wrap: wrap; flex: 1 1 100%; }
+    .main { display: block; background: none; }
+    .left { display: none; }
+    .center { height: auto; }
+    .compare { height: 300px; flex: none; }
+    .ai { height: auto; overflow: visible; margin-bottom: 64px; }
+    .ai .panel-b { overflow: visible; }
+    .ai-foot { border-top: 1px solid var(--line); padding-bottom: 10px; }
+    .tl { grid-template-columns: 64px 1fr; }
+    .tl .lab { padding-inline: 6px; font-size: 11px; }
+    .mock-note { inset-inline-start: 12px; inset-inline-end: 12px; justify-content: space-between; font-size: 11.5px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand"><span class="mark"></span><span>Blazma Animation</span></div>
+    <nav class="menu">
+      <button><span class="lang-en">Project</span><span class="lang-ar">المشروع</span></button>
+      <button><span class="lang-en">Edit</span><span class="lang-ar">تحرير</span></button>
+      <button><span class="lang-en">Animation</span><span class="lang-ar">الحركة</span></button>
+      <button><span class="lang-en">Rigging</span><span class="lang-ar">الهيكل</span></button>
+      <button><span class="lang-en">Physics</span><span class="lang-ar">الفيزياء</span></button>
+      <button style="color:var(--text)"><span class="lang-en">AI</span><span class="lang-ar">الذكاء الاصطناعي</span></button>
+      <button><span class="lang-en">Export</span><span class="lang-ar">تصدير</span></button>
+      <button><span class="lang-en">Settings</span><span class="lang-ar">الإعدادات</span></button>
+    </nav>
+    <div class="spacer"></div>
+    <div class="right">
+      <span class="chip"><span class="dot"></span><span class="ltr">Claude Code · MCP</span><span class="lang-en">connected</span><span class="lang-ar">متصل</span></span>
+      <span class="seg" title="Permission mode">
+        <button class="on"><span class="lang-en">Assisted</span><span class="lang-ar">مساعد</span></button>
+        <button><span class="lang-en">Autonomous</span><span class="lang-ar">مستقل</span></button>
+      </span>
+      <span class="seg" dir="ltr">
+        <button data-set-lang="en">EN</button>
+        <button data-set-lang="ar">عربي</button>
+      </span>
+      <span class="seg">
+        <button data-set-theme="dark"><span class="lang-en">Dark</span><span class="lang-ar">داكن</span></button>
+        <button data-set-theme="light"><span class="lang-en">Light</span><span class="lang-ar">فاتح</span></button>
+      </span>
+    </div>
+  </header>
+
+  <div class="main">
+
+    <!-- LEFT -->
+    <aside class="panel left">
+      <div class="panel-h">
+        <span class="tab on"><span class="lang-en">Scene</span><span class="lang-ar">المشهد</span></span>
+        <span class="tab"><span class="lang-en">Rig</span><span class="lang-ar">الهيكل</span></span>
+      </div>
+      <div class="panel-b">
+        <ul class="tree">
+          <li><span class="ic">▾</span><span class="ltr">Mannequin</span></li>
+          <li class="indent1"><span class="ic">▾</span><span class="ltr">root</span></li>
+          <li class="indent2"><span class="ic">▾</span><span class="ltr">pelvis</span></li>
+          <li class="indent3"><span class="ic">▸</span><span class="ltr">spine_01</span></li>
+          <li class="indent3"><span class="ic">▸</span><span class="ltr">thigh_l</span></li>
+          <li class="indent3 sel"><span class="ic">▸</span><span class="ltr">thigh_r</span></li>
+        </ul>
+        <div class="sec-t"><span class="lang-en">Clips</span><span class="lang-ar">المقاطع</span></div>
+        <ul class="tree">
+          <li><span class="ic">▸</span><span class="ltr">Walk</span></li>
+          <li class="sel"><span class="ic">▸</span><span class="ltr grow">Jump Attack</span></li>
+          <li><span class="ic">▸</span><span class="ltr">Walk (AI draft)</span></li>
+          <li class="indent1"><span class="chip on sm"><span class="lang-en">Draft</span><span class="lang-ar">مسودة</span></span></li>
+        </ul>
+      </div>
+    </aside>
+
+    <!-- CENTER -->
+    <section class="center">
+      <div class="compare" dir="ltr">
+        <div class="viewport">
+          <svg class="scene" data-scene data-pose="idle" data-gizmo data-sel="elR"></svg>
+          <div class="vp-overlay"><span class="vp-tag"><span class="lang-en">Original</span><span class="lang-ar">الأصلي</span></span><span class="vp-label">Jump Attack</span></div>
+          <span class="vp-label foot">f 21 · 24 fps</span>
+        </div>
+        <div class="viewport">
+          <svg class="scene" data-scene data-pose="action" data-trail data-com data-sel="haR"></svg>
+          <div class="vp-overlay"><span class="vp-tag draft"><span class="lang-en">AI Draft</span><span class="lang-ar">مسودة الذكاء الاصطناعي</span></span></div>
+          <span class="vp-label foot">f 21 · CoM</span>
+        </div>
+      </div>
+
+      <div class="tl timeline">
+        <div>
+          <div class="lab" style="height:22px"> </div>
+          <div class="lab"><span class="lang-en">Original</span><span class="lang-ar">الأصلي</span></div>
+          <div class="lab d"><span class="lang-en">Draft</span><span class="lang-ar">المسودة</span></div>
+        </div>
+        <div class="track">
+          <div class="ruler">
+            <span style="left:0%">0</span><span style="left:25%">12</span><span style="left:50%">24</span><span style="left:75%">36</span><span style="left:calc(100% - 4px)">48</span>
+          </div>
+          <div class="tl-row">
+            <i class="key" style="left:2%"></i><i class="key" style="left:15%"></i><i class="key" style="left:31%"></i><i class="key" style="left:44%"></i><i class="key" style="left:60%"></i><i class="key" style="left:77%"></i><i class="key" style="left:96%"></i>
+          </div>
+          <div class="tl-row d">
+            <i class="key d" style="left:2%"></i><i class="key d" style="left:15%"></i><i class="key d" style="left:23%"></i><i class="key d sel" style="left:44%"></i><i class="key d" style="left:48%"></i><i class="key d" style="left:52%"></i><i class="key d" style="left:56%"></i><i class="key d" style="left:71%"></i><i class="key d" style="left:90%"></i><i class="key d" style="left:96%"></i>
+          </div>
+          <div class="playhead" style="left:44%"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT -->
+    <aside class="panel ai">
+      <div class="panel-h">
+        <span class="lang-en" style="color:var(--text);font-weight:600;margin-inline-end:8px">AI Workspace</span><span class="lang-ar" style="color:var(--text);font-weight:600;margin-inline-end:8px">مساحة عمل الذكاء الاصطناعي</span>
+      </div>
+      <div class="panel-h" style="gap:10px">
+        <span class="tab on"><span class="lang-en">Task</span><span class="lang-ar">المهمة</span></span>
+        <span class="tab"><span class="lang-en">Log</span><span class="lang-ar">السجل</span></span>
+        <span class="tab"><span class="lang-en">Drafts</span><span class="lang-ar">المسودات</span></span>
+        <span class="chip sm end" style="margin-inline-start:auto"><span class="ltr">task #07</span></span>
+      </div>
+
+      <div class="panel-b">
+        <div class="task">
+          <div class="sub"><span class="lang-en">Current task</span><span class="lang-ar">المهمة الحالية</span></div>
+          <p class="prompt">
+            <span class="lang-en">Make the jump attack heavier: longer anticipation, stronger impact, 4-frame hit-stop</span>
+            <span class="lang-ar">اجعل ضربة القفز أثقل: تمهيد أطول، وتأثير أقوى، وتوقف لحظي عند الاصطدام مدته <span class="ltr">4</span> إطارات</span>
+          </p>
+          <div class="task-meta">
+            <span class="status"><span class="lang-en">Waiting for approval</span><span class="lang-ar">بانتظار الموافقة</span></span>
+            <span class="sub" style="margin-inline-start:auto"><span class="lang-en">Step</span><span class="lang-ar">الخطوة</span> <span class="ltr">4/5</span></span>
+          </div>
+          <div class="bar"><i class="ok"></i><i class="ok"></i><i class="ok"></i><i class="ok"></i><i class="wait"></i><b>4/5</b></div>
+        </div>
+
+        <div class="section">
+          <h4><span class="lang-en">Steps</span><span class="lang-ar">الخطوات</span></h4>
+          <ul class="steps">
+            <li><span class="st ok">✓</span><code class="ltr">animation_validate<em>(clip="Jump Attack")</em></code><span class="ms">212 ms</span></li>
+            <li><span class="st ok">✓</span><code class="ltr">motion_retime<em>(anticipation=+6f)</em></code><span class="ms">348 ms</span></li>
+            <li><span class="st ok">✓</span><code class="ltr">physics_analyze<em>(clip="Jump Attack (draft)")</em></code><span class="ms">1240 ms</span>
+              <span class="note warn"><b>⚠</b> <span class="lang-en">CoM leaves support polygon at frame <span class="ltr">21</span></span><span class="lang-ar">مركز الكتلة يخرج من مضلع الدعم عند الإطار <span class="ltr">21</span></span></span></li>
+            <li><span class="st ok">✓</span><code class="ltr">physics_correct<em>(strength=0.5)</em></code><span class="ms">860 ms</span></li>
+            <li class="pending"><span class="st wait">⏳</span><code class="ltr">animation_preview<em>(draft=true)</em></code><span class="ms">—</span>
+              <span class="note"><span class="lang-en">Awaiting approval</span><span class="lang-ar">بانتظار الموافقة</span></span></li>
+          </ul>
+        </div>
+
+        <div class="section">
+          <h4><span class="lang-en">Validation results</span><span class="lang-ar">نتائج التحقق</span></h4>
+          <div class="kv">
+            <span class="lang-en">Foot sliding</span><span class="lang-ar">انزلاق القدم</span><span class="v ok">0.8 cm</span>
+            <span class="lang-en">Balance</span><span class="lang-ar">التوازن</span><span class="v t"><span class="lang-en">1 warning fixed</span><span class="lang-ar">تم إصلاح تحذير واحد</span></span>
+            <span class="lang-en">Bones changed</span><span class="lang-ar">العظام المعدّلة</span><span class="v">14</span>
+            <span class="lang-en">Keys added / removed</span><span class="lang-ar">المفاتيح المضافة / المحذوفة</span><span class="v">22 / 9</span>
+          </div>
+          <div class="sub" style="margin-top:6px"><span class="lang-en">Foot sliding within limit (&lt; 1 cm).</span><span class="lang-ar">انزلاق القدم ضمن الحد المسموح: أقل من <span class="ltr">1 cm</span></span></div>
+        </div>
+
+        <div class="section">
+          <h4><span class="lang-en">Changes</span><span class="lang-ar">التغييرات</span></h4>
+          <ul class="diff">
+            <li><code class="ltr">pelvis.position.y</code><span class="p">+6</span><span class="m">−2</span></li>
+            <li><code class="ltr">spine_01.rotation</code><span class="p">+5</span><span class="m">−1</span></li>
+            <li><code class="ltr">hand_r.rotation</code><span class="p">+4</span><span class="m">−3</span></li>
+            <li><code class="ltr">foot_l.position</code><span class="p">+3</span><span class="m">−0</span></li>
+            <li><code class="ltr">root.position.z</code><span class="p">+4</span><span class="m">−3</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="ai-foot">
+        <div class="actions">
+          <button class="tbtn primary"><span class="lang-en">Approve</span><span class="lang-ar">اعتماد</span></button>
+          <button class="tbtn reject"><span class="lang-en">Reject</span><span class="lang-ar">رفض</span></button>
+          <button class="tbtn"><span class="lang-en">Edit manually</span><span class="lang-ar">تعديل يدوي</span></button>
+        </div>
+        <div class="restore">
+          <span><span class="lang-en">Restore point created</span><span class="lang-ar">نقطة استعادة أُنشئت في</span> <span class="ltr">14:32</span></span>
+          <a><span class="lang-en">Cancel task</span><span class="lang-ar">إلغاء المهمة</span></a>
+        </div>
+        <div class="guard"><span><span class="lang-en">Agent cannot run system commands or write outside the project folder.</span><span class="lang-ar">لا يستطيع الوكيل تشغيل أوامر النظام أو الكتابة خارج مجلد المشروع.</span></span></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="mock-note">
+  <span><span class="lang-en">Mockup C — Agent Split · static, no app logic</span><span class="lang-ar">النموذج C — تقسيم الوكيل · ثابت، بلا منطق برمجي</span></span>
+  <a href="index.html"><span class="lang-en">All mockups</span><span class="lang-ar">كل النماذج</span></a>
+</div>
+<script src="shared.js"></script>
+</body>
+</html>

@@ -145,7 +145,8 @@
       el("ellipse", { cx: p[0], cy: p[1], rx: r * 0.35, ry: r, fill: "none", stroke: css("--x"), "stroke-width": 1.5 }, svg);
     }
 
-    // Axis triad bottom-left
+    // Axis triad bottom-left (skipped in small thumbnails)
+    if (W < 240) return;
     const ax = 34, ay = H - 30;
     el("line", { x1: ax, y1: ay, x2: ax + 22, y2: ay, stroke: css("--x"), "stroke-width": 2 }, svg);
     el("line", { x1: ax, y1: ay, x2: ax, y2: ay - 22, stroke: css("--y"), "stroke-width": 2 }, svg);
