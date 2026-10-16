@@ -1,0 +1,48 @@
+# مصفوفة الميزات
+
+الحالة لكل الميزات حاليًا: **مخطط** (لم يُنفَّذ شيء). Simple = تظهر في الوضع البسيط، Adv = في الوضع المتقدم فقط (الميزة موجودة في الوضعين، والإخفاء للواجهة فقط).
+
+| الميزة | المرحلة | الوحدة | الواجهة | CLI | MCP (اسم الأداة) |
+|---|---|---|---|---|---|
+| إنشاء/فتح/حفظ مشروع | 1 | Core | Simple | ✓ | project_create / project_open / project_save |
+| Undo / Redo | 1 | Commands | Simple | ✓ (`exec --undo`) | edit_undo / edit_redo |
+| Autosave + استعادة | 1 | Core | Simple | — | — |
+| ثيم داكن/فاتح | 1 | UI | Simple | — | — |
+| العربية + RTL | 1 | UI | Simple | — | — |
+| فحص المشهد | 1 | Core | Simple | ✓ | scene_inspect |
+| Mannequin مدمج | 2 | Rigging | Simple | ✓ | — (يُنشأ مع المشروع) |
+| استيراد glTF/GLB | 2 | Rigging/Export | Simple | ✓ | rig_import |
+| فحص الهيكل وتقرير التوافق | 2 | Rigging | Adv | ✓ | rig_inspect |
+| Rig mapping (تلقائي + يدوي) | 2 | Rigging | Adv | ✓ | rig_map |
+| FK + Gizmos | 2 | Rigging/UI | Simple | — | pose_get / pose_set |
+| Two-bone IK + Pole + Pinning | 2 | Rigging | Simple | ✓ | pose_set (مع أهداف IK) |
+| حدود المفاصل | 2 | Rigging | Adv | ✓ | rig_map |
+| Mirror / Copy / Paste pose | 2 | Rigging | Simple | ✓ | pose_mirror |
+| مكتبة الوضعيات | 2 | Core | Simple | ✓ | pose_library_* |
+| Timeline + مفاتيح + تشغيل | 3 | Core/UI | Simple | ✓ | keyframe_add / keyframe_remove / keyframe_move |
+| Interpolation (Step/Linear/Cubic) | 3 | Motion | Simple | ✓ | animation_edit |
+| Dope Sheet | 3 | UI | Simple | — | — |
+| Graph Editor (تحرير فعلي) | 3 | Motion/UI | Adv | ✓ | curve_edit |
+| Motion trails / Onion skin | 3 | Motion/UI | Simple | — | animation_preview |
+| Markers / Loop range | 3 | Core | Simple | ✓ | animation_edit |
+| تصدير GLB | 4 | Export | Simple | ✓ | animation_export |
+| JSON sidecar + Events | 4 | Export | Adv | ✓ | animation_export |
+| Root motion | 4 | Motion | Adv | ✓ | animation_edit |
+| تصدير Godot | 4 | Export | Simple | ✓ | animation_export |
+| التحقق من المقطع | 4 | Motion | Simple | ✓ | animation_validate |
+| MCP server + CLI + صلاحيات | 5 | Agent | Adv | — | — |
+| AI Workspace + مسودات + Approve | 5 | UI/AI | Simple | — | draft_apply / draft_reject |
+| مركز الكتلة + Support polygon | 6 | Physics | Simple | ✓ | physics_analyze |
+| Auto-balance | 6 | Physics | Adv | ✓ | physics_correct |
+| مسارات باليستية / قفز | 6 | Physics | Adv | ✓ | physics_trajectory |
+| الحركة الثانوية (Spring) | 6 | Physics | Adv | ✓ | physics_secondary |
+| توليد حركة من نص (Kimodo) | 7 | AI | Simple | ✓ | motion_generate |
+| Retargeting | 7–8 | Rigging | Adv | ✓ | motion_retarget |
+| Blending / Retiming / Loop cleanup | 8 | Motion | Adv | ✓ | motion_* |
+| كشف انزلاق القدم / Foot locking | 8 | Motion | Simple | ✓ | motion_fix_foot_sliding |
+| أنيميشن الأجسام | 8 | Core | Simple | ✓ | — |
+| أحداث القتال + Hitbox/Hurtbox | 9 | Combat | Adv | ✓ | combat_* |
+| تصدير Unity / Unreal / FBX | 10+ | Export | Adv | ✓ | animation_export |
+| حزم Windows/Linux + Installer | 10 | Packaging | — | — | — |
+
+ملاحظة: FBX لن يُعلن دعمه قبل اختباره على ملفات حقيقية. خيار التنفيذ المرجّح هو الاعتماد على تحويل خارجي (FBX2glTF أو ufbx) لأن مواصفات FBX مغلقة. يحتاج ذلك إلى قرار لاحق.

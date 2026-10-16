@@ -1,0 +1,11 @@
+# Build outputs
+bin/
+obj/
+.godot/
+*.user
+# Model weights are never committed
+*.gguf
+*.safetensors
+models/
+# Screenshots from local runs
+screenshots/
