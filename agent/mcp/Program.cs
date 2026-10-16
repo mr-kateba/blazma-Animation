@@ -28,6 +28,7 @@ static class Program
     {
         string? pipe = null, startProject = null;
         var forceHeadless = false;
+        var allowRead = new List<string>();
         var forceAttach = false;
         for (var i = 0; i < args.Length; i++)
         {
@@ -36,9 +37,10 @@ static class Program
                 case "--headless": forceHeadless = true; break;
                 case "--attach": forceAttach = true; break;
                 case "--pipe" when i + 1 < args.Length: pipe = args[++i]; break;
+                case "--allow-read" when i + 1 < args.Length: allowRead.Add(args[++i]); break;
                 case "--project" when i + 1 < args.Length: startProject = args[++i]; break;
                 case "-h" or "--help":
-                    Console.Error.WriteLine("blazma-mcp [--headless | --attach] [--pipe NAME] [--project FILE]\n" +
+                    Console.Error.WriteLine("blazma-mcp [--headless | --attach] [--pipe NAME] [--project FILE] [--allow-read DIR]...\n" +
                         "MCP server on stdio. Attaches to a running Blazma Animation window when there is one, otherwise runs headless.");
                     return 0;
                 default:
@@ -62,7 +64,12 @@ static class Program
                     return 1;
                 }
             }
-            backend ??= new HeadlessBackend();
+            if (backend is null)
+            {
+                var headless = new HeadlessBackend();
+                foreach (var dir in allowRead) headless.AllowRead(dir);
+                backend = headless;
+            }
             Console.Error.WriteLine($"blazma-mcp: {(backend.IsHeadless ? "headless" : "attached to the running app")}");
 
             await using var conn = new AgentConnection(backend, "mcp");

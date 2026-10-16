@@ -264,7 +264,7 @@ public class AgentIpcTests
         var gate = new object();
         var disconnected = new TaskCompletionSource<string>();
         var name = "blazma-test-" + Guid.NewGuid().ToString("N")[..8];
-        await using var server = new AgentIpcServer(req => { lock (gate) return Task.FromResult(rpc.Handle(req)); },
+        await using var server = new AgentIpcServer((req, ctx) => { lock (gate) return Task.FromResult(rpc.Handle(req, ctx)); },
             sid => { lock (gate) host.Disconnect(sid); disconnected.TrySetResult(sid); }, name);
         server.Start();
 
@@ -299,11 +299,191 @@ public class AgentIpcShutdownTests
     public async Task AfterDispose_NewConnectionsAreRefused()
     {
         var name = "blazma-stop-" + Guid.NewGuid().ToString("N")[..8];
-        var server = new AgentIpcServer(req => Task.FromResult(AgentRpcHandler.Error(req["id"]?.DeepClone(), "x", "x")), null, name);
+        var server = new AgentIpcServer((req, _) => Task.FromResult(AgentRpcHandler.Error(req["id"]?.DeepClone(), "x", "x")), null, name);
         server.Start();
         await using (var c = await AgentIpcClient.TryConnectAsync(TimeSpan.FromSeconds(5), name)) Assert.NotNull(c);
         await server.DisposeAsync();
         await Task.Delay(200);
         Assert.Null(await AgentIpcClient.TryConnectAsync(TimeSpan.FromMilliseconds(500), name));
+    }
+}
+
+/// <summary>Regression tests for the Phase 5 security review (each finding was reproduced first).</summary>
+public class AgentSecurityTests
+{
+    static JsonObject A(object o) => JsonNode.Parse(JsonSerializer.Serialize(o))!.AsObject();
+
+    [Fact]
+    public void SaveTarget_NeverOverwritesOtherFiles_AndForcesProjectExtension()
+    {
+        using var dir = new TempDir();
+        var victim = dir.File("victim.txt");
+        File.WriteAllText(victim, "precious");
+        // "victim.txt" becomes "victim.txt.blazanim": a new file, the original stays untouched.
+        Assert.Equal(victim + ".blazanim", AgentPaths.ValidateSaveTarget(victim, null));
+        var otherProject = dir.File("other.blazanim");
+        File.WriteAllText(otherProject, "x");
+        Assert.Equal("file_exists", Assert.Throws<AgentRpcException>(() => AgentPaths.ValidateSaveTarget(otherProject, null)).Code);
+        // The open project itself may be saved again.
+        Assert.Equal(otherProject, AgentPaths.ValidateSaveTarget(otherProject, otherProject));
+        Assert.Equal("precious", File.ReadAllText(victim));
+    }
+
+    [Theory]
+    [InlineData(@"\\attacker\share\x.blazanim")]
+    [InlineData("//attacker/share/x.blazanim")]
+    [InlineData(@"\\?\C:\x.blazanim")]
+    [InlineData("")]
+    public void NetworkDeviceAndEmptyPaths_AreRejected(string path) =>
+        Assert.Equal("invalid_path", Assert.Throws<AgentRpcException>(() => AgentPaths.Normalize(path)).Code);
+
+    [Fact]
+    public void DevicePaths_AreRejected_OnUnix()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        Assert.Equal("invalid_path", Assert.Throws<AgentRpcException>(() => AgentPaths.Normalize("/dev/zero")).Code);
+    }
+
+    static (ProjectSession s, AgentHost host, string sid) Host(bool userPresent, AgentMode mode)
+    {
+        var project = Project.CreateNew("Sec");
+        MannequinFactory.AddTo(project);
+        var s = new ProjectSession(project);
+        var host = new AgentHost(CommandRegistry.CreateDefault(), () => s, userPresent) { Mode = mode };
+        return (s, host, host.Connect("t").Id);
+    }
+
+    static string Model => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "samples", "models", "khronos", "RiggedSimple.glb"));
+
+    [Theory]
+    [InlineData(false, AgentMode.Assisted)]
+    [InlineData(true, AgentMode.Autonomous)]
+    public void ImportOutsideAllowedFolders_IsRefused_WithoutAnInteractiveAssistedUser(bool userPresent, AgentMode mode)
+    {
+        var (_, host, sid) = Host(userPresent, mode);
+        Assert.Equal("path_not_allowed", host.Call(sid, "rig.import", A(new { path = Model })).Error!.Code);
+        Assert.Empty(host.PendingApprovals);
+    }
+
+    [Fact]
+    public void SymlinkInsideAllowedFolder_CannotReachOutside()
+    {
+        if (OperatingSystem.IsWindows()) return; // symlinks need privileges on Windows
+        using var dir = new TempDir();
+        var link = dir.File("innocent.glb");
+        File.CreateSymbolicLink(link, Model);
+        var (_, host, sid) = Host(false, AgentMode.Assisted);
+        host.AllowedReadRoots.Add(dir.Path);
+        Assert.Equal("path_not_allowed", host.Call(sid, "rig.import", A(new { path = link })).Error!.Code);
+    }
+
+    [Fact]
+    public void Import_RejectsNonRegularFiles_AndStoresNoAbsolutePath()
+    {
+        using var dir = new TempDir();
+        var empty = dir.File("empty.glb");
+        File.WriteAllBytes(empty, Array.Empty<byte>());
+        var (s, host, sid) = Host(false, AgentMode.Assisted);
+        host.AllowedReadRoots.Add(dir.Path);
+        host.AllowedReadRoots.Add(Path.GetDirectoryName(Model)!);
+        Assert.Equal("not_a_file", host.Call(sid, "rig.import", A(new { path = empty })).Error!.Code);
+        Assert.True(host.Call(sid, "rig.import", A(new { path = Model })).Ok);
+        Assert.Equal("RiggedSimple.glb", s.Project.Rigs.Single(r => r.Source.Kind == RigSourceKind.Imported).Source.AssetPath);
+    }
+
+    [Fact]
+    public void HugeFrame_IsAnArgumentError_NotACrash()
+    {
+        var (s, host, sid) = Host(false, AgentMode.Assisted);
+        var clip = (string)host.Call(sid, "clip.create", A(new { name = "c" })).Data!["clipId"]!;
+        var ch = s.Project.Characters[0].Id.ToString();
+        Assert.Equal("invalid_args", host.Call(sid, "anim.evaluate", A(new { clipId = clip, characterId = ch, frame = 1e20 })).Error!.Code);
+    }
+
+    [Fact]
+    public void AbortTask_RevertsTheAgentsOwnWork()
+    {
+        var (s, host, sid) = Host(true, AgentMode.Autonomous);
+        host.Call(sid, "clip.create", A(new { name = "half done" }));
+        Assert.True(host.AbortTask(sid).Ok);
+        Assert.Empty(s.Project.Clips);
+    }
+
+    [Fact]
+    public void SessionIds_AreBoundToTheirConnection()
+    {
+        var project = Project.CreateNew("Bind");
+        var s = new ProjectSession(project);
+        var reg = CommandRegistry.CreateDefault();
+        var host = new AgentHost(reg, () => s, true);
+        var rpc = new AgentRpcHandler(host, reg, new FakeServices(s));
+        var a = new AgentRpcContext();
+        var b = new AgentRpcContext();
+        var sidA = (string)rpc.Handle(new JsonObject { ["id"] = 1, ["method"] = "session.hello" }, a)["result"]!["sessionId"]!;
+        var stolen = rpc.Handle(new JsonObject { ["id"] = 2, ["method"] = "session.bye", ["params"] = new JsonObject { ["sessionId"] = sidA } }, b);
+        Assert.Equal("invalid_session", (string)stolen["error"]!["data"]!["code"]!);
+        var noHello = rpc.Handle(new JsonObject { ["id"] = 3, ["method"] = "project.save", ["params"] = new JsonObject { ["sessionId"] = "anything" } }, b);
+        Assert.Equal("invalid_session", (string)noHello["error"]!["data"]!["code"]!);
+        Assert.Single(host.Sessions);
+    }
+
+    [Fact]
+    public async Task CancelledCall_NeverDesynchronisesLaterAnswers()
+    {
+        var name = "blazma-cancel-" + Guid.NewGuid().ToString("N")[..8];
+        await using var server = new AgentIpcServer(async (req, _) =>
+        {
+            if ((string?)req["method"] == "slow") await Task.Delay(500);
+            return new JsonObject { ["jsonrpc"] = "2.0", ["id"] = req["id"]?.DeepClone(), ["result"] = new JsonObject { ["answerFor"] = (string?)req["method"] } };
+        }, null, name);
+        server.Start();
+        var client = (await AgentIpcClient.TryConnectAsync(TimeSpan.FromSeconds(5), name))!;
+        using var cts = new CancellationTokenSource(50);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.CallAsync("slow", null, cts.Token));
+        Assert.False(client.IsUsable);
+        var ex = await Assert.ThrowsAsync<AgentRpcException>(() => client.CallAsync("fast"));
+        Assert.Equal("disconnected", ex.Code); // never a wrong answer
+        await client.DisposeAsync();
+
+        // A fresh connection works normally.
+        await using var again = (await AgentIpcClient.TryConnectAsync(TimeSpan.FromSeconds(5), name))!;
+        Assert.Equal("fast", (string)(await again.CallAsync("fast"))!["answerFor"]!);
+    }
+
+    [Fact]
+    public async Task MalformedAndOversizedMessages_DoNotKillTheServer()
+    {
+        var name = "blazma-robust-" + Guid.NewGuid().ToString("N")[..8];
+        var project = Project.CreateNew("R");
+        var s = new ProjectSession(project);
+        var reg = CommandRegistry.CreateDefault();
+        var host = new AgentHost(reg, () => s, true);
+        var rpc = new AgentRpcHandler(host, reg, new FakeServices(s));
+        var gate = new object();
+        await using var server = new AgentIpcServer((req, ctx) => { lock (gate) return Task.FromResult(rpc.Handle(req, ctx)); },
+            sid => { lock (gate) host.Disconnect(sid); }, name);
+        server.Start();
+
+        // {"method":5}: answered with an error, connection stays usable.
+        await using (var c = (await AgentIpcClient.TryConnectAsync(TimeSpan.FromSeconds(5), name))!)
+        {
+            var bad = await Assert.ThrowsAsync<AgentRpcException>(() => c.CallAsync("5"));
+            Assert.Equal("unknown_method", bad.Code);
+            Assert.NotNull(await c.CallAsync("session.hello"));
+        }
+
+        // An oversized line is refused and that connection dropped, without buffering it all.
+        using (var raw = new System.IO.Pipes.NamedPipeClientStream(".", name, System.IO.Pipes.PipeDirection.InOut,
+            System.IO.Pipes.PipeOptions.Asynchronous | System.IO.Pipes.PipeOptions.CurrentUserOnly))
+        {
+            await raw.ConnectAsync(5000);
+            var chunk = new byte[1 << 20];
+            Array.Fill(chunk, (byte)'a');
+            try { for (var i = 0; i < 20; i++) await raw.WriteAsync(chunk); } catch (IOException) { }
+        }
+
+        // The server still accepts and answers new connections.
+        await using var after = (await AgentIpcClient.TryConnectAsync(TimeSpan.FromSeconds(5), name))!;
+        Assert.NotNull(await after.CallAsync("session.hello"));
     }
 }

@@ -38,11 +38,11 @@ public static class KeyCommands
 
         r.Register(new("anim.evaluate", "The pose a clip produces at a frame (does not change anything). Returns per-bone rotation/position and the pose JSON.", CommandEffect.ReadOnly,
             S.Of(S.Str("clipId", "Clip id.", true), S.Str("characterId", "Character id.", true), S.Num("frame", "Frame (may be fractional).", true)),
-            a => new EvaluateClip(S.Id(a, "clipId"), S.Id(a, "characterId"), S.Number(a, "frame"))));
+            a => new EvaluateClip(S.Id(a, "clipId"), S.Id(a, "characterId"), AnyFrame(a))));
 
         r.Register(new("anim.pose_from_frame", "Set the character's working pose to what the clip gives at a frame (undoable).", CommandEffect.Mutating,
             S.Of(S.Str("clipId", "Clip id.", true), S.Str("characterId", "Character id.", true), S.Num("frame", "Frame.", true)),
-            a => new PoseFromFrame(S.Id(a, "characterId"), S.Id(a, "clipId"), S.Number(a, "frame"))));
+            a => new PoseFromFrame(S.Id(a, "characterId"), S.Id(a, "clipId"), AnyFrame(a))));
     }
 
     static long Frame(JsonObject a, string key)
@@ -50,6 +50,14 @@ public static class KeyCommands
         var f = S.Number(a, key);
         if (f < 0 || f != Math.Floor(f) || f > 10_000_000) throw new CommandException("invalid_args", $"'{key}' must be a whole number ≥ 0.");
         return (long)f;
+    }
+
+    /// <summary>A possibly fractional frame within a sane range (avoids flick overflow).</summary>
+    static double AnyFrame(JsonObject a)
+    {
+        var f = S.Number(a, "frame");
+        if (f < 0 || f > 10_000_000) throw new CommandException("invalid_args", "'frame' must be between 0 and 10,000,000.");
+        return f;
     }
 
     static IReadOnlyList<long> Frames(JsonObject a)

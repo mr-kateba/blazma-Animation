@@ -67,24 +67,18 @@ public partial class AppController
         var server = _ipc;
         _ipc = null;
         if (server is null) return;
-        // AgentIpcServer.AcceptLoop leaves its last, still unconnected pipe instance undisposed when it is cancelled, so the
-        // socket would keep accepting (and never answering) until a GC. Collect once the loop has ended so "off" really is off.
-        _ = server.DisposeAsync().AsTask().ContinueWith(t =>
-        {
-            _ = t.Exception;
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-        });
+        // The server disposes its listening pipe on shutdown, so "off" really refuses new connections.
+        _ = server.DisposeAsync().AsTask().ContinueWith(t => _ = t.Exception);
         foreach (var s in Agents.Sessions.ToList()) Agents.Disconnect(s.Id);
     }
 
     /// <summary>Called on a pool thread by the IPC server: hand the request to the main thread and wait for its answer.</summary>
-    Task<JsonObject> HandleAgentRequest(JsonObject request)
+    Task<JsonObject> HandleAgentRequest(JsonObject request, AgentRpcContext context)
     {
         var tcs = new TaskCompletionSource<JsonObject>(TaskCreationOptions.RunContinuationsAsynchronously);
         Post(() =>
         {
-            try { tcs.SetResult(_rpc.Handle(request)); }
+            try { tcs.SetResult(_rpc.Handle(request, context)); }
             catch (Exception e) { tcs.SetResult(AgentRpcHandler.Error(request["id"]?.DeepClone(), "internal_error", e.Message)); }
         });
         return tcs.Task;
@@ -180,13 +174,10 @@ public partial class AppController
             }
             else
             {
-                // Agents never write outside the project folder or the folders the user allowed.
-                string full;
-                try { full = System.IO.Path.GetFullPath(path); }
-                catch (Exception e) when (e is ArgumentException or NotSupportedException or System.IO.PathTooLongException)
-                { throw new AgentRpcException("invalid_args", "The path is not valid."); }
-                var same = app.FilePath is not null && string.Equals(full, System.IO.Path.GetFullPath(app.FilePath),
-                    OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+                // Agents never write outside the project folder or the folders the user allowed, never to
+                // network/device paths, and never over an existing file other than the open project.
+                var full = AgentPaths.ValidateSaveTarget(path, app.FilePath);
+                var same = app.FilePath is not null && AgentPaths.SamePath(full, System.IO.Path.GetFullPath(app.FilePath));
                 if (!same && !app.Agents.IsUnderAllowedRoot(full))
                     throw new AgentRpcException("path_not_allowed", "Agents can only save inside the project folder or the folders the user allowed.");
                 path = full;

@@ -421,7 +421,7 @@ public class McpIntegrationTests
         var rpc = new AgentRpcHandler(host, registry, new FakeServices(session));
         var gate = new object();
         var pipe = "blazma-test-" + Guid.NewGuid().ToString("N");
-        await using var server = new AgentIpcServer(req => { lock (gate) return Task.FromResult(rpc.Handle(req)); }, pipeName: pipe);
+        await using var server = new AgentIpcServer((req, ctx) => { lock (gate) return Task.FromResult(rpc.Handle(req, ctx)); }, pipeName: pipe);
         server.Start();
 
         await using var mcp = new McpClient("--pipe", pipe);
@@ -466,7 +466,7 @@ public class McpIntegrationTests
         var rpc = new AgentRpcHandler(host, registry, new FakeServices(session));
         var gate = new object();
         var pipe = "blazma-test-" + Guid.NewGuid().ToString("N");
-        await using var server = new AgentIpcServer(req => { lock (gate) return Task.FromResult(rpc.Handle(req)); }, pipeName: pipe);
+        await using var server = new AgentIpcServer((req, ctx) => { lock (gate) return Task.FromResult(rpc.Handle(req, ctx)); }, pipeName: pipe);
         server.Start();
 
         var r = await Tools.RunCli("exec", "--attach", "--pipe", pipe, "clip.create", "--arg", "name=ViaCli");

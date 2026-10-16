@@ -336,13 +336,17 @@ static class Program
             if (!o.Has("json")) Console.WriteLine(ok ? $"[{s.Line}] ok {tool.Id}" : $"[{s.Line}] FAILED {tool.Id}: {r["error"]?["code"]}: {r["error"]?["message"]}");
             if (!ok) { failed = true; break; }
         }
-        await conn.CallGuardedAsync("task.finish", new JsonObject { ["summary"] = $"Script {Path.GetFileName(scriptPath)}: {(failed ? "stopped at a failure" : "done")}" }, ct);
+        if (failed)
+            // All or nothing, also when attached to the app: revert the steps that already ran.
+            await conn.CallGuardedAsync("task.abort", new JsonObject(), ct);
+        else
+            await conn.CallGuardedAsync("task.finish", new JsonObject { ["summary"] = $"Script {Path.GetFileName(scriptPath)}: done" }, ct);
 
         var saved = false;
         if (!failed && edited && !o.Has("no-save") && conn.IsHeadless) saved = await Save(conn, ct);
         if (o.Has("json"))
             Console.WriteLine(new JsonObject { ["ok"] = !failed, ["steps"] = results, ["saved"] = saved }.ToJsonString(ResultText.Pretty));
-        else if (failed) Console.WriteLine("Stopped at the first failure; nothing was saved.");
+        else if (failed) Console.WriteLine("Stopped at the first failure; the earlier steps were reverted and nothing was saved.");
         else Console.WriteLine($"Ran {steps.Count} command(s){(saved ? "; saved." : ".")}");
         return failed ? Exit.UserError : Exit.Ok;
     }

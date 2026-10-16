@@ -29,8 +29,13 @@ public sealed class AgentRpcHandler(AgentHost host, CommandRegistry registry, IA
 {
     public const string ProtocolVersion = "blazma-agent/1";
 
-    public JsonObject Handle(JsonObject request)
+    AgentRpcContext? _context;
+
+    /// <param name="context">The calling connection; sessions opened on it are the only ones it may use.
+    /// Null for in-process callers (headless tools), which own every session.</param>
+    public JsonObject Handle(JsonObject request, AgentRpcContext? context = null)
     {
+        _context = context;
         var id = request["id"]?.DeepClone();
         try
         {
@@ -39,13 +44,16 @@ public sealed class AgentRpcHandler(AgentHost host, CommandRegistry registry, IA
             var result = Dispatch(method, p); // before attaching 'id', so the error path can still use it
             return new JsonObject { ["jsonrpc"] = "2.0", ["id"] = id, ["result"] = result };
         }
-        catch (Exception e) when (e is AgentRpcException or InvalidOperationException or KeyNotFoundException or CommandException)
+        catch (Exception e) when (e is AgentRpcException or InvalidOperationException or KeyNotFoundException or CommandException
+            or IOException or UnauthorizedAccessException or Blazma.Core.Persistence.ProjectFormatException or ArgumentException or OverflowException)
         {
             var code = e switch
             {
                 AgentRpcException a => a.Code,
                 CommandException c => c.Code,
+                Blazma.Core.Persistence.ProjectFormatException f => f.Code,
                 KeyNotFoundException => "not_found",
+                IOException or UnauthorizedAccessException => "io_error",
                 _ => "invalid_request",
             };
             return Error(id, code, e.Message);
@@ -66,6 +74,7 @@ public sealed class AgentRpcHandler(AgentHost host, CommandRegistry registry, IA
             case "session.hello":
             {
                 var info = host.Connect((string?)p["client"] ?? "agent");
+                _context?.Add(info.Id);
                 return new JsonObject
                 {
                     ["sessionId"] = info.Id,
@@ -77,16 +86,31 @@ public sealed class AgentRpcHandler(AgentHost host, CommandRegistry registry, IA
                 };
             }
             case "session.bye":
-                host.Disconnect(Session(p));
+            {
+                var sid = Session(p);
+                host.Disconnect(sid);
+                _context?.Remove(sid);
                 return new JsonObject { ["ok"] = true };
+            }
             case "project.info":
                 return ProjectInfo();
             case "project.save":
             {
-                Session(p);
-                var saved = services.Save((string?)p["path"]);
-                return new JsonObject { ["path"] = saved };
+                var sid = Session(p);
+                try
+                {
+                    var saved = services.Save((string?)p["path"]);
+                    host.Log(sid, "project.save", saved, true);
+                    return new JsonObject { ["path"] = saved };
+                }
+                catch (AgentRpcException e)
+                {
+                    host.Log(sid, "project.save", (string?)p["path"] ?? "", false, e.Code, e.Message);
+                    throw;
+                }
             }
+            case "task.abort":
+                return ToJson(host.AbortTask(Session(p)));
             case "tools.list":
             {
                 var list = new JsonArray();
@@ -146,10 +170,19 @@ public sealed class AgentRpcHandler(AgentHost host, CommandRegistry registry, IA
         ["name"] = services.ProjectName,
         ["path"] = services.ProjectPath,
         ["dirty"] = services.IsDirty,
+        // Lets the agent tell the user whether they see the edits live (app) or in a file (headless).
+        ["userPresent"] = host.UserPresent,
+        ["mode"] = host.Mode.ToString().ToLowerInvariant(),
     };
 
-    static string Session(JsonObject p) =>
-        (string?)p["sessionId"] ?? throw new AgentRpcException("invalid_args", "Missing 'sessionId' (call session.hello first).");
+    string Session(JsonObject p)
+    {
+        var sid = (string?)p["sessionId"] ?? throw new AgentRpcException("invalid_args", "Missing 'sessionId' (call session.hello first).");
+        if (_context is not null && !_context.Owns(sid))
+            throw new AgentRpcException("invalid_session", "This session does not belong to this connection.");
+        if (!host.HasSession(sid)) throw new AgentRpcException("invalid_session", "Unknown or closed session (call session.hello).");
+        return sid;
+    }
 
     public static JsonObject ToJson(CommandResult r)
     {

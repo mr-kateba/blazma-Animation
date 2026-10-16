@@ -243,16 +243,16 @@ public sealed class AgentHost
             case CommandEffect.Destructive:
                 return new ErrorInfo("approval_required", $"'{d.Id}' deletes something; the user must approve it.");
             case CommandEffect.External:
-                var path = (string?)args["path"];
-                if (path is null) return null;
+                if (args["path"] is null) return null;
                 string full;
-                try { full = Path.GetFullPath(path); }
-                catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException)
-                {
-                    return new ErrorInfo("invalid_args", "The path is not valid.");
-                }
+                try { full = AgentPaths.ResolveLinks(AgentPaths.Normalize((string?)args["path"])); }
+                catch (AgentRpcException e) { return new ErrorInfo(e.Code, e.Message); }
                 if (IsUnderAllowedRoot(full)) return null;
-                return new ErrorInfo("approval_required", $"'{d.Id}' reads '{full}', outside the allowed folders.");
+                // Only an interactive user in Assisted mode can widen access case by case; headless and
+                // Autonomous agents are limited to the allowed folders (docs/AI_INTEGRATION.md §3).
+                return UserPresent && Mode == AgentMode.Assisted
+                    ? new ErrorInfo("approval_required", $"'{d.Id}' reads '{full}', outside the allowed folders.")
+                    : new ErrorInfo("path_not_allowed", $"'{full}' is outside the folders agents may read (the project folder and the allowed folders).");
             default:
                 return null;
         }
@@ -260,7 +260,8 @@ public sealed class AgentHost
 
     public bool IsUnderAllowedRoot(string fullPath)
     {
-        var roots = AllowedReadRoots.Concat(ProjectFolder() is { } pf ? new[] { pf } : Array.Empty<string>());
+        var roots = AllowedReadRoots.Concat(ProjectFolder() is { } pf ? new[] { pf } : Array.Empty<string>())
+            .Select(r => { try { return AgentPaths.ResolveLinks(Path.GetFullPath(r)); } catch (Exception) { return r; } });
         var cmp = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         foreach (var root in roots)
         {
@@ -272,6 +273,8 @@ public sealed class AgentHost
     }
 
     AgentTask GetTask(string id) => _tasks.Find(t => t.Id == id) ?? throw new KeyNotFoundException($"No task '{id}'.");
+
+    public bool HasSession(string id) => _sessions.ContainsKey(id);
 
     void RequireSession(string id)
     {
@@ -292,6 +295,26 @@ public sealed class AgentHost
         task?.Calls.Add(call);
         if (task is null) ReadOnlyLog.Add(call);
         Changed?.Invoke();
+    }
+
+    /// <summary>Record a host-level action (e.g. saving) in the activity log.</summary>
+    public void Log(string sessionId, string tool, string args, bool ok, string? code = null, string? message = null)
+    {
+        RequireSession(sessionId);
+        RecordRaw(sessionId, tool, args, ok, code, message, Array.Empty<string>(), track: false);
+    }
+
+    /// <summary>
+    /// Agent gives up its running (or just finished, not yet approved by the user) task and reverts it,
+    /// e.g. a script that failed half way. Same rules as <see cref="Reject"/>.
+    /// </summary>
+    public CommandResult AbortTask(string sessionId)
+    {
+        RequireSession(sessionId);
+        var task = _tasks.LastOrDefault(t => t.SessionId == sessionId && t.State != AgentTaskState.Rejected);
+        if (task is null) return CommandResult.Fail("no_task", "There is no task to abort.");
+        if (task.State == AgentTaskState.Running) task.State = AgentTaskState.Review;
+        return Reject(task.Id);
     }
 
     /// <summary>Calls made outside any task (read-only inspection).</summary>

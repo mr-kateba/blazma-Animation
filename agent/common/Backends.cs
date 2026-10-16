@@ -52,11 +52,20 @@ public sealed class HeadlessBackend : IAgentBackend, IAgentHostServices
     {
         _host = new AgentHost(_registry, () => _session, userPresent: false);
         _host.ProjectFolder = () => _session.FilePath is { } p ? Path.GetDirectoryName(Path.GetFullPath(p)) : null;
+        // Headless agents may read only: the project folder, the folder the tool was started in, and
+        // folders the user listed (--allow-read DIR, or BLAZMA_ALLOW_READ separated by the OS path separator).
+        _host.AllowedReadRoots.Add(Directory.GetCurrentDirectory());
+        if (Environment.GetEnvironmentVariable("BLAZMA_ALLOW_READ") is { Length: > 0 } extra)
+            foreach (var dir in extra.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                AllowRead(dir);
         _rpc = new AgentRpcHandler(_host, _registry, this);
     }
 
     public bool IsHeadless => true;
     public bool HasProject => _hasProject;
+
+    /// <summary>Lets agents import files from <paramref name="dir"/> (validated: no network/device paths).</summary>
+    public void AllowRead(string dir) => _host.AllowedReadRoots.Add(AgentPaths.Normalize(dir));
     public CommandRegistry Registry => _registry;
 
     // IAgentHostServices
@@ -68,7 +77,8 @@ public sealed class HeadlessBackend : IAgentBackend, IAgentHostServices
     {
         if (!_hasProject) throw NoProject();
         var target = path ?? _session.FilePath ?? throw new AgentRpcException("no_path", "The project has not been saved yet; pass 'path'.");
-        target = Path.GetFullPath(target);
+        // Only the open project's file or a NEW .blazanim file: never overwrite anything else.
+        target = AgentPaths.ValidateSaveTarget(target, _session.FilePath);
         if (_session.FilePath is null || Path.GetFullPath(_session.FilePath) != target)
         {
             // Save as: move the lock to the new file.
@@ -121,7 +131,8 @@ public sealed class HeadlessBackend : IAgentBackend, IAgentHostServices
 
     JsonObject NewProject(JsonObject p)
     {
-        var path = Path.GetFullPath(Req(p, "path"));
+        var path = AgentPaths.Normalize(Req(p, "path"));
+        if (!path.EndsWith(ProjectFile.Extension, StringComparison.OrdinalIgnoreCase)) path += ProjectFile.Extension;
         var name = (string?)p["name"] is { Length: > 0 } n ? n : Path.GetFileNameWithoutExtension(path);
         if (File.Exists(path)) throw new AgentRpcException("file_exists", $"'{path}' already exists. Use project_open, or pick a new path.");
         EnsureCanReplace(p);
@@ -147,7 +158,7 @@ public sealed class HeadlessBackend : IAgentBackend, IAgentHostServices
 
     JsonObject OpenProject(JsonObject p)
     {
-        var path = Path.GetFullPath(Req(p, "path"));
+        var path = AgentPaths.Normalize(Req(p, "path"));
         if (!File.Exists(path)) throw new AgentRpcException("not_found", $"File not found: {path}");
         EnsureCanReplace(p);
         if (_lock is not null && _session.FilePath is { } cur && Path.GetFullPath(cur) == path)

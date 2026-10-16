@@ -12,6 +12,9 @@ public static class RigCommands
 {
     public const long MaxImportBytes = 256L * 1024 * 1024;
 
+    /// <summary>Total size of all embedded files in one project.</summary>
+    public const long MaxProjectAssetBytes = 1024L * 1024 * 1024;
+
     public static void Register(CommandRegistry r)
     {
         r.Register(new("rig.import", "Import a rigged character from a .glb/.gltf file. The file is embedded in the project. Returns characterId, rigId and the bone-mapping report.", CommandEffect.External,
@@ -97,6 +100,9 @@ public sealed class ImportRig(string path, string? name) : ICommand
     public CommandOutcome Execute(Project p)
     {
         if (_rig is null) Load();
+        var total = p.Assets.Sum(a => (long)a.Data.Length) + _asset!.Data.Length;
+        if (total > RigCommands.MaxProjectAssetBytes)
+            throw new CommandException("too_large", "The project would exceed 1 GB of embedded files.");
         p.Assets.Add(_asset!);
         p.Rigs.Add(_rig!);
         p.Characters.Add(_character!);
@@ -111,7 +117,10 @@ public sealed class ImportRig(string path, string? name) : ICommand
         if (ext is not (".glb" or ".gltf"))
             throw new CommandException("unsupported_format", "Only .glb and .gltf files can be imported for now.");
         if (!File.Exists(full)) throw new CommandException("not_found", $"File not found: {full}");
-        if (new FileInfo(full).Length > RigCommands.MaxImportBytes)
+        var info = new FileInfo(full);
+        // FIFOs/devices report length 0 and would block the reader forever.
+        if (info.Length == 0) throw new CommandException("not_a_file", "The file is empty or not a regular file.");
+        if (info.Length > RigCommands.MaxImportBytes)
             throw new CommandException("too_large", "The file is larger than 256 MB.");
         if (ext == ".gltf")
             throw new CommandException("unsupported_format",
@@ -133,7 +142,7 @@ public sealed class ImportRig(string path, string? name) : ICommand
             Data = File.ReadAllBytes(full),
         };
         rig.Source.Asset = _asset.Id;
-        rig.Source.AssetPath = full;
+        rig.Source.AssetPath = System.IO.Path.GetFileName(full); // never the absolute path: it leaks user names when shared
         rig.Source.NodeIndex = result.NodeIndexOf.ToDictionary(kv => kv.Key.ToString(), kv => kv.Value);
         _rig = rig;
         _character = MannequinFactory.CreateCharacter(rig, name ?? rig.Name);
