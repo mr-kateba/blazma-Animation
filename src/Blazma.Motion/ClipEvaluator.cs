@@ -55,14 +55,15 @@ public static class ClipEvaluator
     /// <summary>Playback time for <paramref name="elapsed"/> since the start, honouring the loop range.</summary>
     public static Flicks PlaybackTime(Clip clip, Flicks elapsed)
     {
-        var end = clip.Loop.End.Value > 0 ? clip.Loop.End : clip.Duration;
-        var start = clip.Loop.Enabled ? clip.Loop.Start : Flicks.Zero;
-        if (!clip.Loop.Enabled) return elapsed > end ? end : elapsed;
+        if (elapsed.Value < 0) return Flicks.Zero;
+        if (!clip.Loop.Enabled) return elapsed > clip.Duration ? clip.Duration : elapsed;
+        // End = 0 means "clip end"; both ends are clamped to the clip so a stale range cannot freeze playback.
+        var end = clip.Loop.End.Value > 0 && clip.Loop.End < clip.Duration ? clip.Loop.End : clip.Duration;
+        var start = clip.Loop.Start < end ? clip.Loop.Start : Flicks.Zero;
+        if (elapsed < start) return elapsed;
         var length = (end - start).Value;
         if (length <= 0) return start;
-        var e = elapsed.Value - start.Value;
-        if (elapsed < start) return elapsed;
-        return new Flicks(start.Value + (e % length));
+        return new Flicks(start.Value + (elapsed.Value - start.Value) % length);
     }
 
     /// <summary>Model-space positions of a bone sampled every frame between two times (motion trail).</summary>

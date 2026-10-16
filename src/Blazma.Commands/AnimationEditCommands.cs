@@ -259,7 +259,8 @@ public sealed class SetLoop(ObjectId clipId, bool enabled, long? startFrame, lon
             throw new CommandException("invalid_args", $"Loop range must satisfy 0 ≤ startFrame < endFrame ≤ {length} (got {start}..{end}).");
         clip.Loop.Enabled = enabled;
         clip.Loop.Start = Flicks.FromFrame(start, clip.Fps);
-        clip.Loop.End = end == length ? Flicks.Zero : Flicks.FromFrame(end, clip.Fps);
+        // Always explicit, so lengthening the clip later does not silently move the loop end.
+        clip.Loop.End = Flicks.FromFrame(end, clip.Fps);
         return new JsonObject { ["startFrame"] = start, ["endFrame"] = end };
     }
 }
@@ -444,22 +445,14 @@ public sealed class PasteKeys(ObjectId clipId, string keysJson, long frame) : Cl
             warnings.Add(new Diagnostic("ignored_targets", $"{ignored.Count} target(s) are not part of the clip's rig and were ignored."));
 
         var scale = clip.Fps.FramesPerSecond / srcFps.FramesPerSecond;
+        var existingTimes = KeyCommands.KeyTimes(clip);
         var pasted = 0;
         var lockedSkipped = 0;
         var lastFrame = 0L;
         foreach (var item in usable)
         {
-            var track = clip.Tracks.Find(t => t.Target.Id == item.Target.Id && t.Channel == item.Channel);
-            if (track is null)
-            {
-                track = new Track
-                {
-                    Target = new TrackTarget { Kind = item.Target.Kind, Id = item.Target.Id },
-                    Channel = item.Channel,
-                    Group = clip.Tracks.Find(t => t.Target.Id == item.Target.Id)?.Group,
-                };
-                clip.Tracks.Add(track);
-            }
+            var track = KeyCommands.GetOrCreateTrack(clip, rig, item.Target.Kind, item.Target.Id, item.Channel,
+                clip.Tracks.Find(t => t.Target.Id == item.Target.Id)?.Group, existingTimes);
             if (track.Locked) { lockedSkipped++; continue; }
             var f = frame + item.Frame;
             KeyCommands.InsertKey(track, new Keyframe

@@ -250,20 +250,23 @@ public class KeyCommandTests
     public void PinnedFoot_StaysPlanted_ThroughoutPlayback()
     {
         // A squat: feet pinned, pelvis goes down and up. No foot sliding on any frame.
+        // Starts slightly crouched: at rest the legs are fully extended, so any upward hip
+        // movement would (correctly) put the pinned feet out of reach.
         var (s, ch, clip) = Setup();
         Run(s, "pose.set_pinned", new { characterId = ch, control = "ik_foot_l", pinned = true });
         Run(s, "pose.set_pinned", new { characterId = ch, control = "ik_foot_r", pinned = true });
+        Run(s, "pose.set_bone", new { characterId = ch, bone = H.Pelvis, rx = 0, ry = 0, rz = 0, ty = 0.92 });
         Run(s, "key.set", new { clipId = clip, characterId = ch, frame = 0 });
         Run(s, "pose.set_bone", new { characterId = ch, bone = H.Pelvis, rx = 15, ry = 0, rz = 0, ty = 0.70 });
         Run(s, "key.set", new { clipId = clip, characterId = ch, frame = 12 });
-        Run(s, "pose.set_bone", new { characterId = ch, bone = H.Pelvis, rx = 0, ry = 0, rz = 0, ty = 0.95 });
+        Run(s, "pose.set_bone", new { characterId = ch, bone = H.Pelvis, rx = 0, ry = 0, rz = 0, ty = 0.92 });
         Run(s, "key.set", new { clipId = clip, characterId = ch, frame = 24 });
 
         var foot = PosAt(s, 0, H.Foot(Side.Left));
         for (var f = 0.0; f <= 24; f += 0.5)
         {
             Assert.True(PosAt(s, f, H.Foot(Side.Left)).ApproxEquals(foot, 1e-9), $"slid at frame {f}");
-            Assert.True(PosAt(s, f, H.Pelvis).Y <= 0.95 + 1e-9);
+            Assert.True(PosAt(s, f, H.Pelvis).Y <= 0.92 + 1e-9);
         }
         Assert.True(PosAt(s, 12, H.Pelvis).Y < 0.75);
     }

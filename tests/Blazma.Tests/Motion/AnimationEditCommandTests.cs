@@ -118,7 +118,7 @@ public class AnimationEditCommandTests
     // ---- loop ----------------------------------------------------------------------------
 
     [Fact]
-    public void SetLoop_StoresRange_ClipEndIsZero_AndValidates()
+    public void SetLoop_StoresExplicitRange_AndValidates()
     {
         var (s, _, clip) = Setup(30);
         RunUndoable(s, "clip.set_loop", new { clipId = clip, enabled = true, startFrame = 5, endFrame = 20 });
@@ -126,8 +126,9 @@ public class AnimationEditCommandTests
         Assert.Equal(Flicks.FromFrame(5, FrameRate.Fps30), Clip(s).Loop.Start);
         Assert.Equal(Flicks.FromFrame(20, FrameRate.Fps30), Clip(s).Loop.End);
 
+        // The end is always stored explicitly (also at the clip end), so growing the clip later does not move it.
         RunUndoable(s, "clip.set_loop", new { clipId = clip, enabled = true, endFrame = 30 });
-        Assert.Equal(Flicks.Zero, Clip(s).Loop.End);
+        Assert.Equal(Flicks.FromFrame(30, FrameRate.Fps30), Clip(s).Loop.End);
         Assert.Equal(Flicks.FromFrame(5, FrameRate.Fps30), Clip(s).Loop.Start);
 
         RunUndoable(s, "clip.set_loop", new { clipId = clip, enabled = false });
@@ -374,7 +375,11 @@ public class AnimationEditCommandTests
         Assert.True(Run(s, "key.paste", new { clipId = clip, keysJson = doc.ToJsonString(), frame = 3 }).Ok);
         var created = Clip(s).Tracks.Single(t => t.Target.Id == head && t.Channel == TrackChannels.Translation);
         Assert.Equal(HeadRot(s).Group, created.Group);
-        Assert.Equal(Interpolation.Linear, created.Keys[0].Interp);
+        // The new track is back-filled with rest values at the clip's existing key frames;
+        // the pasted key itself keeps its interpolation.
+        var pastedKey = created.Keys.Single(k => k.Time == Flicks.FromFrame(3, Clip(s).Fps));
+        Assert.Equal(Interpolation.Linear, pastedKey.Interp);
+        Assert.Equal(new[] { 0.0, 0.1, 0.0 }, pastedKey.Value);
     }
 
     [Fact]

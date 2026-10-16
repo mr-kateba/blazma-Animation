@@ -107,11 +107,63 @@ public static class KeyCommands
     }
 
     internal static Change ClipChanged(ObjectId id) => new(Change.ClipChanged, id.ToString());
+
+    /// <summary>
+    /// Finds or creates the track for (target, channel). A newly created track is back-filled
+    /// with the channel's rest value at <paramref name="existingTimes"/> (the clip's key times
+    /// before this edit), because that is what the channel was at those keys before it existed.
+    /// Without this, the first key of a new track would be held back to frame 0.
+    /// </summary>
+    internal static Track GetOrCreateTrack(Clip clip, Rig? rig, TargetKind kind, ObjectId id, string channel,
+        string? group, IReadOnlyCollection<Flicks> existingTimes)
+    {
+        var track = clip.Tracks.Find(t => t.Target.Id == id && t.Channel == channel);
+        if (track is not null) return track;
+        track = new Track { Target = new TrackTarget { Kind = kind, Id = id }, Channel = channel, Group = group };
+        clip.Tracks.Add(track);
+        if (RestValue(rig, kind, id, channel) is not { } rest) return track;
+        foreach (var time in existingTimes.OrderBy(t => t.Value))
+        {
+            var neighbour = clip.Tracks.Where(t => t.Target.Id == id && t != track)
+                .SelectMany(t => t.Keys).FirstOrDefault(k => k.Time == time);
+            track.Keys.Add(new Keyframe
+            {
+                Time = time,
+                Value = (double[])rest.Clone(),
+                Interp = channel == TrackChannels.Pinned ? Interpolation.Step : neighbour?.Interp ?? Interpolation.Cubic,
+            });
+        }
+        return track;
+    }
+
+    static double[]? RestValue(Rig? rig, TargetKind kind, ObjectId id, string channel)
+    {
+        Transform? rest = kind switch
+        {
+            TargetKind.Bone => rig?.FindBone(id)?.Rest,
+            TargetKind.Control => rig?.FindControl(id)?.Rest,
+            _ => null,
+        };
+        if (rest is not { } t) return null;
+        return channel switch
+        {
+            TrackChannels.Translation => new[] { t.Translation.X, t.Translation.Y, t.Translation.Z },
+            TrackChannels.Rotation => new[] { t.Rotation.X, t.Rotation.Y, t.Rotation.Z, t.Rotation.W },
+            TrackChannels.Scale => kind == TargetKind.Control ? new[] { 1.0, 1, 1 } : new[] { t.Scale.X, t.Scale.Y, t.Scale.Z },
+            TrackChannels.Pinned => new[] { 0.0 },
+            _ => null,
+        };
+    }
+
+    /// <summary>All distinct key times in the clip.</summary>
+    internal static HashSet<Flicks> KeyTimes(Clip clip) => clip.Tracks.SelectMany(t => t.Keys).Select(k => k.Time).ToHashSet();
 }
 
 /// <summary>
 /// Base for edits to one clip. The first Execute computes the result; undo/redo swap whole-clip
 /// snapshots, so redo is exact even if the pose it was recorded from has changed since.
+/// Note: the Clip object in Project.Clips is replaced on every edit, undo and redo — UI code must
+/// look clips up by id after a clip.changed notification instead of keeping references.
 /// </summary>
 public abstract class ClipEdit(ObjectId clipId) : ICommand
 {
@@ -146,6 +198,7 @@ public abstract class ClipEdit(ObjectId clipId) : ICommand
     public IReadOnlyList<Change> Undo(Project p)
     {
         var index = p.Clips.FindIndex(c => c.Id == ClipId);
+        if (index < 0) throw new InvalidOperationException($"Clip '{ClipId}' disappeared before undo.");
         p.Clips[index] = CloneClip(_before!);
         return new[] { KeyCommands.ClipChanged(ClipId) };
     }
@@ -173,6 +226,8 @@ public sealed class SetKeys(ObjectId clipId, ObjectId characterId, long frame, I
         var time = Flicks.FromFrame(frame, clip.Fps);
         var pose = character.Pose;
         var count = 0;
+        var existingTimes = KeyCommands.KeyTimes(clip);
+        existingTimes.Remove(time);
 
         foreach (var bone in rig.Bones)
         {
@@ -204,13 +259,9 @@ public sealed class SetKeys(ObjectId clipId, ObjectId characterId, long frame, I
         // Only create a track when the value is not the default, but always update existing tracks.
         void Key(TargetKind kind, ObjectId target, string channel, double[] value, bool always)
         {
-            var track = clip.Tracks.Find(t => t.Target.Id == target && t.Channel == channel);
-            if (track is null)
-            {
-                if (!always) return;
-                track = new Track { Target = new TrackTarget { Kind = kind, Id = target }, Channel = channel, Group = GroupOf(rig, kind, target) };
-                clip.Tracks.Add(track);
-            }
+            var exists = clip.Tracks.Exists(t => t.Target.Id == target && t.Channel == channel);
+            if (!exists && !always) return;
+            var track = KeyCommands.GetOrCreateTrack(clip, rig, kind, target, channel, GroupOf(rig, kind, target), existingTimes);
             if (track.Locked) { warnings.Add(new Diagnostic("track_locked", $"A locked track was skipped.")); return; }
             var existing = track.Keys.Find(k => k.Time == time);
             KeyCommands.InsertKey(track, new Keyframe
@@ -249,7 +300,11 @@ public sealed class DeleteKeys(ObjectId clipId, IReadOnlyList<long> frames, IRea
         foreach (var track in clip.Tracks)
         {
             if (only is not null && !only.Contains(track.Target.Id)) continue;
-            if (track.Locked) continue;
+            if (track.Locked)
+            {
+                if (track.Keys.Exists(k => times.Contains(k.Time))) warnings.Add(new Diagnostic("track_locked", "Keys on locked tracks were not deleted."));
+                continue;
+            }
             removed += track.Keys.RemoveAll(k => times.Contains(k.Time));
         }
         if (removed == 0) throw new CommandException("not_found", "No keys at those frames.");
@@ -273,7 +328,11 @@ public sealed class MoveKeys(ObjectId clipId, IReadOnlyList<long> frames, long d
         foreach (var track in clip.Tracks)
         {
             if (only is not null && !only.Contains(track.Target.Id)) continue;
-            if (track.Locked) continue;
+            if (track.Locked)
+            {
+                if (track.Keys.Exists(k => times.Contains(k.Time))) warnings.Add(new Diagnostic("track_locked", "Keys on locked tracks were not moved."));
+                continue;
+            }
             var moving = track.Keys.Where(k => times.Contains(k.Time)).ToList();
             if (moving.Count == 0) continue;
             track.Keys.RemoveAll(k => times.Contains(k.Time));
@@ -327,7 +386,8 @@ public sealed class EvaluateClip(ObjectId clipId, ObjectId characterId, double f
     {
         var clip = p.FindClip(clipId) ?? throw new CommandException("not_found", $"Clip '{clipId}' does not exist.");
         var (character, rig) = PoseCommands.Resolve(p, characterId);
-        var pose = ClipEvaluator.Evaluate(clip, rig, Flicks.FromSeconds(frame / clip.Fps.FramesPerSecond), character.Pose);
+        // Rest base: the same result playback and export give, independent of the working pose.
+        var pose = ClipEvaluator.Evaluate(clip, rig, Flicks.FromSeconds(frame / clip.Fps.FramesPerSecond));
         var model = new RigEvaluator(rig).Model(pose);
         var bones = new JsonArray();
         for (var i = 0; i < rig.Bones.Count; i++)
@@ -351,7 +411,7 @@ public sealed class PoseFromFrame(ObjectId characterId, ObjectId clipId, double 
     protected override JsonNode? Apply(Project project, Rig rig, Pose pose, List<Diagnostic> warnings)
     {
         var clip = project.FindClip(clipId) ?? throw new CommandException("not_found", $"Clip '{clipId}' does not exist.");
-        var evaluated = ClipEvaluator.Evaluate(clip, rig, Flicks.FromSeconds(frame / clip.Fps.FramesPerSecond), pose);
+        var evaluated = ClipEvaluator.Evaluate(clip, rig, Flicks.FromSeconds(frame / clip.Fps.FramesPerSecond));
         pose.Bones = evaluated.Bones;
         pose.Controls = evaluated.Controls;
         return null;

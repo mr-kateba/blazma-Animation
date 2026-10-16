@@ -237,6 +237,7 @@ public sealed class RenameClip(ObjectId clipId, string name) : ICommand
 public sealed class SetClipDuration(ObjectId clipId, long frames) : ICommand
 {
     Flicks? _old;
+    LoopSettings? _oldLoop;
     public string Id => "clip.set_duration";
     public CommandEffect Effect => CommandEffect.Mutating;
     public string Label => "Set clip length";
@@ -246,13 +247,20 @@ public sealed class SetClipDuration(ObjectId clipId, long frames) : ICommand
         if (frames is < 1 or > 10_000_000) throw new CommandException("invalid_args", "frames must be between 1 and 10,000,000.");
         var clip = p.GetClip(clipId);
         _old ??= clip.Duration;
+        _oldLoop ??= new LoopSettings { Enabled = clip.Loop.Enabled, Start = clip.Loop.Start, End = clip.Loop.End };
         clip.Duration = Flicks.FromFrame(frames, clip.Fps);
+        // Keep the loop range inside the clip.
+        if (clip.Loop.End > clip.Duration) clip.Loop.End = clip.Duration;
+        if (clip.Loop.Start >= clip.Duration || (clip.Loop.End.Value > 0 && clip.Loop.Start >= clip.Loop.End))
+            clip.Loop.Start = Flicks.Zero;
         return new(new[] { new Change(Change.ClipChanged, clipId.ToString()) });
     }
 
     public IReadOnlyList<Change> Undo(Project p)
     {
-        p.GetClip(clipId).Duration = _old!.Value;
+        var clip = p.GetClip(clipId);
+        clip.Duration = _old!.Value;
+        clip.Loop = new LoopSettings { Enabled = _oldLoop!.Enabled, Start = _oldLoop.Start, End = _oldLoop.End };
         return new[] { new Change(Change.ClipChanged, clipId.ToString()) };
     }
 }

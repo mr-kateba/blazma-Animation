@@ -174,6 +174,11 @@ public static class ProjectArchive
         foreach (var rig in p.Rigs)
             if (!rig.Source.Asset.IsEmpty && p.FindAsset(rig.Source.Asset) is null)
                 throw new ProjectFormatException("invalid_json", $"Rig '{rig.Name}' refers to a missing embedded asset.");
+        foreach (var clip in p.Clips)
+            foreach (var track in clip.Tracks)
+                for (var i = 1; i < track.Keys.Count; i++)
+                    if (track.Keys[i].Time <= track.Keys[i - 1].Time)
+                        throw new ProjectFormatException("invalid_json", $"Clip '{clip.Name}': keys must be in strictly increasing time order.");
         foreach (var c in p.Characters)
             if (p.FindRig(c.Rig) is null)
                 throw new ProjectFormatException("invalid_json", $"Character '{c.Name}' refers to a missing rig.");
