@@ -6,7 +6,7 @@ obj/
 # Model weights are never committed
 *.gguf
 *.safetensors
-models/
+/models/
 # Screenshots from local runs
 screenshots/
 
