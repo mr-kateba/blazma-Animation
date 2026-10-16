@@ -1,0 +1,13 @@
+<Project Sdk="Godot.NET.Sdk/4.7.2">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <RootNamespace>Blazma.UI</RootNamespace>
+    <!-- Godot generates code with warnings we do not control. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Blazma.Core/Blazma.Core.csproj" />
+    <ProjectReference Include="../../src/Blazma.Commands/Blazma.Commands.csproj" />
+  </ItemGroup>
+</Project>

@@ -9,3 +9,7 @@ obj/
 models/
 # Screenshots from local runs
 screenshots/
+
+# Godot
+app/godot/.godot/
+app/godot/*.translation
