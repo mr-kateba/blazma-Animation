@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Godot-independent library. net8.0 is required by Godot.NET.Sdk 4.7.2; net10.0 for CLI/MCP. -->
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>Blazma.Core</RootNamespace>
+  </PropertyGroup>
+</Project>

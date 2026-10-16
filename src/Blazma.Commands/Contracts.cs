@@ -1,0 +1,79 @@
+using System.Text.Json.Nodes;
+using Blazma.Core.Model;
+
+namespace Blazma.Commands;
+
+/// <summary>What a command does; drives agent permissions (docs/AI_INTEGRATION.md §3).</summary>
+public enum CommandEffect { ReadOnly, Mutating, Destructive, External }
+
+public enum CommandSource { Ui, Cli, Mcp, Test }
+
+/// <summary>Who issued a command. Agent edits carry their session id so they can only undo their own work.</summary>
+public sealed record CommandOrigin(CommandSource Source, string? AgentSessionId = null)
+{
+    public static readonly CommandOrigin Ui = new(CommandSource.Ui);
+    public static readonly CommandOrigin Test = new(CommandSource.Test);
+    public override string ToString() => AgentSessionId is null ? Source.ToString().ToLowerInvariant() : $"{Source.ToString().ToLowerInvariant()}:{AgentSessionId}";
+}
+
+/// <summary>What changed, so views refresh only the affected parts.</summary>
+public sealed record Change(string Kind, string? TargetId = null)
+{
+    public const string ProjectChanged = "project";
+    public const string ClipAdded = "clip.added";
+    public const string ClipRemoved = "clip.removed";
+    public const string ClipChanged = "clip.changed";
+    public const string ProjectReplaced = "project.replaced";
+    public const string SaveStateChanged = "save.state";
+}
+
+public sealed record Diagnostic(string Code, string Message);
+public sealed record ErrorInfo(string Code, string Message);
+
+public sealed record CommandResult(
+    bool Ok,
+    JsonNode? Data,
+    IReadOnlyList<Change> Changes,
+    IReadOnlyList<Diagnostic> Warnings,
+    ErrorInfo? Error,
+    string? TransactionId)
+{
+    public static CommandResult Fail(string code, string message) =>
+        new(false, null, Array.Empty<Change>(), Array.Empty<Diagnostic>(), new ErrorInfo(code, message), null);
+}
+
+/// <summary>A validation or precondition failure. Commands throw it before mutating anything.</summary>
+public sealed class CommandException(string code, string message) : Exception(message)
+{
+    public string Code { get; } = code;
+}
+
+public sealed record CommandOutcome(IReadOnlyList<Change> Changes, JsonNode? Data = null, IReadOnlyList<Diagnostic>? Warnings = null);
+
+/// <summary>
+/// One edit. Rules:
+/// <list type="bullet">
+/// <item>Validate first and throw <see cref="CommandException"/> before touching the project.</item>
+/// <item>Execute must be repeatable after Undo (that is how Redo works), so any generated ids
+/// are fixed when the command is constructed.</item>
+/// <item>ReadOnly commands never mutate and are never put on the undo stack.</item>
+/// </list>
+/// </summary>
+public interface ICommand
+{
+    string Id { get; }
+    CommandEffect Effect { get; }
+
+    /// <summary>Short human-readable label for the undo history.</summary>
+    string Label { get; }
+
+    CommandOutcome Execute(Project project);
+    IReadOnlyList<Change> Undo(Project project);
+
+    /// <summary>
+    /// Absorb a command executed right after this one inside the same transaction
+    /// (e.g. successive values while dragging). Return true if <paramref name="next"/> is now
+    /// represented by this command and can be dropped.
+    /// </summary>
+    bool TryMerge(ICommand next) => false;
+}
