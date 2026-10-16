@@ -1,0 +1,108 @@
+name: Release
+
+# Builds the Windows x64 app and publishes it as a GitHub Release.
+# Trigger: push a tag like v0.1.0-phase1, or run manually with a tag name.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.1.0-phase1)"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: 1
+  GODOT_VERSION: 4.7.2
+  GODOT_BIN: /opt/godot/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64
+  TEMPLATES_DIR: ~/.local/share/godot/export_templates/4.7.2.stable.mono
+
+jobs:
+  windows-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Core tests must pass before a release
+        run: dotnet test Blazma.slnx -warnaserror
+
+      - name: Cache Godot and Windows export templates
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            /opt/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-mono-win-templates
+
+      - name: Install Godot ${{ env.GODOT_VERSION }} .NET and export templates
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          base=https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable
+          sudo mkdir -p /opt/godot && sudo chown "$USER" /opt/godot
+          curl -sSfL -o /tmp/godot.zip "$base/Godot_v${GODOT_VERSION}-stable_mono_linux_x86_64.zip"
+          unzip -q /tmp/godot.zip -d /opt/godot
+          curl -sSfL -o /tmp/tpl.tpz "$base/Godot_v${GODOT_VERSION}-stable_mono_export_templates.tpz"
+          dir=$(eval echo "$TEMPLATES_DIR")
+          mkdir -p "$dir"
+          unzip -q -j -o /tmp/tpl.tpz 'templates/version.txt' 'templates/windows_*x86_64*' -d "$dir"
+          rm /tmp/godot.zip /tmp/tpl.tpz
+
+      - name: Export Windows build
+        run: |
+          set -euo pipefail
+          "$GODOT_BIN" --headless --path app/godot --import || true
+          mkdir -p build/windows
+          "$GODOT_BIN" --headless --path app/godot --export-release "Windows Desktop" ../../build/windows/BlazmaAnimation.exe
+          # The export must contain the C# assemblies, otherwise the app cannot start.
+          test -f build/windows/BlazmaAnimation.exe
+          test -f build/windows/BlazmaAnimation.pck
+          test -f build/windows/data_Blazma.UI_windows_x86_64/Blazma.UI.dll
+          test -f build/windows/data_Blazma.UI_windows_x86_64/Blazma.Core.dll
+
+      - name: Package
+        id: pkg
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          name="BlazmaAnimation-${tag#v}-win64"
+          rm -f build/windows/data_*/*.pdb
+          cp app/godot/assets/fonts/OFL-IBM-Plex.txt build/windows/
+          mv build/windows "build/$name"
+          (cd build && zip -q -r -9 "$name.zip" "$name")
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "zip=build/$name.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${{ steps.pkg.outputs.tag }}"
+          cat > /tmp/notes.md <<'EOF'
+          ## Blazma Animation — نسخة تجريبية لـ Windows 64-bit
+
+          **التشغيل:** فك الضغط ثم شغّل `BlazmaAnimation.exe`. لا يحتاج تثبيت .NET ولا Godot.
+
+          إذا ظهر تحذير SmartScreen اضغط **More info** ثم **Run anyway** (البرنامج غير موقَّع رقميًا بعد).
+
+          التفاصيل والمشكلات المعروفة: `docs/reports/` في المستودع.
+          EOF
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${{ steps.pkg.outputs.zip }}" --clobber
+          else
+            gh release create "$tag" "${{ steps.pkg.outputs.zip }}" \
+              --title "Blazma Animation $tag" --notes-file /tmp/notes.md --prerelease \
+              --target "${{ github.sha }}"
+          fi
