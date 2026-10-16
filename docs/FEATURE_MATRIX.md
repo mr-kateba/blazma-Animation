@@ -1,24 +1,24 @@
 # مصفوفة الميزات
 
-الحالة لكل الميزات حاليًا: **مخطط** (لم يُنفَّذ شيء). Simple = تظهر في الوضع البسيط، Adv = في الوضع المتقدم فقط (الميزة موجودة في الوضعين، والإخفاء للواجهة فقط).
+الحالة: ✅ = منفّذ ومُختبَر في النواة، 🖥️ = له واجهة، بدون علامة = مخطط. Simple = تظهر في الوضع البسيط، Adv = في الوضع المتقدم فقط (الميزة موجودة في الوضعين، والإخفاء للواجهة فقط).
 
 | الميزة | المرحلة | الوحدة | الواجهة | CLI | MCP (اسم الأداة) |
 |---|---|---|---|---|---|
-| إنشاء/فتح/حفظ مشروع | 1 | Core | Simple | ✓ | project_create / project_open / project_save |
-| Undo / Redo | 1 | Commands | Simple | ✓ (`exec --undo`) | edit_undo / edit_redo |
-| Autosave + استعادة | 1 | Core | Simple | — | — |
-| ثيم داكن/فاتح | 1 | UI | Simple | — | — |
-| العربية + RTL | 1 | UI | Simple | — | — |
-| فحص المشهد | 1 | Core | Simple | ✓ | scene_inspect |
-| Mannequin مدمج | 2 | Rigging | Simple | ✓ | — (يُنشأ مع المشروع) |
-| استيراد glTF/GLB | 2 | Rigging/Export | Simple | ✓ | rig_import |
-| فحص الهيكل وتقرير التوافق | 2 | Rigging | Adv | ✓ | rig_inspect |
-| Rig mapping (تلقائي + يدوي) | 2 | Rigging | Adv | ✓ | rig_map |
-| FK + Gizmos | 2 | Rigging/UI | Simple | — | pose_get / pose_set |
-| Two-bone IK + Pole + Pinning | 2 | Rigging | Simple | ✓ | pose_set (مع أهداف IK) |
-| حدود المفاصل | 2 | Rigging | Adv | ✓ | rig_map |
-| Mirror / Copy / Paste pose | 2 | Rigging | Simple | ✓ | pose_mirror |
-| مكتبة الوضعيات | 2 | Core | Simple | ✓ | pose_library_* |
+| ✅🖥️ إنشاء/فتح/حفظ مشروع | 1 | Core | Simple | ✓ | project_create / project_open / project_save |
+| ✅🖥️ Undo / Redo | 1 | Commands | Simple | ✓ (`exec --undo`) | edit_undo / edit_redo |
+| ✅🖥️ Autosave + استعادة | 1 | Core | Simple | — | — |
+| ✅🖥️ ثيم داكن/فاتح | 1 | UI | Simple | — | — |
+| ✅🖥️ العربية + RTL | 1 | UI | Simple | — | — |
+| ✅🖥️ فحص المشهد | 1 | Core | Simple | ✓ | scene_inspect |
+| ✅ Mannequin مدمج | 2 | Rigging | Simple | ✓ | — (يُنشأ مع المشروع) |
+| ✅ استيراد glTF/GLB | 2 | Rigging/Export | Simple | ✓ | rig_import |
+| ✅ فحص الهيكل وتقرير التوافق | 2 | Rigging | Adv | ✓ | rig_inspect |
+| ✅ Rig mapping (تلقائي + يدوي) | 2 | Rigging | Adv | ✓ | rig_map |
+| ✅ FK + Gizmos | 2 | Rigging/UI | Simple | — | pose_get / pose_set |
+| ✅ Two-bone IK + Pole + Pinning | 2 | Rigging | Simple | ✓ | pose_set (مع أهداف IK) |
+| ✅ حدود المفاصل | 2 | Rigging | Adv | ✓ | rig_map |
+| ✅ Mirror / Copy / Paste pose | 2 | Rigging | Simple | ✓ | pose_mirror |
+| ✅ مكتبة الوضعيات | 2 | Core | Simple | ✓ | pose_library_* |
 | Timeline + مفاتيح + تشغيل | 3 | Core/UI | Simple | ✓ | keyframe_add / keyframe_remove / keyframe_move |
 | Interpolation (Step/Linear/Cubic) | 3 | Motion | Simple | ✓ | animation_edit |
 | Dope Sheet | 3 | UI | Simple | — | — |
