@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Shared by blazma-mcp and blazma-anim: attach/headless backends, session tools, doc generation. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Blazma.AgentTools</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Blazma.Agent/Blazma.Agent.csproj" />
+    <ProjectReference Include="../../src/Blazma.Rigging/Blazma.Rigging.csproj" />
+    <ProjectReference Include="../../src/Blazma.Core/Blazma.Core.csproj" />
+  </ItemGroup>
+</Project>

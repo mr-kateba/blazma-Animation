@@ -6,6 +6,11 @@
     <Project Path="src/Blazma.Motion/Blazma.Motion.csproj" />
     <Project Path="src/Blazma.Rigging/Blazma.Rigging.csproj" />
   </Folder>
+  <Folder Name="/agent/">
+    <Project Path="agent/cli/Blazma.Cli.csproj" />
+    <Project Path="agent/common/Blazma.AgentTools.csproj" />
+    <Project Path="agent/mcp/Blazma.Mcp.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Blazma.Tests/Blazma.Tests.csproj" />
   </Folder>

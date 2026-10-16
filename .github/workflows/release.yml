@@ -71,6 +71,18 @@ jobs:
           test -f build/windows/data_Blazma.UI_windows_x86_64/Blazma.UI.dll
           test -f build/windows/data_Blazma.UI_windows_x86_64/Blazma.Core.dll
 
+      - name: Publish agent tools (blazma-mcp.exe, blazma-anim.exe)
+        run: |
+          set -euo pipefail
+          for p in mcp cli; do
+            dotnet publish agent/$p -c Release -r win-x64 --self-contained \
+              -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+              -p:EnableCompressionInSingleFile=true -p:DebugType=none \
+              -o build/windows/tools
+          done
+          test -f build/windows/tools/blazma-mcp.exe
+          test -f build/windows/tools/blazma-anim.exe
+
       - name: Package
         id: pkg
         run: |
@@ -94,6 +106,8 @@ jobs:
           ## Blazma Animation — نسخة تجريبية لـ Windows 64-bit
 
           **التشغيل:** فك الضغط ثم شغّل `BlazmaAnimation.exe`. لا يحتاج تثبيت .NET ولا Godot.
+
+          **أدوات الذكاء الاصطناعي:** في مجلد `tools` الملفان `blazma-mcp.exe` (خادم MCP لـ Claude Code وCodex) و`blazma-anim.exe` (سطر الأوامر). الشرح: `docs/AGENT_SETUP_AR.md`.
 
           إذا ظهر تحذير SmartScreen اضغط **More info** ثم **Run anyway** (البرنامج غير موقَّع رقميًا بعد).
 

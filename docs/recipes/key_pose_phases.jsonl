@@ -1,0 +1,5 @@
+# Recipe: key-pose phases. clip.add_phase_markers spreads the 7 phase markers (Initial ... Final) over the clip; marker.add / marker.update add and retime your own.
+{"command": "clip.create", "args": {"name": "Phases", "durationFrames": 40}, "save": {"clip": "clipId"}}
+{"command": "clip.add_phase_markers", "args": {"clipId": "${clip}"}}
+{"command": "marker.add", "args": {"clipId": "${clip}", "frame": 30, "name": "Impact", "phase": "none"}, "save": {"impact": "markerId"}}
+{"command": "marker.update", "args": {"clipId": "${clip}", "markerId": "${impact}", "frame": 32, "name": "Impact (late)"}}

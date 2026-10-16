@@ -1,0 +1,11 @@
+# Recipe: keep the feet planted while the body lowers. Pin both foot IK targets, key, drop the pelvis, key again.
+# Pinned feet stay where they are, so the legs bend instead of the feet sliding (check foot_l / foot_r in the pose.get output).
+{"command": "clip.create", "args": {"name": "Crouch", "durationFrames": 30}, "save": {"clip": "clipId"}}
+{"command": "pose.set_control", "args": {"characterId": "${character}", "control": "ik_foot_l", "x": 0.09, "y": 0.0, "z": 0.25}}
+{"command": "pose.set_pinned", "args": {"characterId": "${character}", "control": "ik_foot_l", "pinned": true}}
+{"command": "pose.set_control", "args": {"characterId": "${character}", "control": "ik_foot_r", "x": -0.09, "y": 0.0, "z": -0.05}}
+{"command": "pose.set_pinned", "args": {"characterId": "${character}", "control": "ik_foot_r", "pinned": true}}
+{"command": "key.set", "args": {"clipId": "${clip}", "characterId": "${character}", "frame": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "pelvis", "rx": 0, "ry": 0, "rz": 0, "ty": 0.78}}
+{"command": "key.set", "args": {"clipId": "${clip}", "characterId": "${character}", "frame": 15}}
+{"command": "pose.get", "args": {"characterId": "${character}"}}

@@ -132,4 +132,20 @@ public class ReviewPhase3Tests
         Assert.Contains(Run(s, "key.move", new { clipId = clip, frames = "10", delta = 2 }).Warnings, w => w.Code == "track_locked");
         Assert.Contains(Run(s, "key.delete", new { clipId = clip, frames = "0" }).Warnings, w => w.Code == "track_locked");
     }
+
+    [Fact]
+    public void PhaseMarkers_AreAddressableByAgents()
+    {
+        var (s, ch, clip) = Setup();
+        var added = Run(s, "clip.add_phase_markers", new { clipId = clip }).Data!["markers"]!.AsArray();
+        Assert.Equal(7, added.Count);
+        var contact = added.Single(m => (string)m!["phase"]! == "contact")!;
+        Assert.True(Run(s, "marker.update", new { clipId = clip, markerId = (string)contact["markerId"]!, frame = 15 }).Ok);
+        Run(s, "key.set", new { clipId = clip, characterId = ch, frame = 15 });
+
+        var info = Run(s, "project.inspect", new { }).Data!["clips"]![0]!;
+        Assert.Contains(info["markers"]!.AsArray(), m => (string)m!["phase"]! == "contact" && (long)m["frame"]! == 15);
+        Assert.Equal(new long[] { 15 }, info["keyFrames"]!.AsArray().Select(f => (long)f!));
+        Assert.Equal(s.Project.Rigs[0].Id.ToString(), (string)info["skeleton"]!);
+    }
 }

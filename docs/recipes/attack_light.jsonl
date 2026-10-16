@@ -1,0 +1,23 @@
+# Recipe: a quick punch (keys at 0, 6, 9, 18, 24) on a new project. Heavier version: attack_heavier.jsonl.
+# Right arm points -X at rest, so ry>0 swings it forward; lower_arm_r ry>0 folds the forearm.
+{"command": "clip.create", "args": {"name": "Punch", "durationFrames": 25}, "save": {"clip": "clipId"}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "upper_arm_r", "rx": 0, "ry": -20, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "lower_arm_r", "rx": 0, "ry": 100, "rz": 0}}
+{"command": "key.set", "args": {"clipId": "${clip}", "characterId": "${character}", "frame": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "spine_02", "rx": 0, "ry": -25, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "upper_arm_r", "rx": 0, "ry": -70, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "lower_arm_r", "rx": 0, "ry": 110, "rz": 0}}
+{"command": "key.set", "args": {"clipId": "${clip}", "characterId": "${character}", "frame": 6}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "spine_02", "rx": 0, "ry": 30, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "upper_arm_r", "rx": 0, "ry": 85, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "lower_arm_r", "rx": 0, "ry": 0, "rz": 0}}
+{"command": "key.set", "args": {"clipId": "${clip}", "characterId": "${character}", "frame": 9}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "spine_02", "rx": 0, "ry": 20, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "upper_arm_r", "rx": 0, "ry": 70, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "lower_arm_r", "rx": 0, "ry": 10, "rz": 0}}
+{"command": "key.set", "args": {"clipId": "${clip}", "characterId": "${character}", "frame": 18}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "spine_02", "rx": 0, "ry": 0, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "upper_arm_r", "rx": 0, "ry": -20, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "lower_arm_r", "rx": 0, "ry": 100, "rz": 0}}
+{"command": "key.set", "args": {"clipId": "${clip}", "characterId": "${character}", "frame": 24}}
+{"command": "clip.add_phase_markers", "args": {"clipId": "${clip}"}}

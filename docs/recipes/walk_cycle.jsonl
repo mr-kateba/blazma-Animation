@@ -1,0 +1,35 @@
+# Recipe: walk-cycle skeleton of keys. 4 poses (frames 0, 6, 12, 18) + frame 0 copied to frame 24 so the loop closes.
+# Run on a new project: blazma-anim new demo.blazanim && blazma-anim run demo.blazanim walk_cycle.jsonl
+# Rotations: thigh rx<0 swings the leg forward; arms hang with rz=-80 (left) / +80 (right); arm swing is rx (rx<0 forward).
+{"command": "clip.create", "args": {"name": "Walk", "durationFrames": 25}, "save": {"clip": "clipId"}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "thigh_l", "rx": -30, "ry": 0, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "thigh_r", "rx": 25, "ry": 0, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "calf_l", "rx": 5, "ry": 0, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "calf_r", "rx": 5, "ry": 0, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "upper_arm_l", "rx": 25, "ry": 0, "rz": -80}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "upper_arm_r", "rx": -25, "ry": 0, "rz": 80}}
+{"command": "key.set", "args": {"clipId": "${clip}", "characterId": "${character}", "frame": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "thigh_l", "rx": -10, "ry": 0, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "thigh_r", "rx": 10, "ry": 0, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "calf_l", "rx": 60, "ry": 0, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "calf_r", "rx": 5, "ry": 0, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "upper_arm_l", "rx": 10, "ry": 0, "rz": -80}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "upper_arm_r", "rx": -10, "ry": 0, "rz": 80}}
+{"command": "key.set", "args": {"clipId": "${clip}", "characterId": "${character}", "frame": 6}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "thigh_l", "rx": 25, "ry": 0, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "thigh_r", "rx": -30, "ry": 0, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "calf_l", "rx": 5, "ry": 0, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "calf_r", "rx": 5, "ry": 0, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "upper_arm_l", "rx": -25, "ry": 0, "rz": -80}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "upper_arm_r", "rx": 25, "ry": 0, "rz": 80}}
+{"command": "key.set", "args": {"clipId": "${clip}", "characterId": "${character}", "frame": 12}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "thigh_l", "rx": 10, "ry": 0, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "thigh_r", "rx": -10, "ry": 0, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "calf_l", "rx": 5, "ry": 0, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "calf_r", "rx": 60, "ry": 0, "rz": 0}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "upper_arm_l", "rx": -10, "ry": 0, "rz": -80}}
+{"command": "pose.set_bone", "args": {"characterId": "${character}", "bone": "upper_arm_r", "rx": 10, "ry": 0, "rz": 80}}
+{"command": "key.set", "args": {"clipId": "${clip}", "characterId": "${character}", "frame": 18}}
+{"command": "key.copy", "args": {"clipId": "${clip}", "frames": "0"}, "save": {"pose0": "keysJson"}}
+{"command": "key.paste", "args": {"clipId": "${clip}", "keysJson": "${pose0}", "frame": 24}}
+{"command": "clip.set_loop", "args": {"clipId": "${clip}", "enabled": true}}

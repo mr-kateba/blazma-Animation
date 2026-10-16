@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- blazma-anim: command-line front end of the agent API (headless on a file, or attached to the running app). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>blazma-anim</AssemblyName>
+    <RootNamespace>Blazma.Cli</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../common/Blazma.AgentTools.csproj" />
+    <ProjectReference Include="../../src/Blazma.Agent/Blazma.Agent.csproj" />
+  </ItemGroup>
+</Project>

@@ -24,6 +24,9 @@
     <ProjectReference Include="..\..\src\Blazma.Rigging\Blazma.Rigging.csproj" />
     <ProjectReference Include="..\..\src\Blazma.Motion\Blazma.Motion.csproj" />
     <ProjectReference Include="..\..\src\Blazma.Agent\Blazma.Agent.csproj" />
+    <!-- Built before the tests, which start them as separate processes (not referenced as libraries). -->
+    <ProjectReference Include="..\..\agent\cli\Blazma.Cli.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\agent\mcp\Blazma.Mcp.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

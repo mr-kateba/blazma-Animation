@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- blazma-mcp: MCP server (stdio). Attaches to a running Blazma Animation window or runs headless. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>blazma-mcp</AssemblyName>
+    <RootNamespace>Blazma.Mcp</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol" Version="2.2.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../common/Blazma.AgentTools.csproj" />
+    <ProjectReference Include="../../src/Blazma.Agent/Blazma.Agent.csproj" />
+    <ProjectReference Include="../../src/Blazma.Rigging/Blazma.Rigging.csproj" />
+    <ProjectReference Include="../../src/Blazma.Core/Blazma.Core.csproj" />
+  </ItemGroup>
+</Project>

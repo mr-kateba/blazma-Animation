@@ -108,6 +108,15 @@ public sealed class InspectProject : ICommand
                 ["durationFrames"] = c.DurationFrames,
                 ["isDraft"] = c.IsDraft,
                 ["trackCount"] = c.Tracks.Count,
+                ["skeleton"] = c.Skeleton.IsEmpty ? null : c.Skeleton.ToString(),
+                ["keyFrames"] = new JsonArray(Blazma.Motion.ClipEvaluator.KeyFrames(c).Select(f => (JsonNode?)f).ToArray()),
+                ["markers"] = new JsonArray(c.Markers.Select(m => (JsonNode?)new JsonObject
+                {
+                    ["markerId"] = m.Id.ToString(),
+                    ["name"] = m.Name,
+                    ["frame"] = m.Time.ToFrame(c.Fps),
+                    ["phase"] = AnimationEditCommands.PhaseName(m.Phase),
+                }).ToArray()),
             });
         return new CommandOutcome(Array.Empty<Change>(), new JsonObject
         {

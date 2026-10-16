@@ -1,0 +1,7 @@
+# Recipe: repeat the walk cycle (run after walk_cycle.jsonl). Copies frames 0-18 to 24-42 and closes the second loop at frame 48.
+# ${clip} is the project's last clip.
+{"command": "key.copy", "args": {"clipId": "${clip}", "frames": "0,6,12,18"}, "save": {"cycle": "keysJson"}}
+{"command": "key.paste", "args": {"clipId": "${clip}", "keysJson": "${cycle}", "frame": 24}}
+{"command": "key.copy", "args": {"clipId": "${clip}", "frames": "0"}, "save": {"first": "keysJson"}}
+{"command": "key.paste", "args": {"clipId": "${clip}", "keysJson": "${first}", "frame": 48}}
+{"command": "clip.set_loop", "args": {"clipId": "${clip}", "enabled": true}}

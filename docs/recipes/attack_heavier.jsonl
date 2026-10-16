@@ -1,0 +1,9 @@
+# Recipe: make the punch heavier (run after attack_light.jsonl). Later keys move first so nothing is overwritten:
+# strike 9 -> 15, follow-through 18 -> 26, recovery 24 -> 34: a longer wind-up (frames 6-15) and a longer settle.
+# The wind-up key then leaves linearly, so the strike snaps. The clip is lengthened to 35 frames.
+{"command": "key.move", "args": {"clipId": "${clip}", "frames": "24", "delta": 10}}
+{"command": "key.move", "args": {"clipId": "${clip}", "frames": "18", "delta": 8}}
+{"command": "key.move", "args": {"clipId": "${clip}", "frames": "9", "delta": 6}}
+{"command": "key.set_interpolation", "args": {"clipId": "${clip}", "interpolation": "linear", "frames": "6"}}
+{"command": "clip.set_duration", "args": {"clipId": "${clip}", "frames": 35}}
+{"command": "anim.evaluate", "args": {"clipId": "${clip}", "characterId": "${character}", "frame": 12}}

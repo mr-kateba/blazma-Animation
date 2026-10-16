@@ -37,7 +37,7 @@ public static class AnimationEditCommands
             S.Of(S.Str("clipId", "Clip id.", true), S.Str("markerId", "Marker id.", true)),
             a => new DeleteMarker(S.Id(a, "clipId"), S.Id(a, "markerId"))));
 
-        r.Register(new("clip.add_phase_markers", "Add the 7 key-pose phase markers (Initial … Final) spread over the clip; phases that already have a marker are skipped. Returns {added}.", CommandEffect.Mutating,
+        r.Register(new("clip.add_phase_markers", "Add the 7 key-pose phase markers (Initial … Final) spread over the clip; phases that already have a marker are skipped. Returns {added, markers:[{markerId,name,frame,phase}]}.", CommandEffect.Mutating,
             S.Of(S.Str("clipId", "Clip id.", true)),
             a => new AddPhaseMarkers(S.Id(a, "clipId"))));
 
@@ -149,6 +149,19 @@ public static class AnimationEditCommands
             throw new CommandException("invalid_args", $"'{key}' {frame} is outside the clip (length {clip.DurationFrames} frames).");
     }
 
+    /// <summary>KeyPhase → the snake_case name used in command arguments.</summary>
+    public static string PhaseName(KeyPhase phase) => phase switch
+    {
+        KeyPhase.Initial => "initial",
+        KeyPhase.Anticipation => "anticipation",
+        KeyPhase.MainAction => "main_action",
+        KeyPhase.Contact => "contact",
+        KeyPhase.FollowThrough => "follow_through",
+        KeyPhase.Recovery => "recovery",
+        KeyPhase.Final => "final",
+        _ => "none",
+    };
+
     internal static void SortMarkers(Clip clip) => clip.Markers = clip.Markers.OrderBy(m => m.Time.Value).ToList();
 
     internal static Keyframe KeyAt(Clip clip, Track track, long frame) =>
@@ -227,6 +240,7 @@ public sealed class AddPhaseMarkers(ObjectId clipId) : ClipEdit(clipId)
     {
         var last = Math.Max(0, clip.DurationFrames - 1);
         var added = 0;
+        var created = new JsonArray();
         foreach (var (phase, fraction, name) in Phases)
         {
             if (clip.Markers.Exists(m => m.Phase == phase))
@@ -235,11 +249,13 @@ public sealed class AddPhaseMarkers(ObjectId clipId) : ClipEdit(clipId)
                 continue;
             }
             var frame = (long)Math.Round(fraction * last, MidpointRounding.AwayFromZero);
-            clip.Markers.Add(new Marker { Time = Flicks.FromFrame(frame, clip.Fps), Name = name, Phase = phase });
+            var marker = new Marker { Time = Flicks.FromFrame(frame, clip.Fps), Name = name, Phase = phase };
+            clip.Markers.Add(marker);
+            created.Add(new JsonObject { ["markerId"] = marker.Id.ToString(), ["name"] = name, ["frame"] = frame, ["phase"] = AnimationEditCommands.PhaseName(phase) });
             added++;
         }
         AnimationEditCommands.SortMarkers(clip);
-        return new JsonObject { ["added"] = added };
+        return new JsonObject { ["added"] = added, ["markers"] = created };
     }
 }
 
