@@ -2,6 +2,7 @@
   <!-- Godot-independent library. net8.0 is required by Godot.NET.Sdk 4.7.2; net10.0 for CLI/MCP. -->
   <ItemGroup>
     <ProjectReference Include="..\Blazma.Core\Blazma.Core.csproj" />
+    <ProjectReference Include="..\Blazma.Rigging\Blazma.Rigging.csproj" />
   </ItemGroup>
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>

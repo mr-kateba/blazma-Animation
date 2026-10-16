@@ -133,4 +133,25 @@ public readonly record struct Quat(double X, double Y, double Z, double W)
     /// <summary>True when the rotation angle between the two quaternions is at most <paramref name="epsilonRadians"/>.</summary>
     public bool ApproxEquals(Quat other, double epsilonRadians = 1e-9) =>
         AngleBetween(this, other) <= epsilonRadians;
+
+    /// <summary>
+    /// Shortest-arc rotation taking direction <paramref name="from"/> onto <paramref name="to"/>
+    /// (inputs need not be normalized). Opposite vectors rotate 180° about an arbitrary perpendicular axis.
+    /// </summary>
+    public static Quat FromTo(Vec3 from, Vec3 to)
+    {
+        var f = from.Normalized();
+        var t = to.Normalized();
+        if (f.LengthSquared() == 0 || t.LengthSquared() == 0) return Identity;
+        var d = Vec3.Dot(f, t);
+        if (d >= 1 - 1e-15) return Identity;
+        if (d <= -1 + 1e-12)
+        {
+            var axis = Vec3.Cross(f, Vec3.UnitX);
+            if (axis.LengthSquared() < 1e-12) axis = Vec3.Cross(f, Vec3.UnitY);
+            return FromAxisAngle(axis, Math.PI);
+        }
+        var c = Vec3.Cross(f, t);
+        return new Quat(c.X, c.Y, c.Z, 1 + d).Normalized();
+    }
 }

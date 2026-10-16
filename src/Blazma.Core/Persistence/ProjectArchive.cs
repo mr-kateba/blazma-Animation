@@ -22,6 +22,7 @@ public static class ProjectArchive
 {
     public const string FormatName = "blazanim";
     public const string ProjectEntry = "project.json";
+    public const string SceneEntry = "scenes/main.json";
 
     public static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -35,6 +36,14 @@ public static class ProjectArchive
         var entries = new SortedDictionary<string, byte[]>(StringComparer.Ordinal);
         foreach (var clip in project.Clips)
             entries[$"clips/{clip.Id}.json"] = JsonSerializer.SerializeToUtf8Bytes(clip, JsonOptions);
+        foreach (var rig in project.Rigs)
+            entries[$"rigs/{rig.Id}.json"] = JsonSerializer.SerializeToUtf8Bytes(rig, JsonOptions);
+        foreach (var pose in project.PoseLibrary)
+            entries[$"poses/{pose.Id}.json"] = JsonSerializer.SerializeToUtf8Bytes(pose, JsonOptions);
+        entries[SceneEntry] = JsonSerializer.SerializeToUtf8Bytes(new JsonObject
+        {
+            ["characters"] = JsonSerializer.SerializeToNode(project.Characters, JsonOptions),
+        }, JsonOptions);
 
         var files = new JsonObject();
         foreach (var (path, bytes) in entries)
@@ -50,6 +59,9 @@ public static class ProjectArchive
             ["createdUtc"] = project.CreatedUtc,
             ["settings"] = JsonSerializer.SerializeToNode(project.Settings, JsonOptions),
             ["clips"] = new JsonArray(project.Clips.Select(c => (JsonNode?)c.Id.ToString()).ToArray()),
+            ["rigs"] = new JsonArray(project.Rigs.Select(r => (JsonNode?)r.Id.ToString()).ToArray()),
+            ["poses"] = new JsonArray(project.PoseLibrary.Select(p => (JsonNode?)p.Id.ToString()).ToArray()),
+            ["scene"] = SceneEntry,
             ["metadata"] = JsonSerializer.SerializeToNode(project.Metadata, JsonOptions),
             ["files"] = files,
         };
@@ -102,14 +114,16 @@ public static class ProjectArchive
                 Settings = r["settings"].Deserialize<ProjectSettings>(JsonOptions) ?? new ProjectSettings(),
                 Metadata = r["metadata"].Deserialize<Dictionary<string, string>>(JsonOptions) ?? new(),
             };
-            foreach (var idNode in r["clips"] as JsonArray ?? new JsonArray())
+            project.Clips.AddRange(ReadIndexed<Clip>(doc, "clips"));
+            project.Rigs.AddRange(ReadIndexed<Rig>(doc, "rigs"));
+            project.PoseLibrary.AddRange(ReadIndexed<PoseAsset>(doc, "poses"));
+            if ((string?)r["scene"] is { } scenePath)
             {
-                var path = $"clips/{(string?)idNode}.json";
-                if (!doc.Entries.TryGetValue(path, out var clipNode))
-                    throw new ProjectFormatException("missing_entry", $"Clip entry '{path}' is missing.");
-                project.Clips.Add(clipNode.Deserialize<Clip>(JsonOptions)
-                    ?? throw new ProjectFormatException("invalid_json", $"'{path}' is empty."));
+                if (!doc.Entries.TryGetValue(scenePath, out var sceneNode))
+                    throw new ProjectFormatException("missing_entry", $"Scene entry '{scenePath}' is missing.");
+                project.Characters.AddRange(sceneNode["characters"].Deserialize<List<Character>>(JsonOptions) ?? new());
             }
+            Validate(project);
             if (project.Id.IsEmpty)
                 throw new ProjectFormatException("invalid_json", "project.json has no id.");
             return project;
@@ -118,6 +132,37 @@ public static class ProjectArchive
         {
             throw new ProjectFormatException("invalid_json", $"Project data is invalid: {e.Message}", e);
         }
+    }
+
+    static IEnumerable<T> ReadIndexed<T>(ArchiveDocument doc, string folder)
+    {
+        foreach (var idNode in doc.Root[folder] as JsonArray ?? new JsonArray())
+        {
+            var path = $"{folder}/{(string?)idNode}.json";
+            if (!doc.Entries.TryGetValue(path, out var node))
+                throw new ProjectFormatException("missing_entry", $"Entry '{path}' is missing.");
+            yield return node.Deserialize<T>(JsonOptions)
+                ?? throw new ProjectFormatException("invalid_json", $"'{path}' is empty.");
+        }
+    }
+
+    /// <summary>Reference checks that JSON alone cannot express.</summary>
+    static void Validate(Project p)
+    {
+        foreach (var rig in p.Rigs)
+        {
+            var seen = new HashSet<Ids.ObjectId>();
+            foreach (var bone in rig.Bones)
+            {
+                if (!bone.Parent.IsEmpty && !seen.Contains(bone.Parent))
+                    throw new ProjectFormatException("invalid_json", $"Rig '{rig.Name}': bone '{bone.Name}' appears before its parent.");
+                if (!seen.Add(bone.Id))
+                    throw new ProjectFormatException("invalid_json", $"Rig '{rig.Name}': duplicate bone id {bone.Id}.");
+            }
+        }
+        foreach (var c in p.Characters)
+            if (p.FindRig(c.Rig) is null)
+                throw new ProjectFormatException("invalid_json", $"Character '{c.Name}' refers to a missing rig.");
     }
 
     static void AddEntry(ZipArchive zip, string path, byte[] bytes)

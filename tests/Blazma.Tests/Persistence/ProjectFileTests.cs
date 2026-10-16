@@ -162,7 +162,7 @@ public class ProjectFileTests
             using (var r = new StreamReader(entry.Open())) text = r.ReadToEnd();
             entry.Delete();
             using var w = new StreamWriter(zip.CreateEntry("project.json").Open());
-            w.Write(text.Replace("\"schemaVersion\": 1", "\"schemaVersion\": 99"));
+            w.Write(text.Replace("\"schemaVersion\": 2", "\"schemaVersion\": 99"));
         }
         Assert.Equal("schema_too_new", Assert.Throws<ProjectFormatException>(() => ProjectFile.Load(path)).Code);
     }
@@ -200,5 +200,32 @@ public class ProjectFileTests
         File.WriteAllText(SessionLock.LockPathFor(path), "{\"pid\":999999}");
         using var l = SessionLock.TryAcquire(path);
         Assert.NotNull(l);
+    }
+}
+
+public class SchemaMigrationTests
+{
+    static string Fixture(string name) =>
+        Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "fixtures", name);
+
+    [Fact]
+    public void V1File_OpensAndUpgrades_WithoutLosingData()
+    {
+        var p = ProjectFile.Load(Fixture("schema-v1/project-v1.blazanim"));
+        Assert.Equal("Schema v1 fixture", p.Name);
+        Assert.Equal(new[] { "Walk", "Jump" }, p.Clips.Select(c => c.Name));
+        Assert.Equal(48, p.Clips[0].DurationFrames);
+        Assert.Equal(new FrameRate(30000, 1001), p.Clips[1].Fps);
+        Assert.Empty(p.Rigs);
+        Assert.Empty(p.Characters);
+        Assert.Empty(p.PoseLibrary);
+
+        // Re-saving writes the current schema and still round-trips.
+        using var dir = new TempDir();
+        var path = dir.File("upgraded.blazanim");
+        ProjectFile.Save(p, path);
+        var again = ProjectFile.Load(path);
+        Assert.Equal(p.Id, again.Id);
+        Assert.Equal(p.Clips.Select(c => c.Duration), again.Clips.Select(c => c.Duration));
     }
 }

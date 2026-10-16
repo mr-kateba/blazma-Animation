@@ -46,6 +46,7 @@ public sealed class CommandRegistry
     {
         var r = new CommandRegistry();
         BuiltinCommands.Register(r);
+        PoseCommands.Register(r);
         return r;
     }
 }

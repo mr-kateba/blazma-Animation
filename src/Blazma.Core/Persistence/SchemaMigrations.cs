@@ -9,8 +9,18 @@ namespace Blazma.Core.Persistence;
 /// </summary>
 public static class SchemaMigrations
 {
-    /// <summary>Index i migrates version i+1 to i+2. Empty while only schema 1 exists.</summary>
-    static readonly Action<ArchiveDocument>[] Steps = Array.Empty<Action<ArchiveDocument>>();
+    /// <summary>Index i migrates version i+1 to i+2.</summary>
+    static readonly Action<ArchiveDocument>[] Steps =
+    {
+        V1ToV2,
+    };
+
+    /// <summary>v2 adds rigs, the pose library and the scene (characters). v1 files have none of them.</summary>
+    static void V1ToV2(ArchiveDocument doc)
+    {
+        doc.Root["rigs"] ??= new System.Text.Json.Nodes.JsonArray();
+        doc.Root["poses"] ??= new System.Text.Json.Nodes.JsonArray();
+    }
 
     public static void MigrateToCurrent(ArchiveDocument doc)
     {

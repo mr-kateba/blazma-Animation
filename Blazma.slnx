@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Blazma.Commands/Blazma.Commands.csproj" />
     <Project Path="src/Blazma.Core/Blazma.Core.csproj" />
+    <Project Path="src/Blazma.Rigging/Blazma.Rigging.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Blazma.Tests/Blazma.Tests.csproj" />

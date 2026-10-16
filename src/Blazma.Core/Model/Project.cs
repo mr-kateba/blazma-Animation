@@ -11,14 +11,23 @@ namespace Blazma.Core.Model;
 public sealed class Project
 {
     /// <summary>Schema version written by this build. See docs/DATA_FORMAT.md §4.</summary>
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     public ObjectId Id { get; set; } = ObjectId.New();
     public string Name { get; set; } = "Untitled";
     public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
     public ProjectSettings Settings { get; set; } = new();
     public List<Clip> Clips { get; set; } = new();
+    public List<Rig> Rigs { get; set; } = new();
+    public List<Character> Characters { get; set; } = new();
+    public List<PoseAsset> PoseLibrary { get; set; } = new();
     public Dictionary<string, string> Metadata { get; set; } = new();
+
+    public Rig? FindRig(ObjectId id) => Rigs.Find(r => r.Id == id);
+    public Rig GetRig(ObjectId id) => FindRig(id) ?? throw new KeyNotFoundException($"Rig '{id}' does not exist.");
+    public Character? FindCharacter(ObjectId id) => Characters.Find(c => c.Id == id);
+    public Character GetCharacter(ObjectId id) => FindCharacter(id) ?? throw new KeyNotFoundException($"Character '{id}' does not exist.");
+    public PoseAsset? FindPose(ObjectId id) => PoseLibrary.Find(p => p.Id == id);
 
     public Clip? FindClip(ObjectId id) => Clips.Find(c => c.Id == id);
 

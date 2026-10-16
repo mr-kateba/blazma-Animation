@@ -116,6 +116,19 @@ public sealed class InspectProject : ICommand
             ["schemaVersion"] = Project.CurrentSchemaVersion,
             ["frameRate"] = p.Settings.DefaultFrameRate.ToString(),
             ["clips"] = clips,
+            ["characters"] = new JsonArray(p.Characters.Select(c => (JsonNode?)new JsonObject
+            {
+                ["characterId"] = c.Id.ToString(),
+                ["name"] = c.Name,
+                ["rigId"] = c.Rig.ToString(),
+                ["rig"] = p.FindRig(c.Rig)?.Name,
+            }).ToArray()),
+            ["poseLibrary"] = new JsonArray(p.PoseLibrary.Select(x => (JsonNode?)new JsonObject
+            {
+                ["poseId"] = x.Id.ToString(),
+                ["name"] = x.Name,
+                ["rigId"] = x.Rig.ToString(),
+            }).ToArray()),
         });
     }
 

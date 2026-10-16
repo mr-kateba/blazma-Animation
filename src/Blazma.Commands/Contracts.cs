@@ -25,6 +25,11 @@ public sealed record Change(string Kind, string? TargetId = null)
     public const string ClipChanged = "clip.changed";
     public const string ProjectReplaced = "project.replaced";
     public const string SaveStateChanged = "save.state";
+    public const string PoseChanged = "pose.changed";
+    public const string CharacterAdded = "character.added";
+    public const string CharacterRemoved = "character.removed";
+    public const string RigChanged = "rig.changed";
+    public const string PoseLibraryChanged = "poselib.changed";
 }
 
 public sealed record Diagnostic(string Code, string Message);
