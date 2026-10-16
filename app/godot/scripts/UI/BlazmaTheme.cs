@@ -68,7 +68,7 @@ public static class BlazmaTheme
     static StyleBoxEmpty Empty(float l = 0, float t = 0, float r = 0, float b = 0) =>
         new() { ContentMarginLeft = l, ContentMarginTop = t, ContentMarginRight = r, ContentMarginBottom = b };
 
-    static ImageTexture Svg(string body, Color color, int size = 16)
+    public static ImageTexture Svg(string body, Color color, int size = 16)
     {
         var svg = $"<svg xmlns='http://www.w3.org/2000/svg' width='{size}' height='{size}' viewBox='0 0 16 16' fill='none' " +
                   $"stroke='#{color.ToHtml(false)}' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'>{body}</svg>";

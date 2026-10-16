@@ -292,3 +292,18 @@ public class AgentIpcTests
         Assert.Null(c);
     }
 }
+
+public class AgentIpcShutdownTests
+{
+    [Fact]
+    public async Task AfterDispose_NewConnectionsAreRefused()
+    {
+        var name = "blazma-stop-" + Guid.NewGuid().ToString("N")[..8];
+        var server = new AgentIpcServer(req => Task.FromResult(AgentRpcHandler.Error(req["id"]?.DeepClone(), "x", "x")), null, name);
+        server.Start();
+        await using (var c = await AgentIpcClient.TryConnectAsync(TimeSpan.FromSeconds(5), name)) Assert.NotNull(c);
+        await server.DisposeAsync();
+        await Task.Delay(200);
+        Assert.Null(await AgentIpcClient.TryConnectAsync(TimeSpan.FromMilliseconds(500), name));
+    }
+}

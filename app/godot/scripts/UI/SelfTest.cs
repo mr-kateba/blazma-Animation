@@ -326,6 +326,9 @@ public partial class SelfTest : Node
         // Phase 3: timeline, keys, playback, dope sheet, graph editor, markers, trail and onion skin.
         await RunPhase3();
 
+        // Phase 5: the app hosts the agent API; AI Workspace panel.
+        await RunPhase5();
+
         // Restore the user's settings.
         App.SetLanguage(backup.Language); App.SetTheme(backup.Theme); App.SetAdvancedMode(backup.AdvancedMode);
         App.SetAutosaveMinutes(backup.AutosaveMinutes);

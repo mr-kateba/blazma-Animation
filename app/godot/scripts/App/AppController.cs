@@ -53,11 +53,12 @@ public partial class AppController : Node
         _recovery = Recovery.BeginSession(Session.Project, null);
         GetTree().AutoAcceptQuit = false; // MainWindow asks about unsaved changes first
         ApplyLocale();
+        InitAgents();
     }
 
     public override void _Process(double delta)
     {
-        while (_posted.Count > 0) _posted.Dequeue()();
+        DrainPosted();
         AdvancePlayback(delta);
 
         _sinceAutosave += delta;
@@ -65,10 +66,26 @@ public partial class AppController : Node
             AutosaveNow();
     }
 
-    /// <summary>Queue work for the main thread (used by background jobs and IPC).</summary>
+    /// <summary>Queue work for the main thread (used by background jobs and IPC). Safe to call from any thread.</summary>
     public void Post(Action action)
     {
         lock (_posted) _posted.Enqueue(action);
+    }
+
+    /// <summary>Runs everything queued by <see cref="Post"/>. The queue is only touched under its lock (producers run on pool threads).</summary>
+    void DrainPosted()
+    {
+        while (true)
+        {
+            Action next;
+            lock (_posted)
+            {
+                if (_posted.Count == 0) return;
+                next = _posted.Dequeue();
+            }
+            try { next(); }
+            catch (Exception e) { GD.PushError($"Posted action failed: {e}"); }
+        }
     }
 
     // ---- Editing -----------------------------------------------------------------------------
@@ -252,6 +269,7 @@ public partial class AppController : Node
     /// <summary>Clean shutdown: removes recovery data and releases the lock.</summary>
     public void ShutdownCleanly()
     {
+        StopAgentServer();
         CloseCurrent();
         Settings.Save();
     }

@@ -981,3 +981,197 @@ msgstr "المفاتيح"
 
 msgid "Play this clip in a loop."
 msgstr "تشغيل هذا المقطع في حلقة متكررة."
+
+# ---- Phase 5: AI Workspace ----
+msgid "AI"
+msgstr "ذكاء اصطناعي"
+
+msgid "AI Workspace"
+msgstr "مساحة عمل الذكاء الاصطناعي"
+
+msgid "Show or hide the AI Workspace"
+msgstr "إظهار مساحة عمل الذكاء الاصطناعي أو إخفاؤها"
+
+msgid "Close"
+msgstr "إغلاق"
+
+msgid "Connection"
+msgstr "الاتصال"
+
+msgid "Agents allowed"
+msgstr "السماح للوكلاء"
+
+msgid "Agents cannot connect while this is off."
+msgstr "لا يستطيع الوكلاء الاتصال ما دام هذا الخيار متوقفًا."
+
+msgid "No agents connected"
+msgstr "لا يوجد وكلاء متصلون"
+
+msgid "Connected since {0}"
+msgstr "متصل منذ {0}"
+
+msgid "Assisted"
+msgstr "مساعد"
+
+msgid "Autonomous"
+msgstr "مستقل"
+
+msgid "Assisted: every task waits for your review before it counts."
+msgstr "مساعد: تنتظر كل مهمة مراجعتك قبل أن تُعتمد."
+
+msgid "Autonomous: tasks are accepted when they finish. You can still revert them."
+msgstr "مستقل: تُعتمد المهام عند انتهائها، ويمكنك التراجع عنها لاحقًا."
+
+msgid "How to connect an agent"
+msgstr "كيف أربط وكيلًا؟"
+
+msgid "Hide connection help"
+msgstr "إخفاء مساعدة الاتصال"
+
+msgid "Connect Claude Code:"
+msgstr "لربط Claude Code:"
+
+msgid "Copy"
+msgstr "نسخ"
+
+msgid "Copied to the clipboard"
+msgstr "تم النسخ إلى الحافظة"
+
+msgid "Folders agents may read…"
+msgstr "المجلدات التي يستطيع الوكلاء القراءة منها…"
+
+msgid "Folders agents may read"
+msgstr "المجلدات التي يستطيع الوكلاء القراءة منها"
+
+msgid "Agents can always read the project's own folder. Add other folders they may import files from."
+msgstr "يستطيع الوكلاء دائمًا القراءة من مجلد المشروع نفسه. أضف مجلدات أخرى يجوز لهم استيراد الملفات منها."
+
+msgid "Add folder…"
+msgstr "إضافة مجلد…"
+
+msgid "Needs your approval"
+msgstr "بانتظار موافقتك"
+
+msgid "From {0}"
+msgstr "من {0}"
+
+msgid "Approve"
+msgstr "اعتماد"
+
+msgid "Deny"
+msgstr "منع"
+
+msgid "This action deletes something. Allow it?"
+msgstr "هذا الإجراء يحذف شيئًا. هل تسمح به؟"
+
+msgid "This action reads a file outside the allowed folders: {0}"
+msgstr "هذا الإجراء يقرأ ملفًا خارج المجلدات المسموح بها: {0}"
+
+msgid "This action needs your approval."
+msgstr "هذا الإجراء يحتاج إلى موافقتك."
+
+msgid "Tasks"
+msgstr "المهام"
+
+msgid "No tasks yet. When an agent edits the project, its work appears here."
+msgstr "لا توجد مهام بعد. عندما يعدّل وكيل المشروع يظهر عمله هنا."
+
+msgid "Agent task"
+msgstr "مهمة وكيل"
+
+msgid "Running"
+msgstr "قيد التنفيذ"
+
+msgid "Waiting for review"
+msgstr "بانتظار المراجعة"
+
+msgid "Approved"
+msgstr "معتمدة"
+
+msgid "Rejected"
+msgstr "مرفوضة"
+
+msgid "Reject"
+msgstr "رفض"
+
+msgid "Revert"
+msgstr "تراجع عن المهمة"
+
+msgid "Show calls"
+msgstr "إظهار الاستدعاءات"
+
+msgid "Hide calls"
+msgstr "إخفاء الاستدعاءات"
+
+msgid "No changes"
+msgstr "لا تغييرات"
+
+msgid "1 change"
+msgstr "تغيير واحد"
+
+msgid "{0} changes"
+msgstr "{0} تغييرات"
+
+msgid "No calls"
+msgstr "لا استدعاءات"
+
+msgid "1 call"
+msgstr "استدعاء واحد"
+
+msgid "{0} calls"
+msgstr "{0} استدعاءات"
+
+msgid "Agent disconnected."
+msgstr "انقطع اتصال الوكيل."
+
+msgid "The project was replaced. This task can no longer be reverted."
+msgstr "استُبدل المشروع. لم يعد ممكنًا التراجع عن هذه المهمة."
+
+msgid "There are newer changes after this task. Undo them first, then reject."
+msgstr "توجد تغييرات أحدث بعد هذه المهمة. تراجع عنها أولًا ثم ارفض المهمة."
+
+msgid "Finish the current edit first."
+msgstr "أنهِ التعديل الحالي أولًا."
+
+msgid "This task was already rejected."
+msgstr "رُفضت هذه المهمة من قبل."
+
+msgid "The project was replaced; this task can no longer be reverted."
+msgstr "استُبدل المشروع؛ لم يعد ممكنًا التراجع عن هذه المهمة."
+
+msgid "The agent or the action is no longer available."
+msgstr "الوكيل أو الإجراء لم يعد متاحًا."
+
+msgid "No calls yet."
+msgstr "لا توجد استدعاءات بعد."
+
+msgid "Read-only calls ({0})"
+msgstr "استدعاءات القراءة فقط ({0})"
+
+msgid "Hide read-only calls ({0})"
+msgstr "إخفاء استدعاءات القراءة فقط ({0})"
+
+msgid "Waiting for your approval."
+msgstr "بانتظار موافقتك."
+
+msgid "You denied this action."
+msgstr "رفضتَ هذا الإجراء."
+
+msgid "Agents cannot run system commands or write outside the project. Every change can be reverted."
+msgstr "لا يستطيع الوكلاء تشغيل أوامر النظام ولا الكتابة خارج المشروع. وكل تغيير يمكن التراجع عنه."
+
+msgid "AI agents are turned off"
+msgstr "وكلاء الذكاء الاصطناعي متوقفون"
+
+msgid "An AI agent is waiting for your approval"
+msgstr "وكيل ذكاء اصطناعي بانتظار موافقتك"
+
+msgid "AI agents connected: {0}"
+msgstr "وكلاء الذكاء الاصطناعي المتصلون: {0}"
+
+msgid "No AI agent connected"
+msgstr "لا يوجد وكيل ذكاء اصطناعي متصل"
+
+msgid "Allow AI agents to connect"
+msgstr "السماح لوكلاء الذكاء الاصطناعي بالاتصال"
+

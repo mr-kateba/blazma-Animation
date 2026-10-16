@@ -91,6 +91,7 @@ public partial class MainWindow : Control
         App.ActiveClipChanged += OnActiveClipChanged;
         App.InfoRaised += OnInfo;
         App.PlaybackChanged += OnPlaybackForMenus;
+        App.AgentChanged += OnAgentChanged;
 
         RestoreWindowAndLayout();
         OnSettingsChanged();
@@ -109,6 +110,7 @@ public partial class MainWindow : Control
         App.ActiveClipChanged -= OnActiveClipChanged;
         App.InfoRaised -= OnInfo;
         App.PlaybackChanged -= OnPlaybackForMenus;
+        App.AgentChanged -= OnAgentChanged;
     }
 
     void OnInfo(string message) => _toast.Notify(message, _palette.Warn);
@@ -136,7 +138,7 @@ public partial class MainWindow : Control
     public override void _Notification(int what)
     {
         if (what == NotificationWMCloseRequest) RequestQuit();
-        else if (what == NotificationTranslationChanged && IsNodeReady()) { UpdateMenus(); UpdateStatus(); UpdateChip(); }
+        else if (what == NotificationTranslationChanged && IsNodeReady()) { UpdateMenus(); UpdateStatus(); UpdateChip(); UpdateAgentUi(); }
     }
 
     /// <summary>Top-level menu popup by index (Project, Edit, Animation, Rigging, Settings); used by screenshot tests.</summary>
@@ -212,8 +214,10 @@ public partial class MainWindow : Control
         foreach (var s in new SplitContainer[] { _splitOuter, _splitInner, _splitDock })
             s.Dragged += _ => ScheduleLayoutSave();
 
-        page.AddChild(W.Margin(_splitDock, 10, 10, 10, 8));
-        _splitDock.GetParent<Control>().SizeFlagsVertical = SizeFlags.ExpandFill;
+        _splitDock.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        BuildAgentDock(_splitDock);
+        page.AddChild(W.Margin(_splitAgent, 10, 10, 10, 8));
+        _splitAgent.GetParent<Control>().SizeFlagsVertical = SizeFlags.ExpandFill;
 
         page.AddChild(BuildStatusBar());
 
@@ -254,6 +258,7 @@ public partial class MainWindow : Control
         row.AddChild(_segMode);
         row.AddChild(_segLang);
         row.AddChild(_segTheme);
+        row.AddChild(BuildAiButton());
 
         _chip = new PanelContainer { ThemeTypeVariation = "Chip", SizeFlagsVertical = SizeFlags.ShrinkCenter };
         var chipRow = new HBoxContainer();
@@ -292,6 +297,8 @@ public partial class MainWindow : Control
         _pathText.TextDirection = Control.TextDirection.Ltr;
         _pathText.ClipText = true;
         row.AddChild(_pathText);
+
+        BuildStatusAi(row);
 
         _fpsText = W.Label("", "MonoFaint", false);
         _fpsText.TextDirection = Control.TextDirection.Ltr;
@@ -387,6 +394,7 @@ public partial class MainWindow : Control
         _mSettings.AddSubmenuNodeItem("Autosave", _mAuto);
         _mSettings.AddSubmenuNodeItem("Mode", _mMode);
         BuildViewSettingsMenu();
+        BuildAgentMenu();
     }
 
     void OnMenu(int id)
@@ -403,6 +411,8 @@ public partial class MainWindow : Control
             case MNewClip: PromptNewClip(); break;
             case MRenameClip: if (SelectedClipId is { } r) PromptRenameClip(r); break;
             case MDeleteClip: if (SelectedClipId is { } d) ConfirmDeleteClip(d); break;
+            case MAgentAllow: App.SetAllowAgents(!App.Settings.AllowAgents); break;
+            case MAgentFolders: ShowAgentFolders(); break;
             case MClearRecent: App.Settings.RecentFiles.Clear(); App.Settings.Save(); break;
             case >= MAddMannequin and <= MPinSelected: OnRiggingMenu(id); break;
             case MTrail or MOnion or >= MKey and <= MAddPhases: OnAnimationMenu(id); break;
@@ -511,6 +521,7 @@ public partial class MainWindow : Control
         _errorDialog.AutoTranslateMode = AutoTranslateModeEnum.Disabled;
         AddChild(_errorDialog);
         BuildRigDialogs();
+        BuildAgentDialogs();
     }
 
     /// <summary>Text is translated here, then the dialog's own auto-translation is off so user content is never "translated".</summary>
@@ -805,6 +816,8 @@ public partial class MainWindow : Control
         UpdateRiggingMenu();
         RefreshAll();
         SyncViewTools();
+        Agent.MarkDirty();
+        UpdateAgentUi();
     }
 
     /// <summary>The inspector sits at the inline end: right in English, left in Arabic (the stage itself never mirrors).</summary>
@@ -863,6 +876,7 @@ public partial class MainWindow : Control
         l["split_left"] = _splitOuter.SplitOffset;
         l["split_right"] = _splitInner.SplitOffset;
         l["split_dock"] = _splitDock.SplitOffset;
+        l["split_agent"] = _splitAgent.SplitOffset;
         var win = GetWindow();
         if (win.Mode == Window.ModeEnum.Windowed)
         {
@@ -878,6 +892,7 @@ public partial class MainWindow : Control
         _splitOuter.SplitOffset = Get("split_left");
         _splitInner.SplitOffset = Get("split_right");
         _splitDock.SplitOffset = Get("split_dock");
+        _splitAgent.SplitOffset = Get("split_agent");
         var win = GetWindow();
         if (!SelfTest.IsRequested && win.Mode == Window.ModeEnum.Windowed && Get("window_w") >= 800 && Get("window_h") >= 500)
             win.Size = new Vector2I(Get("window_w"), Get("window_h"));

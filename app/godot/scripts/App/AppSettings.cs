@@ -21,6 +21,13 @@ public sealed class AppSettings
     public int OnionFrames { get; set; } = 5;
     public List<string> RecentFiles { get; } = new();
 
+    /// <summary>Phase 5: AI agents (Claude Code etc.) may connect to this window over the local pipe.</summary>
+    public bool AllowAgents { get; set; } = true;
+    /// <summary>False = Assisted (every agent task waits for review), true = Autonomous.</summary>
+    public bool AgentAutonomous { get; set; }
+    /// <summary>Folders agents may import files from besides the project's own folder.</summary>
+    public List<string> AgentReadRoots { get; } = new();
+
     /// <summary>Free-form layout values (panel sizes, window size) owned by the views.</summary>
     public Dictionary<string, Variant> Layout { get; } = new();
 
@@ -39,6 +46,10 @@ public sealed class AppSettings
         AutosaveMinutes = Math.Clamp((int)cfg.GetValue("files", "autosave_minutes", AutosaveMinutes), 0, 60);
         RecentFiles.Clear();
         RecentFiles.AddRange(((string[])cfg.GetValue("files", "recent", Array.Empty<string>())).Take(MaxRecent));
+        AllowAgents = (bool)cfg.GetValue("agent", "allow", AllowAgents);
+        AgentAutonomous = (bool)cfg.GetValue("agent", "autonomous", AgentAutonomous);
+        AgentReadRoots.Clear();
+        AgentReadRoots.AddRange((string[])cfg.GetValue("agent", "read_roots", Array.Empty<string>()));
         if (cfg.HasSection("layout"))
             foreach (var key in cfg.GetSectionKeys("layout"))
                 Layout[key] = cfg.GetValue("layout", key);
@@ -57,6 +68,9 @@ public sealed class AppSettings
         cfg.SetValue("ui", "onion_frames", OnionFrames);
         cfg.SetValue("files", "autosave_minutes", AutosaveMinutes);
         cfg.SetValue("files", "recent", RecentFiles.ToArray());
+        cfg.SetValue("agent", "allow", AllowAgents);
+        cfg.SetValue("agent", "autonomous", AgentAutonomous);
+        cfg.SetValue("agent", "read_roots", AgentReadRoots.ToArray());
         foreach (var (k, v) in Layout) cfg.SetValue("layout", k, v);
         cfg.Save(Path);
     }

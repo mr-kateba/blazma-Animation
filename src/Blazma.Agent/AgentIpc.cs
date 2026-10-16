@@ -47,16 +47,22 @@ public sealed class AgentIpcServer : IAsyncDisposable
     {
         while (!_cts.IsCancellationRequested)
         {
-            NamedPipeServerStream pipe;
+            NamedPipeServerStream? pipe = null;
             try
             {
                 pipe = new NamedPipeServerStream(_pipeName, PipeDirection.InOut, 8, PipeTransmissionMode.Byte,
                     PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                 await pipe.WaitForConnectionAsync(_cts.Token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) { return; }
+            catch (OperationCanceledException)
+            {
+                // Dispose the listening instance, otherwise the OS keeps accepting connections nobody serves.
+                if (pipe is not null) await pipe.DisposeAsync().ConfigureAwait(false);
+                return;
+            }
             catch (IOException)
             {
+                if (pipe is not null) await pipe.DisposeAsync().ConfigureAwait(false);
                 // Pipe name busy (another Blazma window owns it) or transient: back off and retry.
                 try { await Task.Delay(1000, _cts.Token).ConfigureAwait(false); } catch (OperationCanceledException) { return; }
                 continue;
