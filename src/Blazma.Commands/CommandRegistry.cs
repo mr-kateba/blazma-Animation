@@ -49,6 +49,7 @@ public sealed class CommandRegistry
         PoseCommands.Register(r);
         RigCommands.Register(r);
         KeyCommands.Register(r);
+        AnimationEditCommands.Register(r);
         return r;
     }
 }
