@@ -122,3 +122,12 @@ dotnet test Blazma.slnx
 - قد يظهر Windows تحذيراً لأن البرنامج جديد لدى Windows.
 - اضغط **More info** ثم **Run anyway**.
 - حمّل Godot فقط من الرابط الرسمي المذكور أعلاه.
+
+## 7. النسخة الجاهزة (بدون تثبيت أي شيء)
+
+إذا وصلك الملف `BlazmaAnimation-0.1.0-phase1-win64.zip`:
+
+1. فك الضغط في أي مجلد.
+2. شغّل `BlazmaAnimation.exe`.
+3. لا تحتاج تثبيت .NET ولا Godot، فكل شيء مدمج داخل المجلد.
+4. إذا ظهر تحذير SmartScreen: اضغط **More info** ثم **Run anyway** (البرنامج غير موقَّع رقميًا بعد).
