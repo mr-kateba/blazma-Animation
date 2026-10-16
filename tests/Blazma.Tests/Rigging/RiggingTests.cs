@@ -294,3 +294,17 @@ public class JointLimitTests
         Assert.False(clamped);
     }
 }
+
+public class MannequinAddToTests
+{
+    [Fact]
+    public void AddTo_PutsOneRigAndCharacter_AndReusesTheRig()
+    {
+        var p = Project.CreateNew("x");
+        var a = MannequinFactory.AddTo(p);
+        var b = MannequinFactory.AddTo(p, "Second");
+        Assert.Single(p.Rigs);
+        Assert.Equal(a.Rig, b.Rig);
+        Assert.Equal(2, p.Characters.Count);
+    }
+}

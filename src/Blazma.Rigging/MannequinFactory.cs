@@ -79,6 +79,23 @@ public static class MannequinFactory
         }
     }
 
+    /// <summary>
+    /// Puts a mannequin into a project directly (not through the undo history). Used for the
+    /// default content of a new project, so a fresh project is ready to pose and not "dirty".
+    /// </summary>
+    public static Character AddTo(Project project, string name = "Mannequin")
+    {
+        var rig = project.Rigs.Find(r => r.Source.Kind == RigSourceKind.Builtin && r.Name == RigName);
+        if (rig is null)
+        {
+            rig = Create();
+            project.Rigs.Add(rig);
+        }
+        var character = CreateCharacter(rig, name);
+        project.Characters.Add(character);
+        return character;
+    }
+
     /// <summary>A character instance of a rig, at rest, with controls synced.</summary>
     public static Character CreateCharacter(Rig rig, string name = "Mannequin")
     {
