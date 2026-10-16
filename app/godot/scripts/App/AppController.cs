@@ -58,6 +58,7 @@ public partial class AppController : Node
     public override void _Process(double delta)
     {
         while (_posted.Count > 0) _posted.Dequeue()();
+        AdvancePlayback(delta);
 
         _sinceAutosave += delta;
         if (Settings.AutosaveMinutes > 0 && _sinceAutosave >= Settings.AutosaveMinutes * 60)
@@ -77,6 +78,7 @@ public partial class AppController : Node
         ICommand command;
         try { command = Registry.Create(commandId, args); }
         catch (CommandException e) { return Report(CommandResult.Fail(e.Code, e.Message)); }
+        if (PoseEditIds.Contains(commandId)) return ExecutePoseEdit(command, commandId, args);
         return Report(Session.Execute(command, CommandOrigin.Ui));
     }
 
@@ -103,7 +105,9 @@ public partial class AppController : Node
     void OnSessionChanged(SessionChangedArgs args)
     {
         _version++;
+        BeforeSessionNotify(args);
         SessionChanged?.Invoke(args);
+        AfterSessionNotify(args);
     }
 
     // ---- Files -------------------------------------------------------------------------------
@@ -315,6 +319,27 @@ public partial class AppController : Node
     public void SetAutosaveMinutes(int minutes)
     {
         Settings.AutosaveMinutes = Math.Clamp(minutes, 0, 60);
+        Settings.Save();
+        SettingsChanged?.Invoke();
+    }
+
+    public void SetShowTrail(bool show)
+    {
+        Settings.ShowTrail = show;
+        Settings.Save();
+        SettingsChanged?.Invoke();
+    }
+
+    public void SetShowOnion(bool show)
+    {
+        Settings.ShowOnion = show;
+        Settings.Save();
+        SettingsChanged?.Invoke();
+    }
+
+    public void SetOnionFrames(int frames)
+    {
+        Settings.OnionFrames = Math.Clamp(frames, 1, 30);
         Settings.Save();
         SettingsChanged?.Invoke();
     }

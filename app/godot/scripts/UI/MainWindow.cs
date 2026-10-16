@@ -51,7 +51,7 @@ public partial class MainWindow : Control
     public ViewportView Stage { get; private set; } = null!;
     public AxisGizmo Gizmo { get; private set; } = null!;
     public InspectorPanel Inspector { get; private set; } = null!;
-    public ClipStrip Strip { get; private set; } = null!;
+    public ClipStrip Strip => Timeline.Strip;
     public ProjectTreePanel OutlinePanel { get; private set; } = null!;
     public HistoryPanel HistoryPanel { get; private set; } = null!;
     public Toast ToastNode => _toast;
@@ -73,7 +73,7 @@ public partial class MainWindow : Control
     public string? LastError => _lastError;
 
     // selection
-    public string? SelectedClipId { get; private set; }
+    public string? SelectedClipId => App.ActiveClipId;
     List<string> _lastClipIds = new();
     public Clip? SelectedClip => SelectedClipId is null ? null : App.Session.Project.Clips.Find(c => c.Id.ToString() == SelectedClipId);
 
@@ -88,6 +88,9 @@ public partial class MainWindow : Control
         App.SessionChanged += OnSessionChanged;
         App.SettingsChanged += OnSettingsChanged;
         App.ErrorRaised += OnError;
+        App.ActiveClipChanged += OnActiveClipChanged;
+        App.InfoRaised += OnInfo;
+        App.PlaybackChanged += OnPlaybackForMenus;
 
         RestoreWindowAndLayout();
         OnSettingsChanged();
@@ -103,7 +106,14 @@ public partial class MainWindow : Control
         App.SessionChanged -= OnSessionChanged;
         App.SettingsChanged -= OnSettingsChanged;
         App.ErrorRaised -= OnError;
+        App.ActiveClipChanged -= OnActiveClipChanged;
+        App.InfoRaised -= OnInfo;
+        App.PlaybackChanged -= OnPlaybackForMenus;
     }
+
+    void OnInfo(string message) => _toast.Notify(message, _palette.Warn);
+
+    void OnPlaybackForMenus() => UpdateAnimationMenu();
 
     void StartupChecks()
     {
@@ -120,6 +130,7 @@ public partial class MainWindow : Control
             _fpsTimer = 0;
             _fpsText.Text = $"{Engine.GetFramesPerSecond():0} FPS";
         }
+        FlushHistoryIfStale();
     }
 
     public override void _Notification(int what)
@@ -151,7 +162,7 @@ public partial class MainWindow : Control
         Inspector = new InspectorPanel(this);
         OutlinePanel = new ProjectTreePanel(this);
         HistoryPanel = new HistoryPanel(this);
-        Strip = new ClipStrip(this);
+        Timeline = new TimelinePanel(this);
         Gizmo = new AxisGizmo();
 
         _center = new Control
@@ -179,6 +190,7 @@ public partial class MainWindow : Control
         _hint.LayoutDirection = LayoutDirectionEnum.Locale;
         _center.AddChild(_hint);
 
+        BuildMotionLayers();
         _center.AddChild(Rail);
         _center.AddChild(Inspector);
 
@@ -193,9 +205,9 @@ public partial class MainWindow : Control
         _splitOuter.AddChild(_splitInner);
 
         _splitDock = new VSplitContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
-        Strip.SizeFlagsVertical = SizeFlags.Fill;
+        Timeline.SizeFlagsVertical = SizeFlags.Fill;
         _splitDock.AddChild(_splitOuter);
-        _splitDock.AddChild(Strip);
+        _splitDock.AddChild(Timeline);
 
         foreach (var s in new SplitContainer[] { _splitOuter, _splitInner, _splitDock })
             s.Dragged += _ => ScheduleLayoutSave();
@@ -346,6 +358,7 @@ public partial class MainWindow : Control
         _mAnim.AddItem("New Clip…", MNewClip);
         _mAnim.AddItem("Rename Clip…", MRenameClip);
         _mAnim.AddItem("Delete Clip", MDeleteClip);
+        BuildAnimationMenu();
         _mAnim.AboutToPopup += UpdateMenus;
         _mAnim.IdPressed += id => OnMenu((int)id);
 
@@ -373,6 +386,7 @@ public partial class MainWindow : Control
         _mSettings.AddSubmenuNodeItem("Theme", _mTheme);
         _mSettings.AddSubmenuNodeItem("Autosave", _mAuto);
         _mSettings.AddSubmenuNodeItem("Mode", _mMode);
+        BuildViewSettingsMenu();
     }
 
     void OnMenu(int id)
@@ -391,6 +405,7 @@ public partial class MainWindow : Control
             case MDeleteClip: if (SelectedClipId is { } d) ConfirmDeleteClip(d); break;
             case MClearRecent: App.Settings.RecentFiles.Clear(); App.Settings.Save(); break;
             case >= MAddMannequin and <= MPinSelected: OnRiggingMenu(id); break;
+            case MTrail or MOnion or >= MKey and <= MAddPhases: OnAnimationMenu(id); break;
             case >= MRecentBase:
                 var i = id - MRecentBase;
                 if (i < App.Settings.RecentFiles.Count)
@@ -432,6 +447,7 @@ public partial class MainWindow : Control
         _mAnim.SetItemDisabled(_mAnim.GetItemIndex(MRenameClip), !has);
         _mAnim.SetItemDisabled(_mAnim.GetItemIndex(MDeleteClip), !has);
 
+        UpdateAnimationMenu();
         _menuBar.SetMenuTitle(0, Tr("Project"));
         _menuBar.SetMenuTitle(1, Tr("Edit"));
         _menuBar.SetMenuTitle(2, Tr("Animation"));
@@ -664,31 +680,26 @@ public partial class MainWindow : Control
     {
         if (id == SelectedClipId) return;
         Inspector.Flush(); // commit text typed for the previous clip first
-        SelectedClipId = id;
-        Strip.UpdateSelection();
-        OutlinePanel.UpdateSelection();
-        Inspector.Refresh(true);
-        UpdateMenus();
+        App.SetActiveClip(id); // raises ActiveClipChanged, which refreshes the strip, outline, inspector and menus
     }
 
     void SelectFirstIfNone()
     {
         if (SelectedClipId is null && App.Session.Project.Clips.Count > 0)
-            SelectedClipId = App.Session.Project.Clips[0].Id.ToString();
+            App.SetActiveClipSilent(App.Session.Project.Clips[0].Id.ToString());
     }
 
     void ValidateSelection(bool replaced)
     {
         var clips = App.Session.Project.Clips;
         var ids = clips.Select(c => c.Id.ToString()).ToList();
-        if (replaced)
-        {
-            SelectedClipId = ids.Count > 0 ? ids[0] : null;
-        }
-        else if (SelectedClipId is not null && !ids.Contains(SelectedClipId))
+        if (!replaced && SelectedClipId is null && ids.Count > _lastClipIds.Count)
+            App.SetActiveClipSilent(ids.Except(_lastClipIds).LastOrDefault() ?? ids[^1]); // redo of a clip created by Key
+                // On a new / opened project the app controller has already chosen the active clip (remembered per project).
+        if (!replaced && SelectedClipId is not null && !ids.Contains(SelectedClipId))
         {
             var oldIndex = _lastClipIds.IndexOf(SelectedClipId);
-            SelectedClipId = ids.Count == 0 ? null : ids[Math.Clamp(oldIndex, 0, ids.Count - 1)];
+            App.SetActiveClipSilent(ids.Count == 0 ? null : ids[Math.Clamp(oldIndex, 0, ids.Count - 1)]);
         }
         _lastClipIds = ids;
     }
@@ -703,12 +714,26 @@ public partial class MainWindow : Control
         ValidateSelection(replaced);
         // Pose edits (gizmo drags fire one per mouse step) only touch the 3D view, the inspector and the status.
         var poseOnly = args.Changes.All(c => c.Kind is Change.PoseChanged or Change.SaveStateChanged);
+        // Key / marker / curve edits that do not change the clip list only touch the timeline, the inspector and the status.
+        var sig = ClipSignature();
+        var clipLight = !replaced && !poseOnly && sig == _clipSig
+            && args.Changes.All(c => c.Kind is Change.PoseChanged or Change.SaveStateChanged or Change.ClipChanged);
+        _clipSig = sig;
+        if (clipLight)
+        {
+            OnRigSessionChanged(args, false, true);
+            Inspector.Refresh();
+            return;
+        }
         if (OnRigSessionChanged(args, replaced, poseOnly)) return;
         RefreshAll();
     }
 
+    string _clipSig = "";
+
     void RefreshAll()
     {
+        _clipSig = ClipSignature();
         var advanced = App.Settings.AdvancedMode;
         if (_lastClipIds.Count == 0) _lastClipIds = App.Session.Project.Clips.Select(c => c.Id.ToString()).ToList();
         Strip.Rebuild();
@@ -779,6 +804,7 @@ public partial class MainWindow : Control
         ApplyStripMode();
         UpdateRiggingMenu();
         RefreshAll();
+        SyncViewTools();
     }
 
     /// <summary>The inspector sits at the inline end: right in English, left in Arabic (the stage itself never mirrors).</summary>
@@ -818,6 +844,8 @@ public partial class MainWindow : Control
         _lastError = message;
         if (_suppressToast) return;
         if (App.LastErrorCode == "driven_by_ik") { ShowDrivenToast(); return; }
+        if (App.LastErrorCode == "rig_mismatch") { _toast.Notify(Tr("This clip animates a different character. Pick or create another clip for this one."), _palette.Err); return; }
+        if (App.LastErrorCode == "track_locked") { _toast.Notify(Tr("That channel is locked. Unlock it in the dope sheet first."), _palette.Err); return; }
         _toast.Notify(FriendlyError(message), _palette.Err);
     }
 
@@ -868,19 +896,34 @@ public partial class MainWindow : Control
 
     // ---- keyboard ---------------------------------------------------------------------------
 
+    /// <summary>
+    /// Transport keys (Space, arrows, Home/End, K) are taken here, before the GUI: Godot would otherwise use the arrow keys to
+    /// move the keyboard focus. Home keeps resetting the camera while the 3D view has focus, Home / F frame the graph while it has.
+    /// </summary>
+    public override void _Input(InputEvent e)
+    {
+        if (e is not InputEventKey { Pressed: true, Echo: false } k || k.IsCommandOrControlPressed()) return;
+        var owner = GetViewport().GuiGetFocusOwner();
+        if (owner is LineEdit or TextEdit or SpinBox) return;
+        if (owner is ViewportView && k.Keycode == Godot.Key.Home) return;
+        if (owner is GraphCanvas && k.Keycode is Godot.Key.Home or Godot.Key.F) return;
+        if (TransportKeys.Handle(this, k)) GetViewport().SetInputAsHandled();
+    }
+
     public override void _ShortcutInput(InputEvent e)
     {
         if (e is not InputEventKey { Pressed: true, Echo: false } k) return;
-        var inText = GetViewport().GuiGetFocusOwner() is LineEdit or TextEdit;
+        var owner = GetViewport().GuiGetFocusOwner();
+        var inText = owner is LineEdit or TextEdit;
         if (!k.IsCommandOrControlPressed() || k.AltPressed) return;
         switch (k.Keycode)
         {
             case Godot.Key.C:
-                if (inText || k.ShiftPressed) return;
+                if (inText || k.ShiftPressed || GetViewport().GuiGetFocusOwner() is DopeSheetView) return;
                 CopyPose();
                 break;
             case Godot.Key.V:
-                if (inText || k.ShiftPressed) return;
+                if (inText || k.ShiftPressed || GetViewport().GuiGetFocusOwner() is DopeSheetView) return;
                 PastePose();
                 break;
             case Godot.Key.N: RequestNew(); break;

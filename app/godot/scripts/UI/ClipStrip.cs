@@ -91,6 +91,21 @@ public partial class ClipStrip : PanelContainer
         return b;
     }
 
+    bool _embedded;
+
+    /// <summary>Used inside the timeline dock: no card background and the dock's own tabs choose Clips or Poses.</summary>
+    public void Embed()
+    {
+        _embedded = true;
+        _tabs.Visible = false;
+        _clipsTitle.Visible = false;
+        ThemeTypeVariation = "";
+        AddThemeStyleboxOverride("panel", new StyleBoxEmpty());
+        CustomMinimumSize = Vector2.Zero;
+        if (GetChild(0) is MarginContainer m)
+            foreach (var k in new[] { "margin_left", "margin_top", "margin_right", "margin_bottom" }) m.AddThemeConstantOverride(k, 0);
+    }
+
     public bool PosesMode => _posesMode;
     public Segmented Tabs => _tabs;
     public IReadOnlyCollection<PoseCard> PoseCards => _poseCards;
@@ -99,6 +114,7 @@ public partial class ClipStrip : PanelContainer
     /// <summary>The Clips | Poses toggle is for Simple mode; Advanced mode has its own Poses tab in the left dock.</summary>
     public void SetTabsAvailable(bool on)
     {
+        if (_embedded) return;
         _tabs.Visible = on;
         _clipsTitle.Visible = !on;
         if (!on) SetPosesMode(false);

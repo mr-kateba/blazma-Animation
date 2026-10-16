@@ -109,7 +109,7 @@ public partial class SelfTest
         });
         Check("p2 click on empty space deselects the bone", () =>
         {
-            MouseButtonAt(new Vector2(700, 30), true); MouseButtonAt(new Vector2(700, 30), false);
+            MouseButtonAt(new Vector2(400, 40), true); MouseButtonAt(new Vector2(400, 40), false);
             return _w.Selection.BoneId is null && _w.Selection.CharacterId == mid ? null : "still selected: " + _w.Selection.BoneId;
         });
         Check("p2 clicking the hand joint twice cycles to its IK box", () =>
@@ -434,11 +434,11 @@ public partial class SelfTest
         await Settle();
         Shot(P("p2-en-light-posed"), GetViewport());
         App.SetTheme("dark");
-        _w.Strip.SetPosesMode(true);
+        _w.Timeline.SelectTab(TimelinePanel.TabPoses);
         await Settle();
         Check("p2 simple mode Poses toggle shows the library as cards", () => _w.Strip.PoseCards.Count == Proj.PoseLibrary.Count && Proj.PoseLibrary.Count >= 2 ? null : "cards " + _w.Strip.PoseCards.Count);
         Shot(P("p2-en-dark-simple-poses"), GetViewport());
-        _w.Strip.SetPosesMode(false);
+        _w.Timeline.SelectTab(TimelinePanel.TabTimeline);
         await ShotMenu(3, "en-dark-menu-rigging");
 
         // ---- import CesiumMan ----

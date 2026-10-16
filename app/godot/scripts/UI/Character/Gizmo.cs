@@ -421,6 +421,10 @@ public sealed class Gizmo
         _label = "";
         if (scope is not null)
         {
+            // With auto-key on, the drag and its key are one undo step.
+            if (commit && _dragView is { } dv)
+                App.AutoKeyInOpenTransaction(dv.CharacterId, Current == Kind.RotateBone || Current == Kind.MoveBone ? _dragBoneId : null,
+                    Current == Kind.MoveControl ? _dragControlId : null);
             if (commit) scope.Commit(); else scope.Rollback();
             DragEnded?.Invoke();
         }

@@ -45,6 +45,7 @@ public partial class MainWindow
         Overlay.Gizmo.DrivenBlocked += ShowDrivenBlocked;
         Overlay.Gizmo.DragEnded += AfterTransaction;
         Selection.Changed += OnSelectionChanged;
+        Selection.Changed += () => App.SetFocusCharacter(Selection.CharacterId);
     }
 
     void BuildRigDialogs()
@@ -121,7 +122,9 @@ public partial class MainWindow
         if (!poseOnly) return false;
         Inspector.RefreshRig();
         UpdateStatus(); UpdateChip(); UpdateMenus(); UpdateRail();
-        if (!App.Session.InTransaction && App.Settings.AdvancedMode) HistoryPanel.Rebuild();
+        if (App.IsPreviewing) return true;
+        if (App.Session.InTransaction) _historyStale = true;
+        else if (App.Settings.AdvancedMode) HistoryPanel.Rebuild();
         return true;
     }
 
@@ -510,6 +513,6 @@ public partial class MainWindow
 
     void ApplyStripMode()
     {
-        Strip.SetTabsAvailable(!App.Settings.AdvancedMode);
+        Timeline.ApplyMode(App.Settings.AdvancedMode);
     }
 }

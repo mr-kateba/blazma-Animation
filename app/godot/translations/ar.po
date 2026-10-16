@@ -624,3 +624,360 @@ msgstr "لا يحتوي النموذج على هيكل عظمي."
 
 msgid "The model contains no 3D scene."
 msgstr "لا يحتوي النموذج على مشهد ثلاثي الأبعاد."
+
+msgid "Timeline"
+msgstr "الخط الزمني"
+
+msgid "Dope Sheet"
+msgstr "ورقة المفاتيح"
+
+msgid "Graph"
+msgstr "الرسم البياني"
+
+msgid "Clip"
+msgstr "المقطع"
+
+msgid "+ Marker"
+msgstr "+ علامة"
+
+msgid "Frame"
+msgstr "الإطار"
+
+msgid "Auto-key"
+msgstr "مفتاح تلقائي"
+
+msgid "Delete key"
+msgstr "حذف المفتاح"
+
+msgid "Key"
+msgstr "مفتاح"
+
+msgid "No clip yet"
+msgstr "لا يوجد مقطع بعد"
+
+msgid "The clip you are animating. Keys go into this clip."
+msgstr "المقطع الذي تحرّكه الآن. تُضاف المفاتيح إلى هذا المقطع."
+
+msgid "Add a marker at the playhead. Double-click a marker to rename it."
+msgstr "أضف علامة عند رأس التشغيل. انقر مرتين على العلامة لإعادة تسميتها."
+
+msgid "Go to the first frame (Home)"
+msgstr "الانتقال إلى الإطار الأول (Home)"
+
+msgid "Previous key (Up or Alt+Left)"
+msgstr "المفتاح السابق (السهم لأعلى أو Alt+اليسار)"
+
+msgid "Play or pause (Space)"
+msgstr "تشغيل أو إيقاف مؤقت (مسافة)"
+
+msgid "Pause (Space)"
+msgstr "إيقاف مؤقت (مسافة)"
+
+msgid "Next key (Down or Alt+Right)"
+msgstr "المفتاح التالي (السهم لأسفل أو Alt+اليمين)"
+
+msgid "Go to the last frame (End)"
+msgstr "الانتقال إلى الإطار الأخير (End)"
+
+msgid "Loop the clip. Drag the handles on the ruler to set the loop range."
+msgstr "تكرار المقطع. اسحب المقبضين على المسطرة لتحديد نطاق التكرار."
+
+msgid "Current frame. Type a number and press Enter to jump there."
+msgstr "الإطار الحالي. اكتب رقمًا واضغط Enter للانتقال إليه."
+
+msgid "When on, every pose change is keyed at the current frame automatically."
+msgstr "عند التفعيل يُسجَّل كل تغيير في الوضعية كمفتاح تلقائيًا عند الإطار الحالي."
+
+msgid "Delete all keys at this frame (Alt+K)."
+msgstr "حذف كل المفاتيح عند هذا الإطار (Alt+K)."
+
+msgid "Key the whole pose at this frame (K). Shift+K keys only the selected bone or control."
+msgstr "تسجيل الوضعية كاملةً كمفتاح عند هذا الإطار (K). Shift+K يسجّل العظمة أو نقطة التحكم المحددة فقط."
+
+msgid "Unkeyed changes are lost when you change frame"
+msgstr "التغييرات غير المسجّلة كمفاتيح تضيع عند تغيير الإطار"
+
+msgid "All keys"
+msgstr "كل المفاتيح"
+
+msgid "No bone selected"
+msgstr "لا توجد عظمة محددة"
+
+msgid "Markers"
+msgstr "العلامات"
+
+msgid "Pose the character, then press Key. A clip is created for you."
+msgstr "ضع الشخصية في وضعية ثم اضغط «مفتاح». يُنشأ المقطع تلقائيًا."
+
+msgid "Add key-pose phases"
+msgstr "إضافة مراحل الوضعيات الرئيسية"
+
+msgid "Adds Initial Pose, Anticipation, Main Action, Contact, Follow-through, Recovery and Final Pose markers to this clip."
+msgstr "يضيف إلى هذا المقطع علامات: الوضعية الأولى، التمهيد، الحركة الرئيسية، التلامس، المتابعة، التعافي، والوضعية النهائية."
+
+msgid "Key-pose phases mark the main poses of an action. Click one to jump to it, then pose the character and press Set pose."
+msgstr "مراحل الوضعيات الرئيسية تحدد أهم وضعيات الحركة. انقر إحداها للانتقال إليها، ثم حرّك الشخصية واضغط «تثبيت الوضعية»."
+
+msgid "Keyed"
+msgstr "مسجَّل"
+
+msgid "No key yet"
+msgstr "بلا مفتاح بعد"
+
+msgid "Set pose"
+msgstr "تثبيت الوضعية"
+
+msgid "Key the current pose at this phase's frame."
+msgstr "تسجيل الوضعية الحالية كمفتاح عند إطار هذه المرحلة."
+
+msgid "Initial Pose"
+msgstr "الوضعية الأولى"
+
+msgid "Anticipation"
+msgstr "التمهيد"
+
+msgid "Main Action"
+msgstr "الحركة الرئيسية"
+
+msgid "Contact"
+msgstr "التلامس"
+
+msgid "Follow-through"
+msgstr "المتابعة"
+
+msgid "Recovery"
+msgstr "التعافي"
+
+msgid "Final Pose"
+msgstr "الوضعية النهائية"
+
+msgid "Step"
+msgstr "ثابت"
+
+msgid "Linear"
+msgstr "خطي"
+
+msgid "Cubic"
+msgstr "منحنٍ"
+
+msgid "Interpolation"
+msgstr "الاستيفاء"
+
+msgid "Copy keys"
+msgstr "نسخ المفاتيح"
+
+msgid "Paste keys at playhead"
+msgstr "لصق المفاتيح عند رأس التشغيل"
+
+msgid "Channels"
+msgstr "القنوات"
+
+msgid "Keys selected"
+msgstr "مفاتيح محددة"
+
+msgid "No keys yet. Press Key to record the pose."
+msgstr "لا توجد مفاتيح بعد. اضغط «مفتاح» لتسجيل الوضعية."
+
+msgid "Body"
+msgstr "الجسم"
+
+msgid "Arms"
+msgstr "الذراعان"
+
+msgid "Legs"
+msgstr "الساقان"
+
+msgid "IK"
+msgstr "IK"
+
+msgid "Other"
+msgstr "أخرى"
+
+msgid "Lock channels"
+msgstr "قفل القنوات"
+
+msgid "Mute channels"
+msgstr "كتم القنوات"
+
+msgid "Move keys"
+msgstr "تحريك المفاتيح"
+
+msgid "Delete keys"
+msgstr "حذف المفاتيح"
+
+msgid "Set interpolation"
+msgstr "تغيير الاستيفاء"
+
+msgid "The selected keys are on locked channels."
+msgstr "المفاتيح المحددة على قنوات مقفلة."
+
+msgid "Select some keys first."
+msgstr "حدّد بعض المفاتيح أولًا."
+
+msgid "Copied {0} keys."
+msgstr "تم نسخ {0} مفتاحًا."
+
+msgid "Nothing copied yet. Select keys and press Ctrl+C."
+msgstr "لم يُنسخ شيء بعد. حدّد مفاتيح واضغط Ctrl+C."
+
+msgid "Auto tangents"
+msgstr "مماسات تلقائية"
+
+msgid "Frame all"
+msgstr "عرض الكل"
+
+msgid "Reset the tangents of the selected keys to automatic smoothing."
+msgstr "إعادة مماسات المفاتيح المحددة إلى التنعيم التلقائي."
+
+msgid "Fit the visible curves in the view (F)."
+msgstr "ملاءمة المنحنيات الظاهرة داخل العرض (F)."
+
+msgid "Select a bone or control to see its curves."
+msgstr "حدّد عظمة أو نقطة تحكم لعرض منحنياتها."
+
+msgid "Rotation"
+msgstr "التدوير"
+
+msgid "Position"
+msgstr "الموضع"
+
+msgid "Scale"
+msgstr "القياس"
+
+msgid "This bone has no keys in this clip."
+msgstr "لا توجد مفاتيح لهذه العظمة في هذا المقطع."
+
+msgid "Select a bone or control that has keys."
+msgstr "حدّد عظمة أو نقطة تحكم لها مفاتيح."
+
+msgid "Set tangents"
+msgstr "تغيير المماسات"
+
+msgid "Edit curve"
+msgstr "تعديل المنحنى"
+
+msgid "No later key."
+msgstr "لا يوجد مفتاح لاحق."
+
+msgid "No earlier key."
+msgstr "لا يوجد مفتاح سابق."
+
+msgid "Nothing to play yet. Pose the character and press Key at two different frames first."
+msgstr "لا شيء للتشغيل بعد. ضع الشخصية في وضعية واضغط «مفتاح» عند إطارين مختلفين أولًا."
+
+msgid "There is no character to key. Use Rigging > Add Mannequin."
+msgstr "لا توجد شخصية لتسجيل مفاتيحها. استخدم الهيكل ‏> إضافة مجسّم."
+
+msgid "Some locked tracks were skipped."
+msgstr "تم تجاوز بعض القنوات المقفلة."
+
+msgid "There are no keys at this frame."
+msgstr "لا توجد مفاتيح عند هذا الإطار."
+
+msgid "Set key"
+msgstr "تسجيل مفتاح"
+
+msgid "Add marker"
+msgstr "إضافة علامة"
+
+msgid "Edit marker"
+msgstr "تعديل علامة"
+
+msgid "Delete marker"
+msgstr "حذف علامة"
+
+msgid "Add phase markers"
+msgstr "إضافة علامات المراحل"
+
+msgid "Set loop"
+msgstr "ضبط التكرار"
+
+msgid "Set key value"
+msgstr "تغيير قيمة المفتاح"
+
+msgid "Paste keys"
+msgstr "لصق المفاتيح"
+
+msgid "Track flags"
+msgstr "خصائص القناة"
+
+msgid "Pose from frame"
+msgstr "وضعية من الإطار"
+
+msgid "Key Selected"
+msgstr "مفتاح للمحدد"
+
+msgid "Delete Key"
+msgstr "حذف المفتاح"
+
+msgid "Play or Pause"
+msgstr "تشغيل أو إيقاف مؤقت"
+
+msgid "Loop"
+msgstr "تكرار"
+
+msgid "Go to Start"
+msgstr "الانتقال إلى البداية"
+
+msgid "Go to End"
+msgstr "الانتقال إلى النهاية"
+
+msgid "Previous Key"
+msgstr "المفتاح السابق"
+
+msgid "Next Key"
+msgstr "المفتاح التالي"
+
+msgid "Add Marker"
+msgstr "إضافة علامة"
+
+msgid "Add Key-pose Phases"
+msgstr "إضافة مراحل الوضعيات الرئيسية"
+
+msgid "Motion Trail"
+msgstr "مسار الحركة"
+
+msgid "Onion Skin"
+msgstr "طبقات الأشباح"
+
+msgid "Onion Skin Range"
+msgstr "مدى طبقات الأشباح"
+
+msgid "{0} frames"
+msgstr "{0} إطارات"
+
+msgid "Motion trail"
+msgstr "مسار الحركة"
+
+msgid "Onion skin"
+msgstr "طبقات الأشباح"
+
+msgid "Show the path of the selected bone over the whole clip."
+msgstr "إظهار مسار العظمة المحددة على امتداد المقطع كله."
+
+msgid "Show ghosts of the pose a few frames before and after the current frame."
+msgstr "إظهار أشباح الوضعية قبل الإطار الحالي وبعده بعدة إطارات."
+
+msgid "Show ghosts of the pose {0} frames before and after the current frame."
+msgstr "إظهار أشباح الوضعية قبل الإطار الحالي وبعده بـ {0} إطارات."
+
+msgid "Select a bone or control first, or use Key to key the whole pose."
+msgstr "حدّد عظمة أو نقطة تحكم أولًا، أو استخدم «مفتاح» لتسجيل الوضعية كاملةً."
+
+msgid "Marker {0}"
+msgstr "علامة {0}"
+
+msgid "Rename Marker"
+msgstr "إعادة تسمية العلامة"
+
+msgid "This clip animates a different character. Pick or create another clip for this one."
+msgstr "هذا المقطع يحرّك شخصية أخرى. اختر أو أنشئ مقطعًا آخر لهذه الشخصية."
+
+msgid "That channel is locked. Unlock it in the dope sheet first."
+msgstr "هذه القناة مقفلة. افتح قفلها من ورقة المفاتيح أولًا."
+
+msgid "Keys"
+msgstr "المفاتيح"
+
+msgid "Play this clip in a loop."
+msgstr "تشغيل هذا المقطع في حلقة متكررة."

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using Blazma.Core.Model;
 using Blazma.Core.Timing;
+using Blazma.Motion;
 using Blazma.Rigging;
 using Blazma.UI.App;
 using Godot;
@@ -23,6 +24,8 @@ public partial class InspectorPanel : PanelContainer
     public LineEdit ClipName { get; } = new() { SelectAllOnFocus = true };
     public SpinBox Length { get; } = new() { MinValue = 1, MaxValue = 1_000_000, Step = 1, Rounded = true, AllowGreater = false };
     readonly Label _clipFps = W.Label("", "MonoLabel", false);
+    public CheckButton LoopSwitch { get; } = new();
+    readonly Label _clipKeys = W.Label("", "MonoLabel", false);
     readonly Label _noClip = W.Label("Select a clip in the strip below to edit it.", "Faint");
     readonly VBoxContainer _clipBox = new();
     readonly Label _clipHeader = W.Label("Selected clip", "Section");
@@ -94,6 +97,13 @@ public partial class InspectorPanel : PanelContainer
         cg.AddChild(Length);
         cg.AddChild(W.Label("Frame rate", "Dim"));
         cg.AddChild(_clipFps);
+        cg.AddChild(W.Label("Loop", "Dim"));
+        LoopSwitch.TooltipText = "Play this clip in a loop.";
+        LoopSwitch.Toggled += on => { if (!_busy && _host.SelectedClip is { } lc) App.SetLoop(on); };
+        cg.AddChild(LoopSwitch);
+        cg.AddChild(W.Label("Keys", "Dim"));
+        _clipKeys.LocalizeNumeralSystem = false;
+        cg.AddChild(_clipKeys);
         _clipBox.AddChild(cg);
         root.AddChild(_clipBox);
     }
@@ -141,6 +151,8 @@ public partial class InspectorPanel : PanelContainer
                 if (force || !_typingClip) { ClipName.Text = clip.Name; _typingClip = false; }
                 Length.SetValueNoSignal(clip.DurationFrames);
                 _clipFps.Text = string.Format(Tr("{0} fps"), Fmt.Rate(clip.Fps));
+                LoopSwitch.SetPressedNoSignal(clip.Loop.Enabled);
+                _clipKeys.Text = ClipEvaluator.KeyFrames(clip).Count.ToString(CultureInfo.InvariantCulture);
             }
         }
         finally { _busy = false; }

@@ -237,6 +237,8 @@ public partial class SelfTest : Node
         _w.SelectClip(walk);
         await Frames(2);
 
+        _w.Timeline.SelectTab(TimelinePanel.TabClips);
+        await Frames(3);
         Check("strip-card-click-selects", () =>
         {
             var card = _w.Strip.Cards[jump];
@@ -320,6 +322,9 @@ public partial class SelfTest : Node
 
         // Phase 2: characters, posing, IK, pose library, import and bone mapping.
         await RunPhase2();
+
+        // Phase 3: timeline, keys, playback, dope sheet, graph editor, markers, trail and onion skin.
+        await RunPhase3();
 
         // Restore the user's settings.
         App.SetLanguage(backup.Language); App.SetTheme(backup.Theme); App.SetAdvancedMode(backup.AdvancedMode);

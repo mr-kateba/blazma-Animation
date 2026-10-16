@@ -223,6 +223,34 @@ public static class BlazmaTheme
         t.SetConstant("h_separation", "Rail", 0);
         t.SetConstant("icon_max_width", "Rail", 22);
 
+        // Transport / timeline buttons (compact, icon only or short text) ---------------------------------
+        foreach (var (name, accent) in new[] { ("Transport", p.Accent), ("Rec", p.Err) })
+        {
+            t.SetTypeVariation(name, "Button");
+            var soft = accent with { A = 0.18f };
+            t.SetStylebox("normal", name, Box(p.Panel2, p.Line, 6, 1, 7, 4, 7, 4));
+            t.SetStylebox("hover", name, Box(p.Raised, p.LineStrong, 6, 1, 7, 4, 7, 4));
+            t.SetStylebox("pressed", name, Box(soft, accent, 6, 1, 7, 4, 7, 4));
+            t.SetStylebox("hover_pressed", name, Box(soft, accent, 6, 1, 7, 4, 7, 4));
+            t.SetStylebox("disabled", name, Box(p.Panel2, p.Line, 6, 1, 7, 4, 7, 4));
+            t.SetStylebox("focus", name, Empty());
+            Colors(t, name, ("icon_normal_color", p.Text2), ("icon_hover_color", p.Text), ("icon_pressed_color", accent),
+                ("icon_hover_pressed_color", accent), ("icon_focus_color", p.Text2), ("icon_disabled_color", p.Text3),
+                ("font_color", p.Text), ("font_hover_color", p.Text), ("font_pressed_color", p.Text), ("font_hover_pressed_color", p.Text),
+                ("font_focus_color", p.Text), ("font_disabled_color", p.Text3));
+        }
+        t.SetTypeVariation("KeyBtn", "Primary");
+        foreach (var st in new[] { "normal", "hover", "pressed", "hover_pressed", "disabled", "focus" })
+        {
+            var baseBox = (StyleBoxFlat)t.GetStylebox(st, "Primary").Duplicate();
+            baseBox.ContentMarginLeft = 18; baseBox.ContentMarginRight = 18; baseBox.ContentMarginTop = 6; baseBox.ContentMarginBottom = 6;
+            t.SetStylebox(st, "KeyBtn", baseBox);
+        }
+        t.SetStylebox("disabled", "KeyBtn", Box(p.Panel2, p.Line, 6, 1, 18, 6, 18, 6));
+        Colors(t, "KeyBtn", ("font_color", p.OnAccent), ("font_hover_color", p.OnAccent), ("font_pressed_color", p.OnAccent),
+            ("font_focus_color", p.OnAccent), ("font_hover_pressed_color", p.OnAccent), ("font_disabled_color", p.Text3));
+        t.SetFont("font", "KeyBtn", SemiBold);
+
         // Switch (CheckButton) ---------------------------------------------------------------------
         var swOn = Pill(p.Accent, p.OnAccent, true);
         var swOff = Pill(p.Panel2, p.Text3, false, p.LineStrong);
@@ -243,6 +271,24 @@ public static class BlazmaTheme
         t.SetStylebox("disabled", "CheckButton", Empty());
         t.SetStylebox("focus", "CheckButton", Empty());
         t.SetConstant("h_separation", "CheckButton", 10);
+
+        // Check boxes (graph channel list): flat, with a small rounded box ----------------------------------
+        static ImageTexture Raw(string svg)
+        {
+            var img = new Image();
+            img.LoadSvgFromString(svg, 1.0f);
+            return ImageTexture.CreateFromImage(img);
+        }
+        var cbOn = Raw($"<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'><rect x='1.5' y='1.5' width='13' height='13' rx='3' fill='#{p.Accent.ToHtml(false)}'/>" +
+                       $"<path d='M4.6 8.2l2.4 2.4 4.5-5' fill='none' stroke='#{p.OnAccent.ToHtml(false)}' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+        var cbOff = Raw($"<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'><rect x='1.5' y='1.5' width='13' height='13' rx='3' fill='#{p.Panel2.ToHtml(false)}' stroke='#{p.LineStrong.ToHtml(false)}' stroke-width='1.2'/></svg>");
+        foreach (var st in new[] { "normal", "hover", "pressed", "hover_pressed", "disabled", "focus" })
+            t.SetStylebox(st, "CheckBox", Empty(0, 2, 0, 2));
+        t.SetIcon("checked", "CheckBox", cbOn); t.SetIcon("checked_disabled", "CheckBox", cbOn);
+        t.SetIcon("unchecked", "CheckBox", cbOff); t.SetIcon("unchecked_disabled", "CheckBox", cbOff);
+        Colors(t, "CheckBox", ("font_color", p.Text), ("font_hover_color", p.Text), ("font_pressed_color", p.Text),
+            ("font_hover_pressed_color", p.Text), ("font_focus_color", p.Text), ("font_disabled_color", p.Text3));
+        t.SetConstant("h_separation", "CheckBox", 8);
 
         // Menus ---------------------------------------------------------------------------------
         t.SetStylebox("normal", "MenuBar", Box(Colors0, null, 5, 0, 10, 4, 10, 4));

@@ -15,6 +15,10 @@ public sealed class AppSettings
     /// <summary>Draw the skeleton overlay on every character instead of only the selected one.</summary>
     public bool OverlayAll { get; set; }
     public int AutosaveMinutes { get; set; } = 3;
+    /// <summary>Viewport extras (Phase 3): motion trail of the selected bone and onion-skin ghosts.</summary>
+    public bool ShowTrail { get; set; }
+    public bool ShowOnion { get; set; }
+    public int OnionFrames { get; set; } = 5;
     public List<string> RecentFiles { get; } = new();
 
     /// <summary>Free-form layout values (panel sizes, window size) owned by the views.</summary>
@@ -29,6 +33,9 @@ public sealed class AppSettings
         AdvancedMode = (bool)cfg.GetValue("ui", "advanced", AdvancedMode);
         ShowSkeleton = (bool)cfg.GetValue("ui", "show_skeleton", ShowSkeleton);
         OverlayAll = (bool)cfg.GetValue("ui", "overlay_all", OverlayAll);
+        ShowTrail = (bool)cfg.GetValue("ui", "show_trail", ShowTrail);
+        ShowOnion = (bool)cfg.GetValue("ui", "show_onion", ShowOnion);
+        OnionFrames = Math.Clamp((int)cfg.GetValue("ui", "onion_frames", OnionFrames), 1, 30);
         AutosaveMinutes = Math.Clamp((int)cfg.GetValue("files", "autosave_minutes", AutosaveMinutes), 0, 60);
         RecentFiles.Clear();
         RecentFiles.AddRange(((string[])cfg.GetValue("files", "recent", Array.Empty<string>())).Take(MaxRecent));
@@ -45,6 +52,9 @@ public sealed class AppSettings
         cfg.SetValue("ui", "advanced", AdvancedMode);
         cfg.SetValue("ui", "show_skeleton", ShowSkeleton);
         cfg.SetValue("ui", "overlay_all", OverlayAll);
+        cfg.SetValue("ui", "show_trail", ShowTrail);
+        cfg.SetValue("ui", "show_onion", ShowOnion);
+        cfg.SetValue("ui", "onion_frames", OnionFrames);
         cfg.SetValue("files", "autosave_minutes", AutosaveMinutes);
         cfg.SetValue("files", "recent", RecentFiles.ToArray());
         foreach (var (k, v) in Layout) cfg.SetValue("layout", k, v);
