@@ -23,6 +23,7 @@
     <ProjectReference Include="..\..\src\Blazma.Commands\Blazma.Commands.csproj" />
     <ProjectReference Include="..\..\src\Blazma.Rigging\Blazma.Rigging.csproj" />
     <ProjectReference Include="..\..\src\Blazma.Motion\Blazma.Motion.csproj" />
+    <ProjectReference Include="..\..\src\Blazma.Agent\Blazma.Agent.csproj" />
   </ItemGroup>
 
 </Project>

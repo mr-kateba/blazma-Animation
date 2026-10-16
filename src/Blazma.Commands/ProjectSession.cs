@@ -141,8 +141,13 @@ public sealed class ProjectSession
         var tx = _undo[^1];
         if (transactionId is not null && tx.Id != transactionId)
             return CommandResult.Fail("not_latest", "That change is not the most recent one; undo newer changes first.");
-        if (origin.Source is CommandSource.Mcp or CommandSource.Cli && transactionId is null)
-            return CommandResult.Fail("transaction_required", "Agents must name the transaction to undo.");
+        if (origin.Source is CommandSource.Mcp or CommandSource.Cli)
+        {
+            if (transactionId is null)
+                return CommandResult.Fail("transaction_required", "Agents must name the transaction to undo.");
+            if (tx.Origin != origin)
+                return CommandResult.Fail("not_owner", "Agents can only undo their own changes.");
+        }
 
         var wasDirty = IsDirty;
         _undo.RemoveAt(_undo.Count - 1);

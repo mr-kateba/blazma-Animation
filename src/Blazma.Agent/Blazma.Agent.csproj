@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Agent sessions, permissions, review tasks and the local IPC protocol shared by the app, MCP server and CLI. Godot-independent. -->
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>Blazma.Agent</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Blazma.Commands/Blazma.Commands.csproj" />
+  </ItemGroup>
+</Project>

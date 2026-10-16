@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Blazma.Rigging", "..\..\src
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Blazma.Motion", "..\..\src\Blazma.Motion\Blazma.Motion.csproj", "{74A10A0D-8414-4E15-917D-F0B45EF39443}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Blazma.Agent", "..\..\src\Blazma.Agent\Blazma.Agent.csproj", "{8C2B57DD-19D2-49AA-B605-B255A8D2CE4D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -83,6 +85,18 @@ Global
 		{74A10A0D-8414-4E15-917D-F0B45EF39443}.Release|x64.Build.0 = Release|Any CPU
 		{74A10A0D-8414-4E15-917D-F0B45EF39443}.Release|x86.ActiveCfg = Release|Any CPU
 		{74A10A0D-8414-4E15-917D-F0B45EF39443}.Release|x86.Build.0 = Release|Any CPU
+		{8C2B57DD-19D2-49AA-B605-B255A8D2CE4D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8C2B57DD-19D2-49AA-B605-B255A8D2CE4D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8C2B57DD-19D2-49AA-B605-B255A8D2CE4D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{8C2B57DD-19D2-49AA-B605-B255A8D2CE4D}.Debug|x64.Build.0 = Debug|Any CPU
+		{8C2B57DD-19D2-49AA-B605-B255A8D2CE4D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{8C2B57DD-19D2-49AA-B605-B255A8D2CE4D}.Debug|x86.Build.0 = Debug|Any CPU
+		{8C2B57DD-19D2-49AA-B605-B255A8D2CE4D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8C2B57DD-19D2-49AA-B605-B255A8D2CE4D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8C2B57DD-19D2-49AA-B605-B255A8D2CE4D}.Release|x64.ActiveCfg = Release|Any CPU
+		{8C2B57DD-19D2-49AA-B605-B255A8D2CE4D}.Release|x64.Build.0 = Release|Any CPU
+		{8C2B57DD-19D2-49AA-B605-B255A8D2CE4D}.Release|x86.ActiveCfg = Release|Any CPU
+		{8C2B57DD-19D2-49AA-B605-B255A8D2CE4D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
