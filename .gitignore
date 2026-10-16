@@ -13,3 +13,6 @@ screenshots/
 # Godot
 app/godot/.godot/
 app/godot/*.translation
+
+# Exported builds
+build/
