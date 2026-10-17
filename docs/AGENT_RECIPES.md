@@ -91,6 +91,25 @@ marker_update {clipId, markerId, frame:32, name:"Impact (late)"}
 
 Valid `phase` values: none, initial, anticipation, main_action, contact, follow_through, recovery, final. Script: `recipes/key_pose_phases.jsonl`. The phases appear in the app's key-pose strip, so the user can jump between them.
 
+## 6. Templates, a blended sequence, foot locking and a prop (Phase 8)
+
+Script `recipes/walk_to_run_with_sword.jsonl`:
+
+```
+template_list {}                                                              # builtin.idle_breathe, walk_cycle, run_cycle, jump, wave, attack_swing + project templates
+template_apply {templateId:"builtin.walk_cycle", characterId}                 -> clipId (a normal clip, not a draft)
+template_apply {templateId:"builtin.run_cycle", characterId}                  -> clipId
+sequence_create {characterId, name:"Walk to run"}                             -> sequenceId
+sequence_add_clip {sequenceId, clipId:<walk>, loops:2}
+sequence_add_clip {sequenceId, clipId:<run>, loops:2, blendFrames:10, matchFootPhase:true}   # fades in over the walk's end
+sequence_evaluate {sequenceId, frame:125}                                     # active items and their weights
+sequence_bake {sequenceId, footLock:true}                                     -> clipId (export this clip)
+prop_add {name:"Sword", sizeX:0.04, sizeY:0.9, sizeZ:0.04, characterId, bone:"hand_r", x:-0.08, y:0.35}
+key_set {clipId, frame:0, props:"Sword"}                                      # keys the prop only (no characterId)
+```
+
+Other Phase 8 tools: `clip_retarget {clipId, fromCharacterId, toCharacterId}` copies a clip onto another (differently proportioned or imported) character as a new clip; `clip_contacts` / `clip_foot_lock {clipId, characterId}` find and pin foot contacts; `template_save_clip {clipId, name}` adds a clip to the project's template library; `prop_import {path}` embeds a `.glb` mesh as a prop; `animation_export` writes attached props under their bone's node.
+
 ## Undo and review
 
 - `edit_undo {transactionId}` takes back your newest change (use the `transactionId` of the call that made it). Older changes: undo the newer ones first.

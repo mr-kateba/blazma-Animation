@@ -40,6 +40,9 @@ public sealed record Change(string Kind, string? TargetId = null)
     public const string CharacterRemoved = "character.removed";
     public const string RigChanged = "rig.changed";
     public const string PoseLibraryChanged = "poselib.changed";
+    public const string SequenceChanged = "sequence.changed";
+    public const string PropChanged = "prop.changed";
+    public const string TemplateChanged = "template.changed";
 }
 
 public sealed record Diagnostic(string Code, string Message);

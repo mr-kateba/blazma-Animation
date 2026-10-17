@@ -23,6 +23,9 @@ public sealed class ExportResult
     public required string AnimationName { get; init; }
     public int AnimationIndex { get; init; }
     public required IReadOnlyList<string> Warnings { get; init; }
+
+    /// <summary>Props written as extra nodes (empty when the clip shows none).</summary>
+    public IReadOnlyList<ExportedProp> Props { get; init; } = Array.Empty<ExportedProp>();
 }
 
 /// <summary>
@@ -47,12 +50,23 @@ public static class AnimationExporter
             (builder, bindings) = BuildMannequin(rig);
 
         var name = UniqueAnimationName(builder.Json, string.IsNullOrWhiteSpace(options.AnimationName) ? clip.Name : options.AnimationName.Trim());
-        var index = AddAnimation(builder, baked, bindings, name, options.CompactConstantChannels);
+        var props = options.IncludeProps ? PropExport.Add(builder, project, baked, rig, bindings, warnings) : new List<ExportedProp>();
+        var index = AddAnimation(builder, baked, bindings, name, options.CompactConstantChannels, options.IncludeProps ? props : null);
         var glb = builder.ToGlb();
+        var sidecar = Sidecar.Build(project, baked, rig, bindings, name, glbFileName);
+        if (props.Count > 0)
+            sidecar["props"] = new JsonArray(props.Select(x => (JsonNode?)new JsonObject
+            {
+                ["id"] = x.Prop.Id.ToString(),
+                ["name"] = x.Prop.Name,
+                ["shape"] = x.Prop.Shape.ToString().ToLowerInvariant(),
+                ["node"] = x.Node,
+                ["attachedTo"] = x.Bone >= 0 ? rig.Bones[x.Bone].Name : null,
+            }).ToArray());
         return new ExportResult
         {
             Glb = glb, Baked = baked, AnimationName = name, AnimationIndex = index, Warnings = warnings,
-            Sidecar = Sidecar.Build(project, baked, rig, bindings, name, glbFileName),
+            Sidecar = sidecar, Props = props,
         };
     }
 
@@ -288,7 +302,7 @@ public static class AnimationExporter
         }).ToArray();
     }
 
-    static int AddAnimation(GltfBuilder b, BakedClip baked, NodeBinding[] bindings, string name, bool compact)
+    static int AddAnimation(GltfBuilder b, BakedClip baked, NodeBinding[] bindings, string name, bool compact, IReadOnlyList<ExportedProp>? props)
     {
         var locals = NodeLocals(baked, bindings);
         var n = baked.FrameCount;
@@ -305,6 +319,13 @@ public static class AnimationExporter
         var channels = new JsonArray();
         for (var bone = 0; bone < bindings.Length; bone++)
         {
+            var bi = bone;
+            Channels(bindings[bone].Node, f => locals[f][bi]);
+        }
+        foreach (var prop in props ?? Array.Empty<ExportedProp>()) Channels(prop.Node, f => prop.Locals[f]);
+
+        void Channels(int node, Func<int, Transform> at)
+        {
             foreach (var path in new[] { "translation", "rotation", "scale" })
             {
                 var comps = path == "rotation" ? 4 : 3;
@@ -312,7 +333,7 @@ public static class AnimationExporter
                 Quat previous = default;
                 for (var f = 0; f < n; f++)
                 {
-                    var t = locals[f][bone];
+                    var t = at(f);
                     double[] v;
                     if (path == "rotation")
                     {
@@ -339,11 +360,11 @@ public static class AnimationExporter
                 channels.Add(new JsonObject
                 {
                     ["sampler"] = sampler,
-                    ["target"] = new JsonObject { ["node"] = bindings[bone].Node, ["path"] = path },
+                    ["target"] = new JsonObject { ["node"] = node, ["path"] = path },
                 });
             }
         }
-        return GltfBuilder.Add(b.Arr("animations"), new JsonObject
+        var anim = new JsonObject
         {
             ["name"] = name,
             ["channels"] = channels,
@@ -359,7 +380,9 @@ public static class AnimationExporter
                     ["rootMotion"] = RootMotionModes.Name(baked.RootMotion.Mode),
                 },
             },
-        });
+        };
+        if (props is { Count: > 0 }) ((JsonObject)anim["extras"]!["blazma"]!)["props"] = props.Count;
+        return GltfBuilder.Add(b.Arr("animations"), anim);
     }
 
     static bool IsConstant(float[] values, int comps)

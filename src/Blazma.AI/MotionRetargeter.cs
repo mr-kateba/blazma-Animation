@@ -2,7 +2,9 @@ using Blazma.Core.Ids;
 using Blazma.Core.Mathematics;
 using Blazma.Core.Model;
 using Blazma.Core.Timing;
+using Blazma.Motion;
 using Blazma.Rigging;
+using Blazma.Rigging.Retargeting;
 using H = Blazma.Rigging.HumanoidStandard;
 
 namespace Blazma.AI;
@@ -22,6 +24,9 @@ public sealed record RetargetOptions
 
     /// <summary>Drop keys that linear interpolation reproduces within tolerance (keeps the motion editable).</summary>
     public bool ReduceKeys { get; init; } = true;
+
+    /// <summary>The motion is a seamless cycle (last frame = first frame + travel): root travel smoothing wraps around.</summary>
+    public bool Cyclic { get; init; }
 
     public double RotationToleranceDegrees { get; init; } = 0.1;
     public double TranslationToleranceMetres { get; init; } = 0.0005;
@@ -54,96 +59,28 @@ public sealed record RetargetResult(Clip Clip, IReadOnlyList<string> Warnings, I
 /// </summary>
 public static class MotionRetargeter
 {
-    /// <summary>Standard child used to define a bone's direction (first one mapped on both sides wins).</summary>
-    static readonly Dictionary<string, string[]> AimChildren = BuildAim();
-
-    static Dictionary<string, string[]> BuildAim()
-    {
-        var d = new Dictionary<string, string[]>
-        {
-            [H.Pelvis] = new[] { H.Spine1, H.Spine2, H.Chest, H.Neck },
-            [H.Spine1] = new[] { H.Spine2, H.Chest, H.Neck },
-            [H.Spine2] = new[] { H.Chest, H.Neck },
-            [H.Chest] = new[] { H.Neck, H.Head },
-            [H.Neck] = new[] { H.Head },
-        };
-        foreach (var s in new[] { Side.Left, Side.Right })
-        {
-            d[H.Clavicle(s)] = new[] { H.UpperArm(s) };
-            d[H.UpperArm(s)] = new[] { H.LowerArm(s), H.Hand(s) };
-            d[H.LowerArm(s)] = new[] { H.Hand(s) };
-            d[H.Thigh(s)] = new[] { H.Calf(s), H.Foot(s) };
-            d[H.Calf(s)] = new[] { H.Foot(s) };
-            d[H.Foot(s)] = new[] { H.Toe(s) };
-        }
-        return d;
-    }
-
     public static RetargetResult Retarget(MotionResult motion, Rig rig, RetargetOptions options)
     {
         motion.Validate();
         var src = motion.Skeleton;
         var warnings = new List<string>(motion.Warnings);
 
-        // ---- source rest (model space)
+        // ---- source rest (model space) and the shared humanoid map (Blazma.Rigging.Retargeting)
         var srcParent = src.Parents.ToArray();
         var srcRest = new Transform[src.Count];
         for (var j = 0; j < src.Count; j++) srcRest[j] = srcParent[j] < 0 ? src.Rest[j] : srcRest[srcParent[j]] * src.Rest[j];
         var srcByStd = new Dictionary<string, int>();
         foreach (var (name, std) in src.StandardNames)
             if (src.IndexOf(name) is var i and >= 0) srcByStd[std] = i;
-
-        // ---- target rest
-        var ev = new RigEvaluator(rig);
-        var tRest = ev.RestModel();
-        var tByStd = new Dictionary<string, int>();
-        foreach (var m in rig.HumanoidMap)
-            if (ev.IndexOf(m.Bone) is var i and >= 0) tByStd[m.Standard] = i;
-        if (!tByStd.TryGetValue(H.Pelvis, out var tPelvis) || !srcByStd.TryGetValue(H.Pelvis, out var sPelvis))
-            throw new MotionGenerationException("not_humanoid", $"Rig '{rig.Name}' has no bone mapped to '{H.Pelvis}'; map the humanoid bones first (rig.map_bone).");
-
-        // ---- pairs and rest corrections
-        var pairOf = new int[rig.Bones.Count];               // target bone → source joint (−1 = not driven)
-        Array.Fill(pairOf, -1);
-        foreach (var (std, ti) in tByStd)
-            if (srcByStd.TryGetValue(std, out var si)) pairOf[ti] = si;
-        var correction = new Quat[rig.Bones.Count];
-        for (var b = 0; b < rig.Bones.Count; b++)
-        {
-            correction[b] = Quat.Identity;
-            if (pairOf[b] < 0) continue;
-            var std = rig.StandardNameOf(rig.Bones[b].Id)!;
-            Quat? c = null;
-            if (AimChildren.TryGetValue(std, out var kids))
-                foreach (var kid in kids)
-                    if (tByStd.TryGetValue(kid, out var tk) && srcByStd.TryGetValue(kid, out var sk))
-                    {
-                        var dt = tRest[tk].Translation - tRest[b].Translation;
-                        var ds = srcRest[sk].Translation - srcRest[pairOf[b]].Translation;
-                        if (dt.Length() > 1e-6 && ds.Length() > 1e-6) { c = Quat.FromTo(dt, ds); break; }
-                    }
-            if (c is null)
-            {
-                // Leaf (hand, head, toe): reuse the nearest driven ancestor's correction.
-                c = Quat.Identity;
-                for (var p = ev.ParentOf(b); p >= 0; p = ev.ParentOf(p))
-                    if (pairOf[p] >= 0) { c = correction[p]; break; }
-            }
-            correction[b] = c.Value;
-        }
-
-        var mapped = new List<string>();
-        var unmapped = new List<string>();
-        for (var b = 0; b < rig.Bones.Count; b++) (pairOf[b] >= 0 ? mapped : unmapped).Add(rig.Bones[b].Name);
-        if (unmapped.Count > 0)
-            warnings.Add($"{unmapped.Count} bone(s) are not driven by the generated motion and stay at rest: {string.Join(", ", unmapped.Take(12))}{(unmapped.Count > 12 ? ", …" : "")}.");
-        foreach (var std in H.Required)
-            if (!tByStd.ContainsKey(std)) warnings.Add($"The rig has no bone mapped to '{std}'; that part of the motion is lost.");
-
-        // ---- root scale
-        var scale = LegLength(tRest, tByStd) is { } tl && LegLength(srcRest, srcByStd) is { } sl && sl > 1e-6 ? tl / sl
-            : srcRest[sPelvis].Translation.Y > 1e-6 && tRest[tPelvis].Translation.Y > 1e-6 ? tRest[tPelvis].Translation.Y / srcRest[sPelvis].Translation.Y : 1.0;
-        if (!double.IsFinite(scale) || scale <= 0) scale = 1;
+        HumanoidRetargetMap map;
+        try { map = new HumanoidRetargetMap(new RetargetSkeleton(src.Names, srcParent, srcRest, srcByStd), rig); }
+        catch (RetargetException e) { throw new MotionGenerationException(e.Code, e.Message); }
+        var ev = map.Evaluator;
+        var tRest = map.TargetRest;
+        var tByStd = map.TargetByStandard;
+        var tPelvis = map.TargetPelvis;
+        warnings.AddRange(map.Warnings);
+        var scale = map.Scale;
 
         // ---- resample and transfer
         var fps = options.Fps.FramesPerSecond;
@@ -152,8 +89,6 @@ public static class MotionRetargeter
         var srcLocal = new Quat[src.Count];
         var srcWorldRot = new Quat[src.Count];
         var srcWorldPos = new Vec3[src.Count];
-        var srcRestInv = srcRest.Select(t => t.Rotation.Inverse()).ToArray();
-        var restLocals = rig.Bones.Select(b => b.Rest).ToArray();
         for (var f = 0; f < frames; f++)
         {
             var s = Math.Min(f / fps * motion.Fps, motion.FrameCount - 1);
@@ -172,94 +107,18 @@ public static class MotionRetargeter
                     srcWorldPos[j] = srcWorldPos[srcParent[j]] + srcWorldRot[srcParent[j]].Rotate(lt);
                 }
             }
-
-            var loc = new Transform[rig.Bones.Count];
-            var world = new Transform[rig.Bones.Count];
-            for (var b = 0; b < rig.Bones.Count; b++)
-            {
-                var p = ev.ParentOf(b);
-                var parentWorld = p < 0 ? Transform.Identity : world[p];
-                var l = restLocals[b];
-                if (pairOf[b] is var sj and >= 0)
-                {
-                    var g = (srcWorldRot[sj] * srcRestInv[sj] * correction[b] * tRest[b].Rotation).Normalized();
-                    l = l with { Rotation = (parentWorld.Rotation.Inverse() * g).Normalized() };
-                }
-                if (b == tPelvis)
-                {
-                    var d = (srcWorldPos[sPelvis] - srcRest[sPelvis].Translation) * scale;
-                    var desired = tRest[b].Translation + d;
-                    var w = new Transform(desired, (parentWorld.Rotation * l.Rotation).Normalized(), parentWorld.Scale);
-                    l = l with { Translation = RigEvaluator.LocalFromModel(parentWorld, w).Translation };
-                }
-                loc[b] = l;
-                world[b] = p < 0 ? l : parentWorld * l;
-            }
-            locals[f] = loc;
+            locals[f] = map.Transfer(srcWorldRot, srcWorldPos);
         }
 
         var pinned = options.FootCleanup ? PinFeet(rig, ev, tByStd, locals, fps, scale, warnings) : 0;
-        var travelBone = MoveTravelToRoot(ev, tByStd, tPelvis, tRest, locals, fps);
-        var clip = BuildClip(rig, options, locals, pairOf, tPelvis, travelBone, frames, motion, out var keyCount);
-        return new RetargetResult(clip, warnings, mapped, unmapped, scale, pinned, keyCount);
-    }
-
-    /// <summary>
-    /// When the rig has a bone mapped to "root" above the pelvis (the mannequin, most game rigs), the horizontal travel goes on
-    /// that bone: it follows the ground projection of the pelvis, smoothed over ±0.25 s (symmetric window), so the pelvis keeps its height, sway
-    /// and rest offset relative to it. Every bone below the pelvis keeps exactly the same model-space transform (feet, pinned
-    /// contacts), the root no longer stays at the origin (viewport bone, pole controls in root space), and export
-    /// rootMotion=in_place can remove the travel. Returns the root bone index, or −1 when the rig has no such bone.
-    /// </summary>
-    static int MoveTravelToRoot(RigEvaluator ev, Dictionary<string, int> byStd, int pelvis, Transform[] rest, Transform[][] locals, double fps)
-    {
-        if (!byStd.TryGetValue(H.Root, out var root) || root == pelvis || !ev.IsAncestorOrSelf(root, pelvis)) return -1;
-        var frames = locals.Length;
-        var models = locals.Select(ev.Model).ToArray();
-        var restOffset = rest[pelvis].Translation - rest[root].Translation;
-        // Ground-projected pelvis offset from where it sits over the root at rest, per frame.
-        var travel = models.Select(m =>
-        {
-            var d = m[pelvis].Translation - m[root].Translation - restOffset;
-            return new Vec3(d.X, 0, d.Z);
-        }).ToArray();
-        var half = Math.Max(0, (int)Math.Round(0.25 * fps));
-        for (var f = 0; f < frames; f++)
-        {
-            var sum = Vec3.Zero;
-            var n = 0;
-            // Symmetric window, narrowed near the ends, so steady travel is followed exactly (no lag or lead at the ends).
-            var h = Math.Min(half, Math.Min(f, frames - 1 - f));
-            for (var k = f - h; k <= f + h; k++) { sum += travel[k]; n++; }
-            var shift = sum / n;
-            var m = models[f];
-            var loc = locals[f];
-            var rp = ev.ParentOf(root);
-            var newRoot = m[root] with { Translation = m[root].Translation + shift };
-            loc[root] = rp < 0 ? newRoot : RigEvaluator.LocalFromModel(m[rp], newRoot);
-            // Bones between the root and the pelvis follow the root; the pelvis keeps its model transform.
-            var after = ev.Model(loc);
-            var pp = ev.ParentOf(pelvis);
-            loc[pelvis] = RigEvaluator.LocalFromModel(after[pp], m[pelvis]);
-        }
-        return root;
-    }
-
-    static double? LegLength(Transform[] rest, Dictionary<string, int> byStd)
-    {
-        double? total = null;
-        foreach (var s in new[] { Side.Left, Side.Right })
-            if (byStd.TryGetValue(H.Thigh(s), out var t) && byStd.TryGetValue(H.Calf(s), out var c) && byStd.TryGetValue(H.Foot(s), out var f))
-            {
-                var len = (rest[c].Translation - rest[t].Translation).Length() + (rest[f].Translation - rest[c].Translation).Length();
-                total = total is null ? len : (total + len) / 2;
-            }
-        return total;
+        var travelBone = HumanoidRetargetMap.MoveTravelToRoot(ev, tByStd, tPelvis, tRest, locals, fps, options.Cyclic);
+        var clip = BuildClip(rig, options, locals, map.PairOf, tPelvis, travelBone, frames, motion, out var keyCount);
+        return new RetargetResult(clip, warnings, map.Mapped, map.Unmapped, scale, pinned, keyCount);
     }
 
     // ------------------------------------------------------------------ foot contact cleanup
 
-    static int PinFeet(Rig rig, RigEvaluator ev, Dictionary<string, int> byStd, Transform[][] locals, double fps, double scale, List<string> warnings)
+    static int PinFeet(Rig rig, RigEvaluator ev, IReadOnlyDictionary<string, int> byStd, Transform[][] locals, double fps, double scale, List<string> warnings)
     {
         var frames = locals.Length;
         if (frames < 3) return 0;
@@ -338,70 +197,10 @@ public static class MotionRetargeter
         clip.Metadata["source.frames"] = motion.FrameCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
         foreach (var (k, v) in motion.Metadata) clip.Metadata[k] = v;
 
-        keyCount = 0;
-        var rotTol = o.RotationToleranceDegrees * Math.PI / 180;
-        for (var b = 0; b < rig.Bones.Count; b++)
-        {
-            var bone = rig.Bones[b];
-            var driven = pairOf[b] >= 0 || locals.Any(l => Quat.AngleBetween(l[b].Rotation, bone.Rest.Rotation) > 1e-9);
-            if (driven)
-            {
-                var values = new Quat[frames];
-                for (var f = 0; f < frames; f++)
-                {
-                    var q = locals[f][b].Rotation;
-                    if (f > 0 && Quat.Dot(q, values[f - 1]) < 0) q = new Quat(-q.X, -q.Y, -q.Z, -q.W); // continuous sign
-                    values[f] = q;
-                }
-                var keep = o.ReduceKeys ? Reduce(frames, (i, j, k) => Quat.AngleBetween(Quat.Slerp(values[i], values[j], (double)(k - i) / (j - i)), values[k]) <= rotTol)
-                    : Enumerable.Range(0, frames).ToList();
-                clip.Tracks.Add(Track(bone, TrackChannels.Rotation, keep.Select(f => (f, new[] { values[f].X, values[f].Y, values[f].Z, values[f].W })), o.Fps, rig));
-                keyCount += keep.Count;
-            }
-            if (b == pelvis || b == travelBone)
-            {
-                var pos = locals.Select(l => l[b].Translation).ToArray();
-                var keep = o.ReduceKeys ? Reduce(frames, (i, j, k) => (Vec3.Lerp(pos[i], pos[j], (double)(k - i) / (j - i)) - pos[k]).Length() <= o.TranslationToleranceMetres)
-                    : Enumerable.Range(0, frames).ToList();
-                clip.Tracks.Add(Track(bone, TrackChannels.Translation, keep.Select(f => (f, new[] { pos[f].X, pos[f].Y, pos[f].Z })), o.Fps, rig));
-                keyCount += keep.Count;
-            }
-        }
+        keyCount = BakedTracks.AddBoneTracks(clip, rig, locals,
+            b => pairOf[b] >= 0 || BakedTracks.RotationMoves(rig, locals, b),
+            b => b == pelvis || b == travelBone,
+            o.ReduceKeys, o.RotationToleranceDegrees, o.TranslationToleranceMetres);
         return clip;
     }
-
-    /// <summary>Greedy key reduction for linear interpolation: keeps a frame only when dropping it would move some
-    /// in-between sample beyond tolerance. Segments are capped at 120 frames to bound the cost.</summary>
-    static List<int> Reduce(int frames, Func<int, int, int, bool> withinTolerance)
-    {
-        var keep = new List<int> { 0 };
-        if (frames == 1) return keep;
-        var anchor = 0;
-        for (var end = 2; end < frames; end++)
-        {
-            var ok = end - anchor <= 120;
-            for (var k = anchor + 1; ok && k < end; k++) ok = withinTolerance(anchor, end, k);
-            if (!ok)
-            {
-                keep.Add(end - 1);
-                anchor = end - 1;
-            }
-        }
-        keep.Add(frames - 1);
-        return keep;
-    }
-
-    static Track Track(Bone bone, string channel, IEnumerable<(int Frame, double[] Value)> keys, FrameRate fps, Rig rig) => new()
-    {
-        Target = new TrackTarget { Kind = TargetKind.Bone, Id = bone.Id },
-        Channel = channel,
-        Group = rig.StandardNameOf(bone.Id) switch
-        {
-            null => "Other",
-            var s when s.StartsWith("thigh") || s.StartsWith("calf") || s.StartsWith("foot") || s.StartsWith("toe") => "Legs",
-            var s when s.StartsWith("clavicle") || s.Contains("arm") || s.StartsWith("hand") => "Arms",
-            _ => "Body",
-        },
-        Keys = keys.Select(k => new Keyframe { Time = Flicks.FromFrame(k.Frame, fps), Value = k.Value, Interp = Interpolation.Linear }).ToList(),
-    };
 }

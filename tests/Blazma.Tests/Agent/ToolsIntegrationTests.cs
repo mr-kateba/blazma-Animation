@@ -289,18 +289,21 @@ public class CliIntegrationTests
         try
         {
             Assert.Equal(0, (await Tools.RunCli("new", file)).Exit);
-            foreach (var name in new[] { "walk_cycle", "walk_cycle_repeat", "attack_light", "attack_heavier", "ik_pin_feet", "key_pose_phases" })
+            foreach (var name in new[] { "walk_cycle", "walk_cycle_repeat", "attack_light", "attack_heavier", "ik_pin_feet", "key_pose_phases", "walk_to_run_with_sword" })
             {
                 var r = await Tools.RunCli("run", file, Path.Combine(Tools.Recipes, name + ".jsonl"));
                 Assert.True(r.Exit == 0, $"{name}: {r.Out}\n{r.Err}");
             }
             var p = ProjectFile.Load(file);
-            Assert.Equal(new[] { "Walk", "Punch", "Crouch", "Phases" }, p.Clips.Select(c => c.Name).ToArray());
+            Assert.Equal(new[] { "Walk", "Punch", "Crouch", "Phases", "Walk (template)", "Run (template)", "Walk to run" }, p.Clips.Select(c => c.Name).ToArray());
             Assert.Equal(49, p.Clips[0].DurationFrames);
             Assert.True(p.Clips[0].Loop.Enabled);
             Assert.Equal(35, p.Clips[1].DurationFrames);
             Assert.Contains(p.Clips[3].Markers, m => m.Name == "Impact (late)");
             Assert.True(p.Clips[3].Markers.Count >= 8);
+            Assert.Single(p.Sequences);
+            Assert.Equal("hand_r", p.Rigs[0].FindBone(p.Props.Single().Attachment!.Bone)!.Name);
+            Assert.Contains(p.Clips[6].Tracks, t => t.Target.Kind == Blazma.Core.Model.TargetKind.Prop);
         }
         finally { Directory.Delete(dir, true); }
     }

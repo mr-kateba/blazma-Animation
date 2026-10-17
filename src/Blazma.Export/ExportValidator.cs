@@ -25,6 +25,11 @@ public sealed class ExportValidationReport
     public double MaxWorldPositionError { get; set; }
     public double MaxWorldRotationErrorDegrees { get; set; }
 
+    /// <summary>Props found and checked (node, parent, channels and world transform).</summary>
+    public int PropsChecked { get; set; }
+    public double MaxPropPositionError { get; set; }
+    public double MaxPropRotationErrorDegrees { get; set; }
+
     public JsonObject ToJson(int maxIssues = 20) => new()
     {
         ["ok"] = Ok,
@@ -38,6 +43,9 @@ public sealed class ExportValidationReport
         ["worldFramesChecked"] = WorldFramesChecked,
         ["maxWorldPositionError"] = MaxWorldPositionError,
         ["maxWorldRotationErrorDegrees"] = MaxWorldRotationErrorDegrees,
+        ["propsChecked"] = PropsChecked,
+        ["maxPropPositionError"] = MaxPropPositionError,
+        ["maxPropRotationErrorDegrees"] = MaxPropRotationErrorDegrees,
         ["issueCount"] = Issues.Count,
         ["issues"] = new JsonArray(Issues.Take(maxIssues).Select(i => (JsonNode?)i).ToArray()),
     };
@@ -109,15 +117,21 @@ public static class ExportValidator
         {
             var original = AnimationExporter.OriginalGlb(project, rig);
             var originalNodes = GltfAnimationReader.ReadNodes(original.Json);
-            if (originalNodes.Count != nodes.Count)
-                issues.Add($"Node count {nodes.Count} differs from the original file ({originalNodes.Count}).");
+            // Props are appended after the original nodes (and their meshes/materials after the original ones).
+            if (nodes.Count < originalNodes.Count)
+                issues.Add($"Node count {nodes.Count} is less than in the original file ({originalNodes.Count}).");
             else
-                for (var i = 0; i < nodes.Count; i++)
+                for (var i = 0; i < originalNodes.Count; i++)
                     if (nodes[i].Parent != originalNodes[i].Parent || nodes[i].Name != originalNodes[i].Name || nodes[i].Mesh != originalNodes[i].Mesh || nodes[i].Skin != originalNodes[i].Skin)
                         issues.Add($"Node {i} ('{nodes[i].Name}') differs from the original file (parent, name, mesh or skin).");
-            foreach (var key in new[] { "meshes", "skins", "materials" })
-                if (Count(glb.Json, key) != Count(original.Json, key))
-                    issues.Add($"The number of {key} differs from the original file.");
+            for (var i = originalNodes.Count; i < nodes.Count; i++)
+                if (!IsPropNode(glb.Json, nodes, i))
+                    issues.Add($"Node {i} ('{nodes[i].Name}') is not in the original file and is not part of a prop.");
+            if (Count(glb.Json, "skins") != Count(original.Json, "skins"))
+                issues.Add("The number of skins differs from the original file.");
+            foreach (var key in new[] { "meshes", "materials" })
+                if (Count(glb.Json, key) < Count(original.Json, key))
+                    issues.Add($"The number of {key} is less than in the original file.");
             bindings = AnimationExporter.BindImported(rig, originalNodes);
         }
         else
@@ -196,7 +210,48 @@ public static class ExportValidator
         report.MaxRotationErrorDegrees = maxR;
         report.MaxScaleError = maxS;
 
-        CheckWorld(nodes, anim, clip, rig, bindings, baked.StartFrame, baked.FrameCount, baked.RootMotion.Mode, report);
+        var props = PropsToCheck(glb.Json, nodes, anim, project, clip, rig, bindings, options, issues);
+        CheckWorld(nodes, anim, clip, rig, bindings, baked.StartFrame, baked.FrameCount, baked.RootMotion.Mode, report, project, props);
+    }
+
+    /// <summary>True for a node tagged as a prop (extras.blazma.kind = "prop") or below one.</summary>
+    static bool IsPropNode(JsonObject json, IReadOnlyList<GltfNodeInfo> nodes, int i)
+    {
+        var array = json["nodes"] as JsonArray;
+        var steps = 0;
+        for (int? n = i; n is int k && steps++ <= nodes.Count; n = nodes[k].Parent)
+            if ((string?)array?[k]?["extras"]?["blazma"]?["kind"] == "prop") return true;
+        return false;
+    }
+
+    /// <summary>
+    /// The props the file must contain (when it was exported with props: options, or the "props" count in the animation's
+    /// extras), each with its node; checks that every one is present once, under the right parent, with all three channels.
+    /// </summary>
+    static List<(Prop Prop, int Node, int Bone)> PropsToCheck(JsonObject json, IReadOnlyList<GltfNodeInfo> nodes, GltfAnimation anim, Project project, Clip clip, Rig rig,
+        NodeBinding[] bindings, ExportOptions? options, List<string> issues)
+    {
+        var result = new List<(Prop, int, int)>();
+        var include = options?.IncludeProps ?? anim.Extras?["blazma"]?["props"] is not null;
+        if (!include) return result;
+        var array = json["nodes"] as JsonArray ?? new JsonArray();
+        var expected = PropEvaluator.PropsFor(project, clip, rig);
+        if (GltfAnimationReader.Int(anim.Extras?["blazma"]?["props"]) is int declared && declared != expected.Count)
+            issues.Add($"The animation declares {declared} prop(s); the clip shows {expected.Count}.");
+        foreach (var prop in expected)
+        {
+            var found = Enumerable.Range(0, array.Count).Where(i => (string?)array[i]?["extras"]?["blazma"]?["propId"] == prop.Id.ToString()).ToList();
+            if (found.Count != 1) { issues.Add($"Prop '{prop.Name}' has {found.Count} nodes in the file (expected 1)."); continue; }
+            var node = found[0];
+            var bone = PropEvaluator.AttachedBone(project, prop, rig);
+            int? expectedParent = bone >= 0 ? bindings[bone].Node : null;
+            if (nodes[node].Parent != expectedParent)
+                issues.Add($"Prop '{prop.Name}' node {node} has parent {nodes[node].Parent?.ToString() ?? "none"}; expected {(expectedParent?.ToString() ?? "none (scene root)")}.");
+            foreach (var path in new[] { "translation", "rotation", "scale" })
+                if (!anim.Channels.Any(c => c.Node == node && c.Path == path)) issues.Add($"Prop '{prop.Name}' has no {path} channel.");
+            result.Add((prop, node, bone));
+        }
+        return result;
     }
 
     /// <summary>
@@ -205,8 +260,12 @@ public static class ExportValidator
     /// expected root motion is recomputed here from the app's evaluation.
     /// </summary>
     static void CheckWorld(IReadOnlyList<GltfNodeInfo> nodes, GltfAnimation anim, Clip clip, Rig rig, NodeBinding[] bindings,
-        long startFrame, int frameCount, RootMotionMode mode, ExportValidationReport report)
+        long startFrame, int frameCount, RootMotionMode mode, ExportValidationReport report, Project? project = null,
+        IReadOnlyList<(Prop Prop, int Node, int Bone)>? props = null)
     {
+        props ??= Array.Empty<(Prop, int, int)>();
+        double maxPropP = 0, maxPropR = 0;
+        var worstProp = (Name: "", Frame: 0L);
         var issues = report.Issues;
         for (var i = 0; i < nodes.Count; i++)
         {
@@ -256,8 +315,24 @@ public static class ExportValidator
                 if (!(p <= maxP)) { maxP = p; worstP = (i, startFrame + f); }
                 if (!(r <= maxR)) { maxR = r; worstR = (i, startFrame + f); }
             }
+            foreach (var (prop, node, bone) in props)
+            {
+                var time = clip.Loop.Enabled ? ClipEvaluator.PlaybackTime(clip, elapsed) : elapsed;
+                var expected = PropEvaluator.World(project!, prop, PropEvaluator.Local(prop, clip, time), rig, app);
+                var expectedT = bone >= 0 && moved[bone] ? expected.Translation + shift : expected.Translation;
+                var w = world[node];
+                var p = (w.Translation - expectedT).Length();
+                var r = Quat.AngleBetween(w.Rotation.Normalized(), expected.Rotation.Normalized()) * 180 / Math.PI;
+                if (!(p <= maxPropP)) { maxPropP = p; worstProp = (prop.Name, startFrame + f); }
+                if (!(r <= maxPropR)) { maxPropR = r; worstProp = (prop.Name, startFrame + f); }
+            }
             checkedFrames++;
         }
+        report.PropsChecked = props.Count;
+        report.MaxPropPositionError = maxPropP;
+        report.MaxPropRotationErrorDegrees = maxPropR;
+        if (props.Count > 0 && !(maxPropP <= WorldPositionTolerance && maxPropR <= WorldRotationToleranceDegrees))
+            issues.Add($"World check: prop '{worstProp.Name}' is {maxPropP:G3} m / {maxPropR:G3}° from the app's evaluation at frame {worstProp.Frame} (tolerance {WorldPositionTolerance:G3} m, {WorldRotationToleranceDegrees:G3}°).");
         report.WorldFramesChecked = checkedFrames;
         report.MaxWorldPositionError = maxP;
         report.MaxWorldRotationErrorDegrees = maxR;

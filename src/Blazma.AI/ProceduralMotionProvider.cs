@@ -12,7 +12,7 @@ public sealed class ProceduralMotionProvider : IMotionGenerationProvider
 {
     public const string ProviderId = "procedural";
 
-    enum Kind { Walk, Run, Jump, Wave, Squat, Idle }
+    enum Kind { Walk, Run, Jump, Wave, Squat, Idle, Attack }
 
     static readonly (Kind Kind, string[] Words)[] Keywords =
     {
@@ -20,11 +20,12 @@ public sealed class ProceduralMotionProvider : IMotionGenerationProvider
         (Kind.Walk, new[] { "walk", "stroll", "step", "مشي", "يمشي", "تمشي" }),
         (Kind.Jump, new[] { "jump", "hop", "leap", "قفز", "يقفز", "قفزة" }),
         (Kind.Wave, new[] { "wave", "waving", "greet", "hello", "تلويح", "يلوح", "يلوّح", "تحية" }),
+        (Kind.Attack, new[] { "attack", "swing", "slash", "strike", "هجوم", "يهاجم", "ضربة", "يضرب" }),
         (Kind.Squat, new[] { "squat", "crouch", "قرفصاء", "يجلس", "قرفص" }),
         (Kind.Idle, new[] { "idle", "stand", "breath", "wait", "وقوف", "يقف", "انتظار", "ثبات" }),
     };
 
-    public static IReadOnlyList<string> SupportedKeywords => new[] { "walk", "run", "jump", "wave", "squat", "idle" };
+    public static IReadOnlyList<string> SupportedKeywords => new[] { "walk", "run", "jump", "wave", "squat", "idle", "attack" };
 
     public string Id => ProviderId;
 
@@ -33,7 +34,7 @@ public sealed class ProceduralMotionProvider : IMotionGenerationProvider
         new[]
         {
             "Deterministic keyword-based cycles for tests and offline demos; it does not understand free text.",
-            "Keywords: " + string.Join(", ", SupportedKeywords) + " (also Arabic: مشي، ركض، قفز، تلويح، قرفصاء، وقوف).",
+            "Keywords: " + string.Join(", ", SupportedKeywords) + " (also Arabic: مشي، ركض، قفز، تلويح، قرفصاء، وقوف، هجوم).",
             "Body only (30 SOMA joints), like Kimodo: fingers and face are not animated.",
         });
 
@@ -137,7 +138,8 @@ public sealed class ProceduralMotionProvider : IMotionGenerationProvider
                 case Kind.Jump: Jump(f, t / duration, vary); break;
                 case Kind.Wave: Wave(f, t, vary, phase0); break;
                 case Kind.Squat: Squat(f, t / duration, vary); break;
-                default: Idle(f, t, vary, phase0); break;
+                case Kind.Attack: Attack(f, t, t / duration, vary, phase0); break;
+                default: Idle(f, t, vary, phase0, loop ? duration : 0); break;
             }
             // Stand the lowest ankle on the ground. Cycles: move the hips so the support foot does not slide
             // (the travel speed comes from the stride, ≈1.3 m/s walking).
@@ -157,7 +159,7 @@ public sealed class ProceduralMotionProvider : IMotionGenerationProvider
             Array.Copy(f.R, 0, rot, i * SomaSkeleton.Names.Count, SomaSkeleton.Names.Count);
             root[i] = f.Root;
         }
-        if (req.Constraints is { Loop: true } && kind is Kind.Jump or Kind.Squat or Kind.Wave)
+        if (req.Constraints is { Loop: true } && kind is Kind.Jump or Kind.Squat or Kind.Wave or Kind.Attack)
             warnings.Add("Loop: this motion starts and ends in the same standing pose.");
         return new MotionResult(ProviderId, SomaSkeleton.Definition, fps, n, rot, root, warnings)
         {
@@ -258,10 +260,40 @@ public sealed class ProceduralMotionProvider : IMotionGenerationProvider
         f.R[Head] = Ry(-10 * raise);
     }
 
-    static void Idle(Frame f, double t, double vary, double phase0)
+    /// <summary>Key poses of a one-handed overhead swing (right hand): (u, upper arm Rz, upper arm Ry, forearm Rz, trunk twist, crouch).</summary>
+    static readonly (double U, double ArmZ, double ArmY, double Fore, double Twist, double Crouch)[] AttackKeys =
     {
-        var b = Math.Sin(2 * Math.PI * (0.25 * t + phase0));
-        var sway = Math.Sin(2 * Math.PI * (0.1 * t + phase0));
+        (0, 80, 0, 0, 0, 0), (0.3, -60, -35, -50, -20, 0), (0.45, 40, 55, -5, 25, 0.06), (0.6, 60, 45, -10, 20, 0.06), (1, 80, 0, 0, 0, 0),
+    };
+
+    /// <summary>Wind-up (anticipation), fast swing forward and down (main action), follow-through, recovery to idle.</summary>
+    static void Attack(Frame f, double t, double u, double vary, double phase0)
+    {
+        u = Math.Clamp(u, 0, 1);
+        var k = 1;
+        while (k < AttackKeys.Length - 1 && u > AttackKeys[k].U) k++;
+        var a = AttackKeys[k - 1];
+        var b = AttackKeys[k];
+        var s = Smooth((u - a.U) / (b.U - a.U));
+        double L(double x, double y) => x + (y - x) * s;
+        var crouch = L(a.Crouch, b.Crouch) * vary;
+        Idle(f, t, vary, phase0);
+        var (la, lk) = LegForHeight(LegLength - 0.01 - crouch);
+        SetLeg(f, LLeg, LShin, LFoot, la, lk);
+        SetLeg(f, RLeg, RShin, RFoot, la, lk);
+        f.R[RArm] = Ry(L(a.ArmY, b.ArmY) * vary) * Rz(L(a.ArmZ, b.ArmZ));
+        f.R[RFore] = Rz(L(a.Fore, b.Fore));
+        var twist = L(a.Twist, b.Twist) * vary;
+        f.R[Spine2] = Ry(0.5 * twist);
+        f.R[Chest] = Ry(0.5 * twist);
+    }
+
+    /// <param name="loopDuration">When &gt; 0 (loop requested), breathing and sway are rounded to whole cycles over this length.</param>
+    static void Idle(Frame f, double t, double vary, double phase0, double loopDuration = 0)
+    {
+        double Freq(double hz) => loopDuration > 0 ? Math.Max(1, Math.Round(loopDuration * hz)) / loopDuration : hz;
+        var b = Math.Sin(2 * Math.PI * (Freq(0.25) * t + phase0));
+        var sway = Math.Sin(2 * Math.PI * (Freq(0.1) * t + phase0));
         var (a, k) = LegForHeight(LegLength - 0.01);
         SetLeg(f, LLeg, LShin, LFoot, a, k);
         SetLeg(f, RLeg, RShin, RFoot, a, k);

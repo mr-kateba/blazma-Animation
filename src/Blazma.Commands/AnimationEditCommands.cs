@@ -433,7 +433,7 @@ public sealed class PasteKeys(ObjectId clipId, string keysJson, long frame) : Cl
         var (items, srcFps) = Parse(clip);
 
         // Resolve which targets are valid for the clip's rig (binding it first if needed).
-        var rigTargets = items.Where(i => i.Target.Kind != TargetKind.Object).Select(i => i.Target.Id).Distinct().ToList();
+        var rigTargets = items.Where(i => i.Target.Kind is TargetKind.Bone or TargetKind.Control).Select(i => i.Target.Id).Distinct().ToList();
         Rig? rig = null;
         if (!clip.Skeleton.IsEmpty) rig = p.FindRig(clip.Skeleton);
         else if (rigTargets.Count > 0)
@@ -452,6 +452,7 @@ public sealed class PasteKeys(ObjectId clipId, string keysJson, long frame) : Cl
             {
                 TargetKind.Bone => rig is null || rig.FindBone(item.Target.Id) is not null,
                 TargetKind.Control => rig is null || rig.FindControl(item.Target.Id) is not null,
+                TargetKind.Prop => p.FindProp(item.Target.Id) is not null,
                 _ => true,
             };
             if (known) usable.Add(item); else ignored.Add(item.Target.Id);
@@ -509,6 +510,7 @@ public sealed class PasteKeys(ObjectId clipId, string keysJson, long frame) : Cl
                     "bone" => TargetKind.Bone,
                     "control" => TargetKind.Control,
                     "object" => TargetKind.Object,
+                    "prop" => TargetKind.Prop,
                     var other => throw new CommandException("invalid_args", $"Unknown target kind '{other}'."),
                 };
                 if (!ObjectId.TryParse((string?)tgt["id"], out var id)) throw new CommandException("invalid_args", "A key has an invalid target id.");

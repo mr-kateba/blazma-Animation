@@ -162,7 +162,7 @@ public class ProjectFileTests
             using (var r = new StreamReader(entry.Open())) text = r.ReadToEnd();
             entry.Delete();
             using var w = new StreamWriter(zip.CreateEntry("project.json").Open());
-            w.Write(text.Replace("\"schemaVersion\": 3", "\"schemaVersion\": 99"));
+            w.Write(text.Replace($"\"schemaVersion\": {Project.CurrentSchemaVersion}", "\"schemaVersion\": 99"));
         }
         Assert.Equal("schema_too_new", Assert.Throws<ProjectFormatException>(() => ProjectFile.Load(path)).Code);
     }

@@ -86,7 +86,17 @@ public sealed class TrackTarget
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<TargetKind>))]
-public enum TargetKind { Bone, Control, Object }
+public enum TargetKind
+{
+    Bone,
+    Control,
+
+    /// <summary>Reserved (never written by this build).</summary>
+    Object,
+
+    /// <summary>A <see cref="Prop"/> (schema v4): translation/rotation/scale of its offset (attached) or world transform.</summary>
+    Prop,
+}
 
 [JsonConverter(typeof(JsonStringEnumConverter<Interpolation>))]
 public enum Interpolation { Step, Linear, Cubic }

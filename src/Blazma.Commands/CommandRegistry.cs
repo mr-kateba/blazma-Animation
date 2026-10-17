@@ -71,6 +71,10 @@ public sealed class CommandRegistry
         ExportCommands.Register(r);
         PhysicsCommands.Register(r);
         AICommands.Register(r, r.Motion);
+        RetargetCommands.Register(r);
+        SequenceCommands.Register(r);
+        PropCommands.Register(r);
+        TemplateCommands.Register(r);
         return r;
     }
 }

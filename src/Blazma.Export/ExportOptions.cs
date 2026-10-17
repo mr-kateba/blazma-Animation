@@ -32,6 +32,9 @@ public sealed record ExportOptions
 
     /// <summary>Animation name in the file (default: the clip name; a suffix is added on collision).</summary>
     public string? AnimationName { get; init; }
+
+    /// <summary>Write props attached to the character or animated by the clip as extra nodes with channels (default true).</summary>
+    public bool IncludeProps { get; init; } = true;
 }
 
 /// <summary>An export failure with a stable code (e.g. unsupported_source, missing_asset).</summary>

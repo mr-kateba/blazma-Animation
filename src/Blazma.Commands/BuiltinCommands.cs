@@ -138,6 +138,20 @@ public sealed class InspectProject : ICommand
                 ["name"] = x.Name,
                 ["rigId"] = x.Rig.ToString(),
             }).ToArray()),
+            ["sequences"] = new JsonArray(p.Sequences.Select(x => (JsonNode?)new JsonObject
+            {
+                ["sequenceId"] = x.Id.ToString(),
+                ["name"] = x.Name,
+                ["characterId"] = x.Character.ToString(),
+                ["itemCount"] = x.Items.Count,
+            }).ToArray()),
+            ["props"] = new JsonArray(p.Props.Select(x => (JsonNode?)PropCommands.Describe(p, x)).ToArray()),
+            ["templates"] = new JsonArray(p.Templates.Select(x => (JsonNode?)new JsonObject
+            {
+                ["templateId"] = x.Id.ToString(),
+                ["name"] = x.Name,
+                ["rig"] = x.Rig.Name,
+            }).ToArray()),
         });
     }
 

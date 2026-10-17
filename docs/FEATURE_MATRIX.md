@@ -41,10 +41,12 @@
 | ✅ تشخيص المزوّدات والعتاد (دون شبكة) | 7 | AI | Adv | ✓ | motion_providers |
 | ✅ مسودات المقاطع المولّدة (قبول/رفض) | 7 | AI/Commands | Simple | ✓ | clip_accept_draft / clip_delete |
 | ✅ Retarget من SOMA إلى أي هيكل بشري مطابَق (داخل motion_job_apply) | 7 | AI | — | ✓ | motion_job_apply |
-| Retargeting بين مقاطع المستخدم | 8 | Rigging | Adv | ✓ | motion_retarget |
-| Blending / Retiming / Loop cleanup | 8 | Motion | Adv | ✓ | motion_* |
-| كشف انزلاق القدم / Foot locking | 8 | Motion | Simple | ✓ | motion_fix_foot_sliding |
-| أنيميشن الأجسام | 8 | Core | Simple | ✓ | — |
+| ✅ Retarget بين الشخصيات (rig ← rig، نسب مختلفة، أهداف IK، تثبيت القدمين) | 8 | Rigging/Motion | Adv | ✓ | clip_retarget |
+| ✅ Blending / انتقالات (تسلسل مقاطع، محاذاة الجذر، مطابقة طور القدمين، خبز) | 8 | Motion | Adv | ✓ | sequence_create / sequence_add_clip / sequence_set_blend / sequence_update_item / sequence_update / sequence_remove / sequence_inspect / sequence_evaluate / sequence_bake |
+| Retiming / Loop cleanup | 8+ | Motion | Adv | ✓ | — |
+| ✅ كشف التلامس / Foot locking | 8 | Physics/Motion | Simple | ✓ | clip_contacts / clip_foot_lock |
+| ✅ أنيميشن الأجسام (Props، ربط بعظمة، تصدير GLB) | 8 | Core/Motion/Export | Simple | ✓ | prop_add / prop_import / prop_remove / prop_attach / prop_detach / prop_set_transform / prop_evaluate / key_set {props} |
+| ✅ قوالب المقاطع (مدمجة + مكتبة المشروع) | 8 | AI/Motion | Simple | ✓ | template_list / template_apply / template_save_clip / template_delete |
 | أحداث القتال + Hitbox/Hurtbox | 9 | Combat | Adv | ✓ | combat_* |
 | تصدير Unity / Unreal / FBX | 10+ | Export | Adv | ✓ | animation_export |
 | حزم Windows/Linux + Installer | 10 | Packaging | — | — | — |

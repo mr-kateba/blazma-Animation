@@ -84,9 +84,12 @@ No arguments.
 | [`character_remove`](#character_remove) | destructive | Remove a character from the scene (undoable). |
 | [`clip_accept_draft`](#clip_accept_draft) | mutating | Accept a draft clip (generated motion): it becomes a normal clip (undoable). To discard a draft use clip.delete. |
 | [`clip_add_phase_markers`](#clip_add_phase_markers) | mutating | Add the 7 key-pose phase markers (Initial … Final) spread over the clip; phases that already have a marker are skipped. Returns {added, markers:[{markerId,name,frame,phase}]}. |
+| [`clip_contacts`](#clip_contacts) | readonly | Detect foot-ground contacts in a clip (same rules as physics.analyze: a sole point within 'threshold' of the ground and slower than 'maxSpeed'). Returns spans per foot. Does not change anything. |
 | [`clip_create`](#clip_create) | mutating | Create an empty animation clip. Returns its clipId. |
 | [`clip_delete`](#clip_delete) | destructive | Delete a clip (undoable). |
+| [`clip_foot_lock`](#clip_foot_lock) | mutating | Lock feet during ground contacts: detects contacts, then keys the leg IK targets pinned on one anchor per contact (with knee poles from the motion) and eases on/off over blendFrames. Frames outside contact ± blendFrames keep exactly their original pose. Undoable. Returns spans, maxAnchorError (m) and maxUntouchedChange. |
 | [`clip_rename`](#clip_rename) | mutating | Rename a clip. |
+| [`clip_retarget`](#clip_retarget) | mutating | Retarget a clip from one character to another (rig → rig through the humanoid maps; differently proportioned or imported characters). Creates a NEW normal clip (undoable): mapped bones point the same way in the world, hip/root travel is scaled by the leg-length ratio, animated IK targets/poles are mapped, unmapped bones stay at rest (warning). With footLock (default true) the source's foot contacts are kept planted on the target. Returns clipId and a report. |
 | [`clip_set_duration`](#clip_set_duration) | mutating | Set a clip's length in frames. |
 | [`clip_set_loop`](#clip_set_loop) | mutating | Enable/disable looping and optionally set the loop range (startFrame < endFrame ≤ clip length). |
 | [`key_auto_tangents`](#key_auto_tangents) | mutating | Reset keys' tangents to automatic. Filter by track and/or frames; omit both for every key. |
@@ -94,7 +97,7 @@ No arguments.
 | [`key_delete`](#key_delete) | mutating | Delete keys at the given frames (optionally only for some bones/controls). |
 | [`key_move`](#key_move) | mutating | Shift keys at the given frames by 'delta' frames (keys they land on are replaced). |
 | [`key_paste`](#key_paste) | mutating | Paste keys from key.copy at a frame (replaces keys at the same times, creates tracks, extends the clip if needed). Targets unknown to the clip's rig are ignored with a warning. |
-| [`key_set`](#key_set) | mutating | Record the character's current pose as keys at a frame (replaces existing keys there). By default every bone and IK control; pass 'bones' to key only some. Binds the clip to the character's rig on first use. |
+| [`key_set`](#key_set) | mutating | Record the character's current pose as keys at a frame (replaces existing keys there). By default every bone and IK control; pass 'bones' to key only some. Pass 'props' to also key props' current transforms (offset from the bone when attached, else world); without characterId only the props are keyed. Binds the clip to the character's rig on first use. |
 | [`key_set_interpolation`](#key_set_interpolation) | mutating | Set how motion leaves the given keys: step, linear or cubic. |
 | [`key_set_tangents`](#key_set_tangents) | mutating | Make a key's tangents explicit (value per second) and set one component's in/out slope. Other components keep their current auto values, so the curve does not jump. |
 | [`key_set_value`](#key_set_value) | mutating | Set one component of the key at a frame. Rotation keys are renormalized afterwards. Pinned channel accepts 0 or 1 (component 0). |
@@ -125,11 +128,31 @@ No arguments.
 | [`project_inspect`](#project_inspect) | readonly | Summarize the project: name, frame rate and clips. |
 | [`project_rename`](#project_rename) | mutating | Rename the project. |
 | [`project_set_frame_rate`](#project_set_frame_rate) | mutating | Set the default frame rate for new clips. |
+| [`prop_add`](#prop_add) | mutating | Add a primitive prop (box, sphere, cylinder) to the scene, optionally attached to a character's bone (e.g. a sword in hand_r). Position x/y/z (metres) and rotation rx/ry/rz (intrinsic Euler XYZ, degrees): the offset from the bone when attached, else world. Returns propId. |
+| [`prop_attach`](#prop_attach) | mutating | Attach a prop to a character's bone. keepWorld (default true) keeps it where it is now (offset computed from the character's current pose). |
+| [`prop_detach`](#prop_detach) | mutating | Detach a prop from its bone. keepWorld (default true) keeps it where it is now. |
+| [`prop_evaluate`](#prop_evaluate) | readonly | World transform of a prop (with a clip at a frame, or its working transform). Does not change anything. |
+| [`prop_import`](#prop_import) | external | Import a prop mesh from a .glb file (embedded in the project; static meshes, materials and textures are kept, skins/animations are not). Optionally attach it to a character's bone. Returns propId. |
+| [`prop_remove`](#prop_remove) | destructive | Remove a prop (undoable). Its keys in clips are kept but ignored. |
+| [`prop_set_transform`](#prop_set_transform) | mutating | Set a prop's working transform (only the given components change). Position x/y/z (metres) and rotation rx/ry/rz (intrinsic Euler XYZ, degrees): the offset from the bone when attached, else world. sx/sy/sz scale. Successive calls in one drag merge into one undo step. |
 | [`rig_import`](#rig_import) | external | Import a rigged character from a .glb/.gltf file. The file is embedded in the project. Returns characterId, rigId and the bone-mapping report. |
 | [`rig_inspect`](#rig_inspect) | readonly | List a rig's bones (name, parent, standard name, rest), controls and IK chains. |
 | [`rig_map_bone`](#rig_map_bone) | mutating | Correct the humanoid mapping: give a bone a Blazma standard name (e.g. thigh_l), or omit 'standard' to unmap it. IK chains are rebuilt. |
 | [`rig_mapping_report`](#rig_mapping_report) | readonly | Bone-mapping report for a rig: assignments, missing bones and issues. |
 | [`scene_add_mannequin`](#scene_add_mannequin) | mutating | Add the built-in humanoid mannequin to the scene. Returns characterId. |
+| [`sequence_add_clip`](#sequence_add_clip) | mutating | Add a clip to a sequence. By default it starts where the last item ends minus its blend, so it fades in over the end of the previous clip. matchFootPhase picks the inFrame whose foot phase best matches the sequence at the start (less foot sliding in the transition). Returns itemId, startFrame, inFrame. |
+| [`sequence_bake`](#sequence_bake) | mutating | Bake a sequence into a NEW normal clip (undoable) that plays exactly like the sequence; export that clip to export the sequence. Returns clipId. |
+| [`sequence_create`](#sequence_create) | mutating | Create an empty clip sequence on a character's track (clips played one after another with blended transitions). Returns sequenceId. |
+| [`sequence_evaluate`](#sequence_evaluate) | readonly | The blended pose of a sequence at a frame and which items contribute with what weight. Does not change anything. |
+| [`sequence_inspect`](#sequence_inspect) | readonly | Items of a sequence with their timing (start/end frames, blend, alignment) and the sequence length. Does not change anything. |
+| [`sequence_remove`](#sequence_remove) | destructive | Remove an item from a sequence, or the whole sequence when itemId is omitted (undoable). Clips are not deleted. |
+| [`sequence_set_blend`](#sequence_set_blend) | mutating | Set an item's fade-in length (frames) and/or curve. |
+| [`sequence_update`](#sequence_update) | mutating | Rename a sequence and/or change its root alignment options. |
+| [`sequence_update_item`](#sequence_update_item) | mutating | Change an item's timing: startFrame, inFrame, outFrame, speed and/or loops (at least one). |
+| [`template_apply`](#template_apply) | mutating | Create a NEW normal clip (not a draft; undoable) from a template on any humanoid-mapped character: built-in templates are generated and retargeted to its proportions; project templates are retargeted from the rig they were saved with (feet locked on contacts). Returns clipId. |
+| [`template_delete`](#template_delete) | destructive | Delete a project template (undoable). Built-in templates cannot be deleted. |
+| [`template_list`](#template_list) | readonly | List clip templates: built-in ones (idle, walk/run cycles, jump, wave, attack swing) and the project's own (saved with template.save_clip). |
+| [`template_save_clip`](#template_save_clip) | mutating | Save a clip as a template in the project's library (with a snapshot of its rig, so it can be applied to other characters later). Returns templateId. |
 | [`track_set_flags`](#track_set_flags) | mutating | Lock/unlock and/or mute/unmute a track (at least one flag). |
 
 ### `anim_evaluate`
@@ -216,6 +239,22 @@ Effect: **mutating**. Command id: `clip.add_phase_markers`.
 |---|---|---|---|
 | `clipId` | string | yes | Clip id. (min length 1) |
 
+### `clip_contacts`
+
+Detect foot-ground contacts in a clip (same rules as physics.analyze: a sole point within 'threshold' of the ground and slower than 'maxSpeed'). Returns spans per foot. Does not change anything.
+
+Effect: **readonly**. Command id: `clip.contacts`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `clipId` | string | yes | Clip id. (min length 1) |
+| `characterId` | string | no | Character (default: the first one using the clip's rig). (min length 1) |
+| `threshold` | number | no | Contact height above the ground in metres (default 0.03). |
+| `maxSpeed` | number | no | Maximum sole speed in m/s for a contact (default 0.35). |
+| `minFrames` | integer | no | Shortest contact in frames (default 3). (min 1) |
+| `startFrame` | integer | no | First frame to search (default 0). (min 0) |
+| `endFrame` | integer | no | Last frame to search (default: clip end). (min 0) |
+
 ### `clip_create`
 
 Create an empty animation clip. Returns its clipId.
@@ -239,6 +278,23 @@ Effect: **destructive**. Command id: `clip.delete`.
 |---|---|---|---|
 | `clipId` | string | yes | Clip id. (min length 1) |
 
+### `clip_foot_lock`
+
+Lock feet during ground contacts: detects contacts, then keys the leg IK targets pinned on one anchor per contact (with knee poles from the motion) and eases on/off over blendFrames. Frames outside contact ± blendFrames keep exactly their original pose. Undoable. Returns spans, maxAnchorError (m) and maxUntouchedChange.
+
+Effect: **mutating**. Command id: `clip.foot_lock`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `clipId` | string | yes | Clip id. (min length 1) |
+| `characterId` | string | no | Character (default: the first one using the clip's rig). (min length 1) |
+| `threshold` | number | no | Contact height above the ground in metres (default 0.03). |
+| `maxSpeed` | number | no | Maximum sole speed in m/s for a contact (default 0.35). |
+| `minFrames` | integer | no | Shortest contact in frames (default 3). (min 1) |
+| `startFrame` | integer | no | First frame to search (default 0). (min 0) |
+| `endFrame` | integer | no | Last frame to search (default: clip end). (min 0) |
+| `blendFrames` | integer | no | Frames to ease onto/off each anchor (default 3). (min 0) |
+
 ### `clip_rename`
 
 Rename a clip.
@@ -249,6 +305,21 @@ Effect: **mutating**. Command id: `clip.rename`.
 |---|---|---|---|
 | `clipId` | string | yes | Clip id. (min length 1) |
 | `name` | string | yes | New name. (min length 1) |
+
+### `clip_retarget`
+
+Retarget a clip from one character to another (rig → rig through the humanoid maps; differently proportioned or imported characters). Creates a NEW normal clip (undoable): mapped bones point the same way in the world, hip/root travel is scaled by the leg-length ratio, animated IK targets/poles are mapped, unmapped bones stay at rest (warning). With footLock (default true) the source's foot contacts are kept planted on the target. Returns clipId and a report.
+
+Effect: **mutating**. Command id: `clip.retarget`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `clipId` | string | yes | Source clip id. (min length 1) |
+| `fromCharacterId` | string | yes | Character the clip animates now. (min length 1) |
+| `toCharacterId` | string | yes | Character to retarget onto (its rig must be humanoid-mapped). (min length 1) |
+| `name` | string | no | Name of the new clip. (min length 1) |
+| `footLock` | boolean | no | Keep the source's foot contacts planted (pinned IK, default true). |
+| `reduceKeys` | boolean | no | Remove keys linear interpolation reproduces within 0.05° / 0.2 mm (default true). |
 
 ### `clip_set_duration`
 
@@ -337,16 +408,17 @@ Effect: **mutating**. Command id: `key.paste`.
 
 ### `key_set`
 
-Record the character's current pose as keys at a frame (replaces existing keys there). By default every bone and IK control; pass 'bones' to key only some. Binds the clip to the character's rig on first use.
+Record the character's current pose as keys at a frame (replaces existing keys there). By default every bone and IK control; pass 'bones' to key only some. Pass 'props' to also key props' current transforms (offset from the bone when attached, else world); without characterId only the props are keyed. Binds the clip to the character's rig on first use.
 
 Effect: **mutating**. Command id: `key.set`.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `clipId` | string | yes | Clip id. (min length 1) |
-| `characterId` | string | yes | Character id. (min length 1) |
+| `characterId` | string | no | Character id (required unless 'props' is given). (min length 1) |
 | `frame` | number | yes | Frame number (≥ 0). |
 | `bones` | string | no | Comma-separated bone/control names or ids; omit for all. (min length 1) |
+| `props` | string | no | Comma-separated prop names or ids to key as well. (min length 1) |
 | `interpolation` | string | no | step \| linear \| cubic (default cubic for new keys). (min length 1) |
 
 ### `key_set_interpolation`
@@ -732,6 +804,107 @@ Effect: **mutating**. Command id: `project.set_frame_rate`.
 | `numerator` | integer | yes | Frames per second numerator, e.g. 30 or 30000. (min 1) |
 | `denominator` | integer | no | Denominator, default 1 (1001 for NTSC). (min 1) |
 
+### `prop_add`
+
+Add a primitive prop (box, sphere, cylinder) to the scene, optionally attached to a character's bone (e.g. a sword in hand_r). Position x/y/z (metres) and rotation rx/ry/rz (intrinsic Euler XYZ, degrees): the offset from the bone when attached, else world. Returns propId.
+
+Effect: **mutating**. Command id: `prop.add`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | Prop name. (min length 1) |
+| `shape` | string | no | box (default) \| sphere \| cylinder. (min length 1) |
+| `sizeX` | number | no | Size X in metres (box extent, sphere/cylinder diameter; default 0.1). |
+| `sizeY` | number | no | Size Y (cylinder length; default 0.1). |
+| `sizeZ` | number | no | Size Z (default 0.1). |
+| `characterId` | string | no | Attach to this character… (min length 1) |
+| `bone` | string | no | …at this bone (id or name). (min length 1) |
+| `x` | number | no | Position X (m). |
+| `y` | number | no | Position Y (m). |
+| `z` | number | no | Position Z (m). |
+| `rx` | number | no | Rotation X (deg). |
+| `ry` | number | no | Rotation Y (deg). |
+| `rz` | number | no | Rotation Z (deg). |
+
+### `prop_attach`
+
+Attach a prop to a character's bone. keepWorld (default true) keeps it where it is now (offset computed from the character's current pose).
+
+Effect: **mutating**. Command id: `prop.attach`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `propId` | string | yes | Prop id. (min length 1) |
+| `characterId` | string | yes | Character. (min length 1) |
+| `bone` | string | yes | Bone id or name. (min length 1) |
+| `keepWorld` | boolean | no | Keep its world placement (default true). |
+
+### `prop_detach`
+
+Detach a prop from its bone. keepWorld (default true) keeps it where it is now.
+
+Effect: **mutating**. Command id: `prop.detach`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `propId` | string | yes | Prop id. (min length 1) |
+| `keepWorld` | boolean | no | Keep its world placement (default true). |
+
+### `prop_evaluate`
+
+World transform of a prop (with a clip at a frame, or its working transform). Does not change anything.
+
+Effect: **readonly**. Command id: `prop.evaluate`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `propId` | string | yes | Prop id. (min length 1) |
+| `clipId` | string | no | Clip id (optional). (min length 1) |
+| `frame` | number | no | Frame (with clipId). |
+| `characterId` | string | no | Character the clip is played on (default: the one the prop is attached to). (min length 1) |
+
+### `prop_import`
+
+Import a prop mesh from a .glb file (embedded in the project; static meshes, materials and textures are kept, skins/animations are not). Optionally attach it to a character's bone. Returns propId.
+
+Effect: **external**. Command id: `prop.import`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `path` | string | yes | Absolute path of the .glb file. (min length 1) |
+| `name` | string | no | Prop name (default: file name). (min length 1) |
+| `characterId` | string | no | Attach to this character… (min length 1) |
+| `bone` | string | no | …at this bone (id or name). (min length 1) |
+
+### `prop_remove`
+
+Remove a prop (undoable). Its keys in clips are kept but ignored.
+
+Effect: **destructive**. Command id: `prop.remove`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `propId` | string | yes | Prop id. (min length 1) |
+
+### `prop_set_transform`
+
+Set a prop's working transform (only the given components change). Position x/y/z (metres) and rotation rx/ry/rz (intrinsic Euler XYZ, degrees): the offset from the bone when attached, else world. sx/sy/sz scale. Successive calls in one drag merge into one undo step.
+
+Effect: **mutating**. Command id: `prop.set_transform`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `propId` | string | yes | Prop id. (min length 1) |
+| `x` | number | no | Position X (m). |
+| `y` | number | no | Position Y (m). |
+| `z` | number | no | Position Z (m). |
+| `rx` | number | no | Rotation X (deg). |
+| `ry` | number | no | Rotation Y (deg). |
+| `rz` | number | no | Rotation Z (deg). |
+| `sx` | number | no | Scale X. |
+| `sy` | number | no | Scale Y. |
+| `sz` | number | no | Scale Z. |
+
 ### `rig_import`
 
 Import a rigged character from a .glb/.gltf file. The file is embedded in the project. Returns characterId, rigId and the bone-mapping report.
@@ -785,6 +958,171 @@ Effect: **mutating**. Command id: `scene.add_mannequin`.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | no | Character name (default 'Mannequin'). (min length 1) |
+
+### `sequence_add_clip`
+
+Add a clip to a sequence. By default it starts where the last item ends minus its blend, so it fades in over the end of the previous clip. matchFootPhase picks the inFrame whose foot phase best matches the sequence at the start (less foot sliding in the transition). Returns itemId, startFrame, inFrame.
+
+Effect: **mutating**. Command id: `sequence.add_clip`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `sequenceId` | string | yes | Sequence id. (min length 1) |
+| `clipId` | string | yes | Clip id (animates the sequence's character rig). (min length 1) |
+| `startFrame` | integer | no | Sequence frame where the item starts. (min 0) |
+| `inFrame` | integer | no | First clip frame played (default 0). (min 0) |
+| `outFrame` | integer | no | Clip frame where a pass ends (exclusive; default: clip length). (min 1) |
+| `speed` | number | no | Playback speed (default 1). |
+| `loops` | integer | no | Times the in–out range repeats (default 1). (min 1) |
+| `blendFrames` | integer | no | Frames to fade in over the previous items (default 0 for the first item, 0.3 s otherwise). (min 0) |
+| `blendCurve` | string | no | smooth (default; no velocity jump) \| linear \| ease_in \| ease_out. (min length 1) |
+| `matchFootPhase` | boolean | no | Choose inFrame to match the foot phase (default false). |
+
+### `sequence_bake`
+
+Bake a sequence into a NEW normal clip (undoable) that plays exactly like the sequence; export that clip to export the sequence. Returns clipId.
+
+Effect: **mutating**. Command id: `sequence.bake`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `sequenceId` | string | yes | Sequence id. (min length 1) |
+| `name` | string | no | Clip name (default: the sequence name). (min length 1) |
+| `reduceKeys` | boolean | no | Remove keys linear interpolation reproduces within 0.05° / 0.2 mm (default true). |
+| `footLock` | boolean | no | Lock foot contacts of the baked clip (default false). |
+
+### `sequence_create`
+
+Create an empty clip sequence on a character's track (clips played one after another with blended transitions). Returns sequenceId.
+
+Effect: **mutating**. Command id: `sequence.create`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `characterId` | string | yes | Character whose rig the clips animate. (min length 1) |
+| `name` | string | yes | Sequence name. (min length 1) |
+| `fps` | integer | no | Timeline frame rate (default: the project frame rate). (min 1) |
+| `alignRoot` | boolean | no | Each clip continues from where the previous one is (default true). |
+| `alignYaw` | boolean | no | Also align the facing direction (default true). |
+
+### `sequence_evaluate`
+
+The blended pose of a sequence at a frame and which items contribute with what weight. Does not change anything.
+
+Effect: **readonly**. Command id: `sequence.evaluate`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `sequenceId` | string | yes | Sequence id. (min length 1) |
+| `frame` | number | yes | Sequence frame (may be fractional). |
+
+### `sequence_inspect`
+
+Items of a sequence with their timing (start/end frames, blend, alignment) and the sequence length. Does not change anything.
+
+Effect: **readonly**. Command id: `sequence.inspect`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `sequenceId` | string | yes | Sequence id. (min length 1) |
+
+### `sequence_remove`
+
+Remove an item from a sequence, or the whole sequence when itemId is omitted (undoable). Clips are not deleted.
+
+Effect: **destructive**. Command id: `sequence.remove`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `sequenceId` | string | yes | Sequence id. (min length 1) |
+| `itemId` | string | no | Item id; omit to remove the sequence. (min length 1) |
+
+### `sequence_set_blend`
+
+Set an item's fade-in length (frames) and/or curve.
+
+Effect: **mutating**. Command id: `sequence.set_blend`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `sequenceId` | string | yes | Sequence id. (min length 1) |
+| `itemId` | string | yes | Item id. (min length 1) |
+| `blendFrames` | integer | no | Fade-in frames. (min 0) |
+| `blendCurve` | string | no | smooth (default; no velocity jump) \| linear \| ease_in \| ease_out. (min length 1) |
+
+### `sequence_update`
+
+Rename a sequence and/or change its root alignment options.
+
+Effect: **mutating**. Command id: `sequence.update`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `sequenceId` | string | yes | Sequence id. (min length 1) |
+| `name` | string | no | New name. (min length 1) |
+| `alignRoot` | boolean | no | Root alignment. |
+| `alignYaw` | boolean | no | Facing alignment. |
+
+### `sequence_update_item`
+
+Change an item's timing: startFrame, inFrame, outFrame, speed and/or loops (at least one).
+
+Effect: **mutating**. Command id: `sequence.update_item`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `sequenceId` | string | yes | Sequence id. (min length 1) |
+| `itemId` | string | yes | Item id. (min length 1) |
+| `startFrame` | integer | no | Sequence start frame. (min 0) |
+| `inFrame` | integer | no | First clip frame. (min 0) |
+| `outFrame` | integer | no | Clip frame where a pass ends (exclusive). (min 1) |
+| `speed` | number | no | Playback speed. |
+| `loops` | integer | no | Repeats. (min 1) |
+
+### `template_apply`
+
+Create a NEW normal clip (not a draft; undoable) from a template on any humanoid-mapped character: built-in templates are generated and retargeted to its proportions; project templates are retargeted from the rig they were saved with (feet locked on contacts). Returns clipId.
+
+Effect: **mutating**. Command id: `template.apply`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `templateId` | string | yes | Template id from template.list (e.g. builtin.walk_cycle). (min length 1) |
+| `characterId` | string | yes | Character to animate. (min length 1) |
+| `durationSeconds` | number | no | Length in seconds (default: the template's). |
+| `name` | string | no | Clip name (default: the template name). (min length 1) |
+| `fps` | integer | no | Frame rate for built-in templates (default: the project frame rate). (min 1) |
+
+### `template_delete`
+
+Delete a project template (undoable). Built-in templates cannot be deleted.
+
+Effect: **destructive**. Command id: `template.delete`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `templateId` | string | yes | Template id. (min length 1) |
+
+### `template_list`
+
+List clip templates: built-in ones (idle, walk/run cycles, jump, wave, attack swing) and the project's own (saved with template.save_clip).
+
+Effect: **readonly**. Command id: `template.list`.
+
+No arguments.
+
+### `template_save_clip`
+
+Save a clip as a template in the project's library (with a snapshot of its rig, so it can be applied to other characters later). Returns templateId.
+
+Effect: **mutating**. Command id: `template.save_clip`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `clipId` | string | yes | Clip id. (min length 1) |
+| `name` | string | yes | Template name. (min length 1) |
+| `description` | string | no | Short description. (min length 1) |
+| `characterId` | string | no | Character whose rig the clip animates (needed only when the clip is not bound to a rig yet). (min length 1) |
 
 ### `track_set_flags`
 

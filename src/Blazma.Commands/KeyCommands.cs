@@ -15,11 +15,18 @@ public static class KeyCommands
 {
     public static void Register(CommandRegistry r)
     {
-        r.Register(new("key.set", "Record the character's current pose as keys at a frame (replaces existing keys there). By default every bone and IK control; pass 'bones' to key only some. Binds the clip to the character's rig on first use.", CommandEffect.Mutating,
-            S.Of(S.Str("clipId", "Clip id.", true), S.Str("characterId", "Character id.", true), S.Num("frame", "Frame number (≥ 0).", true),
+        r.Register(new("key.set", "Record the character's current pose as keys at a frame (replaces existing keys there). By default every bone and IK control; pass 'bones' to key only some. " +
+            "Pass 'props' to also key props' current transforms (offset from the bone when attached, else world); without characterId only the props are keyed. Binds the clip to the character's rig on first use.", CommandEffect.Mutating,
+            S.Of(S.Str("clipId", "Clip id.", true), S.Str("characterId", "Character id (required unless 'props' is given).", false), S.Num("frame", "Frame number (≥ 0).", true),
                  S.Str("bones", "Comma-separated bone/control names or ids; omit for all.", false),
+                 S.Str("props", "Comma-separated prop names or ids to key as well.", false),
                  S.Str("interpolation", "step | linear | cubic (default cubic for new keys).", false)),
-            a => new SetKeys(S.Id(a, "clipId"), S.Id(a, "characterId"), Frame(a, "frame"), Names(a), Interp(a, false))));
+            a =>
+            {
+                var props = ((string?)a["props"])?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) is { Length: > 0 } pn ? pn : null;
+                if (a["characterId"] is null && props is null) throw new CommandException("invalid_args", "Give 'characterId' (and/or 'props').");
+                return new SetKeys(S.Id(a, "clipId"), S.OptId(a, "characterId"), Frame(a, "frame"), Names(a), Interp(a, false), props);
+            }));
 
         r.Register(new("key.delete", "Delete keys at the given frames (optionally only for some bones/controls).", CommandEffect.Mutating,
             S.Of(S.Str("clipId", "Clip id.", true), S.Str("frames", "Comma-separated frame numbers, e.g. \"0,12\".", true),
@@ -218,58 +225,78 @@ public abstract class ClipEdit(ObjectId clipId) : ICommand
         JsonSerializer.Deserialize<Clip>(JsonSerializer.SerializeToUtf8Bytes(c, ProjectArchive.JsonOptions), ProjectArchive.JsonOptions)!;
 }
 
-public sealed class SetKeys(ObjectId clipId, ObjectId characterId, long frame, IReadOnlyList<string>? names, Interpolation? interp) : ClipEdit(clipId)
+public sealed class SetKeys(ObjectId clipId, ObjectId? characterId, long frame, IReadOnlyList<string>? names, Interpolation? interp,
+    IReadOnlyList<string>? props = null) : ClipEdit(clipId)
 {
     public override string Id => "key.set";
     public override string Label => "Set key";
 
     protected override JsonNode? Apply(Project p, Clip clip, List<Diagnostic> warnings)
     {
-        var (character, rig) = PoseCommands.Resolve(p, characterId);
+        var time = Flicks.FromFrame(frame, clip.Fps);
+        var count = 0;
+        var existingTimes = KeyCommands.KeyTimes(clip);
+        existingTimes.Remove(time);
+        var keyedProps = props is null ? new List<Prop>() : PropCommands.Resolve(p, props);
+        if (characterId is not { } cid)
+        {
+            foreach (var prop in keyedProps) KeyProp(prop);
+            ExtendClip();
+            return new JsonObject { ["frame"] = frame, ["keys"] = count };
+        }
+        var (character, rig) = PoseCommands.Resolve(p, cid);
         if (clip.Skeleton.IsEmpty) clip.Skeleton = rig.Id;
         else if (clip.Skeleton != rig.Id)
             throw new CommandException("rig_mismatch", $"Clip '{clip.Name}' animates a different rig than '{character.Name}'.");
 
         var only = KeyCommands.ResolveTargets(rig, names);
-        var time = Flicks.FromFrame(frame, clip.Fps);
         var pose = character.Pose;
-        var count = 0;
-        var existingTimes = KeyCommands.KeyTimes(clip);
-        existingTimes.Remove(time);
 
         foreach (var bone in rig.Bones)
         {
             if (only is not null && !only.Contains(bone.Id)) continue;
             var t = pose.LocalOf(bone);
-            Key(TargetKind.Bone, bone.Id, TrackChannels.Rotation, Q(t.Rotation), always: true);
-            Key(TargetKind.Bone, bone.Id, TrackChannels.Translation, V(t.Translation), always: !t.Translation.ApproxEquals(bone.Rest.Translation, 1e-12));
-            Key(TargetKind.Bone, bone.Id, TrackChannels.Scale, V(t.Scale), always: !t.Scale.ApproxEquals(Vec3.One, 1e-12));
+            Key(TargetKind.Bone, bone.Id, TrackChannels.Rotation, Q(t.Rotation), always: true, rigOf: rig);
+            Key(TargetKind.Bone, bone.Id, TrackChannels.Translation, V(t.Translation), always: !t.Translation.ApproxEquals(bone.Rest.Translation, 1e-12), rigOf: rig);
+            Key(TargetKind.Bone, bone.Id, TrackChannels.Scale, V(t.Scale), always: !t.Scale.ApproxEquals(Vec3.One, 1e-12), rigOf: rig);
         }
         foreach (var control in rig.Controls)
         {
             if (only is not null && !only.Contains(control.Id)) continue;
             var state = PoseSolver.StateOf(rig, pose, control.Id);
-            Key(TargetKind.Control, control.Id, TrackChannels.Translation, V(state.Transform.Translation), always: true);
+            Key(TargetKind.Control, control.Id, TrackChannels.Translation, V(state.Transform.Translation), always: true, rigOf: rig);
             if (control.Kind == ControlKind.IkTarget)
             {
-                Key(TargetKind.Control, control.Id, TrackChannels.Rotation, Q(state.Transform.Rotation), always: true);
-                Key(TargetKind.Control, control.Id, TrackChannels.Pinned, new[] { state.Pinned ? 1.0 : 0.0 }, always: true);
+                Key(TargetKind.Control, control.Id, TrackChannels.Rotation, Q(state.Transform.Rotation), always: true, rigOf: rig);
+                Key(TargetKind.Control, control.Id, TrackChannels.Pinned, new[] { state.Pinned ? 1.0 : 0.0 }, always: true, rigOf: rig);
             }
         }
 
-        if (frame >= clip.DurationFrames)
+        foreach (var prop in keyedProps) KeyProp(prop);
+        ExtendClip();
+        return new JsonObject { ["frame"] = frame, ["keys"] = count };
+
+        void ExtendClip()
         {
+            if (frame < clip.DurationFrames) return;
             clip.Duration = Flicks.FromFrame(frame + 1, clip.Fps);
             warnings.Add(new Diagnostic("clip_extended", $"The clip was extended to {frame + 1} frames."));
         }
-        return new JsonObject { ["frame"] = frame, ["keys"] = count };
+
+        void KeyProp(Prop prop)
+        {
+            var t = prop.Local;
+            Key(TargetKind.Prop, prop.Id, TrackChannels.Translation, V(t.Translation), always: true, rigOf: null);
+            Key(TargetKind.Prop, prop.Id, TrackChannels.Rotation, Q(t.Rotation), always: true, rigOf: null);
+            Key(TargetKind.Prop, prop.Id, TrackChannels.Scale, V(t.Scale), always: !t.Scale.ApproxEquals(Vec3.One, 1e-12), rigOf: null);
+        }
 
         // Only create a track when the value is not the default, but always update existing tracks.
-        void Key(TargetKind kind, ObjectId target, string channel, double[] value, bool always)
+        void Key(TargetKind kind, ObjectId target, string channel, double[] value, bool always, Rig? rigOf = null)
         {
             var exists = clip.Tracks.Exists(t => t.Target.Id == target && t.Channel == channel);
             if (!exists && !always) return;
-            var track = KeyCommands.GetOrCreateTrack(clip, rig, kind, target, channel, GroupOf(rig, kind, target), existingTimes);
+            var track = KeyCommands.GetOrCreateTrack(clip, rigOf, kind, target, channel, kind == TargetKind.Prop ? "Props" : GroupOf(rigOf!, kind, target), existingTimes);
             if (track.Locked) { warnings.Add(new Diagnostic("track_locked", $"A locked track was skipped.")); return; }
             var existing = track.Keys.Find(k => k.Time == time);
             KeyCommands.InsertKey(track, new Keyframe

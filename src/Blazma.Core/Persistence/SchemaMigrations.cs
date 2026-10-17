@@ -14,7 +14,17 @@ public static class SchemaMigrations
     {
         V1ToV2,
         V2ToV3,
+        V3ToV4,
     };
+
+    /// <summary>v4 adds clip sequences, props (and prop tracks, target kind "Prop") and the clip template library.
+    /// v3 files have none of them: the three indexes start empty.</summary>
+    static void V3ToV4(ArchiveDocument doc)
+    {
+        doc.Root["sequences"] ??= new System.Text.Json.Nodes.JsonArray();
+        doc.Root["props"] ??= new System.Text.Json.Nodes.JsonArray();
+        doc.Root["templates"] ??= new System.Text.Json.Nodes.JsonArray();
+    }
 
     /// <summary>
     /// v3 adds clip markers and animated IK "pinned" tracks. Both are new optional data, so the

@@ -40,6 +40,12 @@ public static class ProjectArchive
             entries[$"rigs/{rig.Id}.json"] = JsonSerializer.SerializeToUtf8Bytes(rig, JsonOptions);
         foreach (var pose in project.PoseLibrary)
             entries[$"poses/{pose.Id}.json"] = JsonSerializer.SerializeToUtf8Bytes(pose, JsonOptions);
+        foreach (var seq in project.Sequences)
+            entries[$"sequences/{seq.Id}.json"] = JsonSerializer.SerializeToUtf8Bytes(seq, JsonOptions);
+        foreach (var prop in project.Props)
+            entries[$"props/{prop.Id}.json"] = JsonSerializer.SerializeToUtf8Bytes(prop, JsonOptions);
+        foreach (var template in project.Templates)
+            entries[$"templates/{template.Id}.json"] = JsonSerializer.SerializeToUtf8Bytes(template, JsonOptions);
         foreach (var asset in project.Assets)
             entries[asset.ArchivePath] = asset.Data;
         entries[SceneEntry] = JsonSerializer.SerializeToUtf8Bytes(new JsonObject
@@ -63,6 +69,9 @@ public static class ProjectArchive
             ["clips"] = new JsonArray(project.Clips.Select(c => (JsonNode?)c.Id.ToString()).ToArray()),
             ["rigs"] = new JsonArray(project.Rigs.Select(r => (JsonNode?)r.Id.ToString()).ToArray()),
             ["poses"] = new JsonArray(project.PoseLibrary.Select(p => (JsonNode?)p.Id.ToString()).ToArray()),
+            ["sequences"] = new JsonArray(project.Sequences.Select(x => (JsonNode?)x.Id.ToString()).ToArray()),
+            ["props"] = new JsonArray(project.Props.Select(x => (JsonNode?)x.Id.ToString()).ToArray()),
+            ["templates"] = new JsonArray(project.Templates.Select(x => (JsonNode?)x.Id.ToString()).ToArray()),
             ["scene"] = SceneEntry,
             ["assets"] = JsonSerializer.SerializeToNode(project.Assets, JsonOptions),
             ["metadata"] = JsonSerializer.SerializeToNode(project.Metadata, JsonOptions),
@@ -121,6 +130,9 @@ public static class ProjectArchive
             project.Clips.AddRange(ReadIndexed<Clip>(doc, "clips"));
             project.Rigs.AddRange(ReadIndexed<Rig>(doc, "rigs"));
             project.PoseLibrary.AddRange(ReadIndexed<PoseAsset>(doc, "poses"));
+            project.Sequences.AddRange(ReadIndexed<ClipSequence>(doc, "sequences"));
+            project.Props.AddRange(ReadIndexed<Prop>(doc, "props"));
+            project.Templates.AddRange(ReadIndexed<ClipTemplate>(doc, "templates"));
             if ((string?)r["scene"] is { } scenePath)
             {
                 if (!doc.Entries.TryGetValue(scenePath, out var sceneNode))
@@ -182,6 +194,24 @@ public static class ProjectArchive
         foreach (var c in p.Characters)
             if (p.FindRig(c.Rig) is null)
                 throw new ProjectFormatException("invalid_json", $"Character '{c.Name}' refers to a missing rig.");
+        foreach (var prop in p.Props)
+        {
+            if (prop.Shape == PropShape.Mesh && p.FindAsset(prop.Asset) is null)
+                throw new ProjectFormatException("invalid_json", $"Prop '{prop.Name}' refers to a missing embedded asset.");
+            if (!(prop.Size.X > 0 && prop.Size.Y > 0 && prop.Size.Z > 0) || !double.IsFinite(prop.Size.Length()))
+                throw new ProjectFormatException("invalid_json", $"Prop '{prop.Name}' has an invalid size.");
+        }
+        // Sequence items and prop attachments may refer to clips/characters deleted later (deleting is allowed);
+        // the evaluators skip such references, so they are not load errors.
+        foreach (var seq in p.Sequences)
+            foreach (var item in seq.Items)
+                if (!(item.Speed > 0) || !double.IsFinite(item.Speed) || item.Loops < 1 || item.StartFrame < 0 || item.InFrame < 0 || item.BlendInFrames < 0
+                    || (item.OutFrame is long o && o <= item.InFrame))
+                    throw new ProjectFormatException("invalid_json", $"Sequence '{seq.Name}' has an invalid item.");
+        foreach (var t in p.Templates)
+            for (var i = 0; i < t.Rig.Bones.Count; i++)
+                if (!t.Rig.Bones[i].Parent.IsEmpty && t.Rig.Bones.FindIndex(b => b.Id == t.Rig.Bones[i].Parent) is var pi && (pi < 0 || pi >= i))
+                    throw new ProjectFormatException("invalid_json", $"Template '{t.Name}': its rig's bones are not parent-before-child.");
     }
 
     static void AddEntry(ZipArchive zip, string path, byte[] bytes)

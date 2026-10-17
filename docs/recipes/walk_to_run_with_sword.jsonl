@@ -1,0 +1,11 @@
+# Recipe (Phase 8): built-in templates, a blended walk -> run sequence baked into a normal clip (feet locked),
+# and a sword attached to the right hand whose grip is keyed on the baked clip.
+{"command": "template.apply", "args": {"templateId": "builtin.walk_cycle", "characterId": "${character}", "name": "Walk (template)"}, "save": {"walk": "clipId"}}
+{"command": "template.apply", "args": {"templateId": "builtin.run_cycle", "characterId": "${character}", "name": "Run (template)"}, "save": {"run": "clipId"}}
+{"command": "sequence.create", "args": {"characterId": "${character}", "name": "Walk to run"}, "save": {"seq": "sequenceId"}}
+{"command": "sequence.add_clip", "args": {"sequenceId": "${seq}", "clipId": "${walk}", "loops": 2}}
+{"command": "sequence.add_clip", "args": {"sequenceId": "${seq}", "clipId": "${run}", "loops": 2, "blendFrames": 10, "matchFootPhase": true}}
+{"command": "sequence.evaluate", "args": {"sequenceId": "${seq}", "frame": 125}}
+{"command": "sequence.bake", "args": {"sequenceId": "${seq}", "name": "Walk to run", "footLock": true}, "save": {"clip": "clipId"}}
+{"command": "prop.add", "args": {"name": "Sword", "sizeX": 0.04, "sizeY": 0.9, "sizeZ": 0.04, "characterId": "${character}", "bone": "hand_r", "x": -0.08, "y": 0.35}}
+{"command": "key.set", "args": {"clipId": "${clip}", "frame": 0, "props": "Sword"}}

@@ -11,7 +11,7 @@ namespace Blazma.Core.Model;
 public sealed class Project
 {
     /// <summary>Schema version written by this build. See docs/DATA_FORMAT.md §4.</summary>
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
 
     public ObjectId Id { get; set; } = ObjectId.New();
     public string Name { get; set; } = "Untitled";
@@ -21,6 +21,15 @@ public sealed class Project
     public List<Rig> Rigs { get; set; } = new();
     public List<Character> Characters { get; set; } = new();
     public List<PoseAsset> PoseLibrary { get; set; } = new();
+
+    /// <summary>Clip sequences (blending/transitions) on character tracks. Schema v4.</summary>
+    public List<ClipSequence> Sequences { get; set; } = new();
+
+    /// <summary>Animatable objects (props). Schema v4.</summary>
+    public List<Prop> Props { get; set; } = new();
+
+    /// <summary>The project's clip template library (user templates). Schema v4.</summary>
+    public List<ClipTemplate> Templates { get; set; } = new();
 
     /// <summary>Binary files embedded in the project (imported models), so a project is self-contained.</summary>
     public List<ProjectAsset> Assets { get; set; } = new();
@@ -34,6 +43,9 @@ public sealed class Project
     public ProjectAsset? FindAsset(ObjectId id) => Assets.Find(a => a.Id == id);
 
     public Clip? FindClip(ObjectId id) => Clips.Find(c => c.Id == id);
+    public ClipSequence? FindSequence(ObjectId id) => Sequences.Find(s => s.Id == id);
+    public Prop? FindProp(ObjectId id) => Props.Find(p => p.Id == id);
+    public ClipTemplate? FindTemplate(ObjectId id) => Templates.Find(t => t.Id == id);
 
     public Clip GetClip(ObjectId id) =>
         FindClip(id) ?? throw new KeyNotFoundException($"Clip '{id}' does not exist.");
