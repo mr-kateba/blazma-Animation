@@ -3,6 +3,7 @@
     <Project Path="src/Blazma.Agent/Blazma.Agent.csproj" />
     <Project Path="src/Blazma.Commands/Blazma.Commands.csproj" />
     <Project Path="src/Blazma.Core/Blazma.Core.csproj" />
+    <Project Path="src/Blazma.Export/Blazma.Export.csproj" />
     <Project Path="src/Blazma.Motion/Blazma.Motion.csproj" />
     <Project Path="src/Blazma.Rigging/Blazma.Rigging.csproj" />
   </Folder>

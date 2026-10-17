@@ -45,7 +45,8 @@ public sealed record AgentPendingApproval(string Id, string SessionId, string To
 /// <list type="bullet">
 /// <item>sessions (one per connected client) and tasks with Approve/Reject,</item>
 /// <item>permissions: Destructive commands need the user's approval when a user is present;
-/// External commands may only read files under allowed folders,</item>
+/// commands that read or write files outside the project (External, or a declared <see cref="CommandDescriptor.FileArg"/>)
+/// may only use allowed folders, and agents only ever create new files,</item>
 /// <item>an activity log for the AI Workspace panel.</item>
 /// </list>
 /// Not thread-safe: call it on the thread that owns the session (the app marshals IPC calls to the
@@ -72,7 +73,7 @@ public sealed class AgentHost
     public bool UserPresent { get; }
     public AgentMode Mode { get; set; } = AgentMode.Assisted;
 
-    /// <summary>Folders agents may import files from (besides the project's own folder).</summary>
+    /// <summary>Folders agents may import files from and export new files to (besides the project's own folder).</summary>
     public List<string> AllowedReadRoots { get; } = new();
 
     /// <summary>Folder of the open project file, if any (always readable).</summary>
@@ -139,6 +140,12 @@ public sealed class AgentHost
         if (!_registry.TryGet(commandId, out var descriptor))
             return Record(sessionId, commandId, args, CommandResult.Fail("unknown_command", $"Unknown command '{commandId}'."), track: false);
 
+        // Agents never replace existing files, whatever they ask for.
+        if (descriptor.FileArg?.OverwriteArgument is { } ow && args[ow] is not null)
+        {
+            args = (JsonObject)args.DeepClone();
+            args[ow] = false;
+        }
         if (CheckPermission(descriptor, args) is { } denial)
         {
             if (denial.Code == "approval_required" && UserPresent)
@@ -238,24 +245,26 @@ public sealed class AgentHost
     /// <summary>Permission rules (docs/AI_INTEGRATION.md §3). Null = allowed.</summary>
     ErrorInfo? CheckPermission(CommandDescriptor d, JsonObject args)
     {
-        switch (d.Effect)
+        if (d.Effect == CommandEffect.Destructive)
+            return new ErrorInfo("approval_required", $"'{d.Id}' deletes something; the user must approve it.");
+        // Files outside the project: declared by the descriptor, or "path" of an External command (read).
+        var file = d.FileArg ?? (d.Effect == CommandEffect.External ? new FileArgument("path") : null);
+        if (file is null || args[file.Argument] is null) return null;
+        string full;
+        try
         {
-            case CommandEffect.Destructive:
-                return new ErrorInfo("approval_required", $"'{d.Id}' deletes something; the user must approve it.");
-            case CommandEffect.External:
-                if (args["path"] is null) return null;
-                string full;
-                try { full = AgentPaths.ResolveLinks(AgentPaths.Normalize((string?)args["path"])); }
-                catch (AgentRpcException e) { return new ErrorInfo(e.Code, e.Message); }
-                if (IsUnderAllowedRoot(full)) return null;
-                // Only an interactive user in Assisted mode can widen access case by case; headless and
-                // Autonomous agents are limited to the allowed folders (docs/AI_INTEGRATION.md §3).
-                return UserPresent && Mode == AgentMode.Assisted
-                    ? new ErrorInfo("approval_required", $"'{d.Id}' reads '{full}', outside the allowed folders.")
-                    : new ErrorInfo("path_not_allowed", $"'{full}' is outside the folders agents may read (the project folder and the allowed folders).");
-            default:
-                return null;
+            full = file.Write
+                ? AgentPaths.ValidateNewFileTarget((string?)args[file.Argument], file.Extension, _session().FilePath)
+                : AgentPaths.ResolveLinks(AgentPaths.Normalize((string?)args[file.Argument]));
         }
+        catch (AgentRpcException e) { return new ErrorInfo(e.Code, e.Message); }
+        if (IsUnderAllowedRoot(full)) return null;
+        var verb = file.Write ? "writes" : "reads";
+        // Only an interactive user in Assisted mode can widen access case by case; headless and
+        // Autonomous agents are limited to the allowed folders (docs/AI_INTEGRATION.md §3).
+        return UserPresent && Mode == AgentMode.Assisted
+            ? new ErrorInfo("approval_required", $"'{d.Id}' {verb} '{full}', outside the allowed folders.")
+            : new ErrorInfo("path_not_allowed", $"'{full}' is outside the folders agents may use (the project folder and the allowed folders).");
     }
 
     public bool IsUnderAllowedRoot(string fullPath)

@@ -15,7 +15,20 @@ public sealed record CommandDescriptor(
 {
     /// <summary>MCP tool name: "clip.create" → "clip_create".</summary>
     public string ToolName => Id.Replace('.', '_');
+
+    /// <summary>
+    /// The argument naming a file outside the project that this command reads or writes. Agents get the
+    /// allowed-folder rules for it whatever the <see cref="Effect"/> (e.g. a ReadOnly export that writes a
+    /// file but does not change the project). Null: commands with Effect External use "path" for reading.
+    /// </summary>
+    public FileArgument? FileArg { get; init; }
 }
+
+/// <param name="Argument">Name of the path argument.</param>
+/// <param name="Write">True when the command creates the file. Agents may then only create new files.</param>
+/// <param name="Extension">Required extension of a written file (e.g. ".glb").</param>
+/// <param name="OverwriteArgument">Boolean argument that allows replacing an existing file; always forced off for agents.</param>
+public sealed record FileArgument(string Argument, bool Write = false, string? Extension = null, string? OverwriteArgument = null);
 
 public sealed class CommandRegistry
 {
@@ -50,6 +63,7 @@ public sealed class CommandRegistry
         RigCommands.Register(r);
         KeyCommands.Register(r);
         AnimationEditCommands.Register(r);
+        ExportCommands.Register(r);
         return r;
     }
 }

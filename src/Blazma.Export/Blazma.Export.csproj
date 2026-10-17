@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- glTF/GLB export, baking, root motion, sidecar JSON and round-trip validation. Godot-independent. -->
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>Blazma.Export</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Blazma.Core/Blazma.Core.csproj" />
+    <ProjectReference Include="../Blazma.Rigging/Blazma.Rigging.csproj" />
+    <ProjectReference Include="../Blazma.Motion/Blazma.Motion.csproj" />
+  </ItemGroup>
+</Project>

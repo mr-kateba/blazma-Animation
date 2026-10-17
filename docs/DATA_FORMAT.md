@@ -111,3 +111,61 @@ previews/             صور مصغّرة
 (المعرّفات هنا مختصرة للتوضيح، وهي في الملف الحقيقي ULID.)
 
 `humanoidMap` اتجاهه: **عظمة المستخدم ← اسم العظمة في الهيكل القياسي لـBlazma**. يُستخدم في Retargeting وفي تحويل مخرجات Kimodo.
+
+## 7. التصدير (Export) — المرحلة 4
+
+الأمر `animation.export` (أداة MCP: `animation_export`) يكتب ملف `.glb` (glTF 2.0 ثنائي) وبجانبه ملف sidecar باسم `<name>.blazma.json`. الأمر `animation.validate` يعيد قراءة الملف ويقارنه بالمقطع.
+
+### 7.1 الخبز (Baking)
+- يُقيَّم المقطع إطارًا إطارًا من الإطار `startFrame` (افتراضيًا 0) إلى `endFrame` (افتراضيًا طول المقطع بالإطارات) **شاملًا الطرفين**، بالدالة نفسها التي يستخدمها التشغيل: من وضعية الراحة (وليس وضعية العمل)، مع إعادة حل سلاسل IK المثبّتة (Pinned) في كل إطار.
+- المقطع المتكرر (Loop) يمر عبر `PlaybackTime`، فالإطار عند نهاية المقطع يكرر بداية الـLoop، كما في التشغيل.
+- الزمن في الملف: `(frame - startFrame) / fps` بالثواني، فأول إطار مُصدَّر هو الزمن 0.
+- كل القنوات `LINEAR`، والـQuaternion متصل الإشارة بين الإطارات (لا قفز بين q و‎−q).
+- **القنوات الثابتة:** القناة التي لا تتغير قيمتها تُكتب بمفتاحين فقط (أول إطار وآخر إطار) بدل مفتاح لكل إطار. اخترنا مفتاحين وليس واحدًا حتى تمتد كل قناة على طول المقطع كاملًا، فلا يستنتج أي محرك مدة خاطئة. يمكن تعطيل ذلك (`CompactConstantChannels = false`).
+
+### 7.2 Root motion
+- عظمة الـRoot motion: العظمة المربوطة بالاسم القياسي `root`، وإلا أول عظمة في الـRig.
+- `rootMotion`: ‏`keep` (افتراضي، دون تغيير) أو `in_place` (حذف الحركة الأفقية X/Z نسبةً لأول إطار مُصدَّر مع إبقاء الارتفاع Y) أو `in_place_all` (حذف كل الإزاحة X/Y/Z).
+- الحذف يتم في فضاء أب العظمة (فضاء النموذج لعظمة الجذر)، أي قبل تحويلها إلى فضاء العقدة الأصلية في ملف الشخصية المستوردة.
+- الإزاحة المحذوفة (أو القابلة للاستخراج في وضع `keep`) تُكتب في الـsidecar: فرق كل إطار عن السابق، والمجموع.
+
+### 7.3 الـMannequin المدمج
+ملف جديد: عقدة لكل عظمة (بالترتيب نفسه، فرقم العقدة = رقم العظمة) بتحويل الراحة TRS، وتحت كل عظمة عقدة شبكة (Mesh) صلبة على شكل صندوق بطول المسافة إلى العظمة الابنة، مع Normals ومادة واحدة. لا يوجد Skin. القنوات تستهدف عقد العظام. `asset.generator = "Blazma Animation"`.
+
+### 7.4 الشخصيات المستوردة
+- يُستخدم ملف `.glb` الأصلي المضمَّن في المشروع (`assets/<id>/<file>`) **كما هو**: كل العقد والشبكات والـSkins والمواد والحركات الموجودة تبقى، وتُضاف حركتنا في آخر `animations`، وتُلحق بياناتها بنهاية الـBIN buffer. عند تكرار الاسم يُضاف لاحقة (`Walk_2`).
+- القنوات تستهدف أرقام العقد الأصلية (`Rig.Source.NodeIndex`).
+- **تحويل الجذر:** عند الاستيراد يُدمج تحويل العقد الأب غير العظمية (مثل عقدة `Z_UP`) في وضعية راحة عظمة الجذر. عند التصدير يُعاد تحويل قيمة الجذر إلى فضاء أبيها الحقيقي: `nodeLocal = inverse(World(parent)) * boneLocal` (دقيق عندما يكون مقياس الأب منتظمًا).
+- العقدة المتحركة التي تستخدم `matrix` تُعاد كتابتها كـ`translation/rotation/scale` (لأن glTF يمنع تحريك عقدة لها matrix)، مع تحذير.
+- **غير مدعوم (`unsupported_source`):** المصدر `.gltf`، أو ملف GLB يعتمد على buffers خارجية. (الاستيراد أصلًا يقبل `.glb` فقط للتضمين.) الـbuffers من نوع `data:` URI مقبولة.
+
+### 7.5 الـSidecar ‏`<name>.blazma.json`
+الإطارات فيه نسبية لأول إطار مُصدَّر، مثل أزمنة الـGLB.
+
+```json
+{
+  "schema": "blazma.animation-export", "schemaVersion": 1, "generator": "Blazma Animation",
+  "glb": "walk.glb", "animation": "Walk",
+  "clip": { "id": "01J...", "name": "Walk" },
+  "fps": { "numerator": 30, "denominator": 1 },
+  "startFrame": 0, "endFrame": 25, "frameCount": 26, "durationSeconds": 0.8333,
+  "loop": { "enabled": true, "startFrame": 0, "endFrame": 24 },
+  "markers": [ { "frame": 12, "name": "Pass", "kind": "contact" } ],
+  "events": [ { "frame": 6, "time": 0.2, "name": "foot_contact_r", "payload": { "surface": "stone" } } ],
+  "rootMotion": { "mode": "in_place", "removed": true, "bone": "root", "axes": "xz",
+                  "totalDisplacement": [0, 0, 0.6], "perFrameDelta": [[0,0,0], [0,0,0.004], "..."] },
+  "bones": [ { "name": "thigh_l", "standard": "thigh_l", "parent": "pelvis", "node": 15 } ],
+  "source": { "kind": "builtin", "rig": "Blazma Mannequin", "file": null, "project": "Demo" }
+}
+```
+
+- `loop.endFrame` حصري (exclusive) مثل `duration`.
+- `markers[].kind`: ‏`marker` للعلامة العادية، أو اسم المرحلة (`initial`، `anticipation`، `main_action`، `contact`، `follow_through`، `recovery`، `final`).
+- `bones[].standard`: الاسم القياسي من `humanoidMap` (أو `null`)، و`node` رقم العقدة في الـGLB.
+- الحركة نفسها في الـGLB تحمل `extras.blazma` = ‏`{clipId, fps, startFrame, endFrame, rootMotion}`، ويستخدمه `animation.validate` لمعرفة خيارات التصدير.
+
+### 7.6 التحقق (`animation.validate`)
+يعيد قراءة الملف ويفحص: رأس GLB (magic/version/length) ومحاذاة الـchunks على 4 بايت، حدود الـbufferViews والـaccessors، وجود min/max لـ`POSITION` ولأزمنة الحركة ومطابقتها، صحة الهرمية (أب واحد، بلا دورات)، مدة الحركة (± نصف إطار)، ثم يقارن كل قناة لكل عظمة في كل إطار مع خبز جديد للمقطع. السماحيات: الموضع ‎1e-4 م، الدوران ‎0.01°، المقياس ‎1e-4. للشخصية المستوردة يتحقق أيضًا من أن عدد العقد والهرمية والشبكات والـSkins مطابق للملف الأصلي.
+
+### 7.7 قواعد الوكلاء
+`animation.export` لا يغيّر المشروع (Effect = ReadOnly، لا يدخل سجل التراجع)، لكنه يعلن مسار الكتابة (`CommandDescriptor.FileArg`)، فيطبّق `AgentHost` عليه: امتداد `.glb` إلزامي، المجلد الأب موجود، **ملف جديد فقط** (`file_exists` حتى مع `overwrite=true`، فالخيار يُفرض `false` للوكلاء ويحمي الـsidecar أيضًا)، ولا يُكتب فوق ملف المشروع، والمسار (بعد حل الروابط الرمزية للمجلد) داخل المجلدات المسموحة، وإلا `approval_required` (مستخدم حاضر في الوضع Assisted) أو `path_not_allowed`. الواجهة وحدها تستطيع الاستبدال بـ`overwrite=true`. `animation.validate` يخضع لقواعد القراءة نفسها.

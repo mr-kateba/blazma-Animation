@@ -42,6 +42,27 @@ public static class AgentPaths
         return full;
     }
 
+    /// <summary>
+    /// Where an agent may write an exported file: a NEW file with the required extension, in a folder that
+    /// exists, never the open project. The folder's links are resolved, so the returned path is the
+    /// real location (the caller checks it against the allowed folders).
+    /// </summary>
+    public static string ValidateNewFileTarget(string? path, string? extension, string? currentProjectPath)
+    {
+        var full = Normalize(path);
+        if (extension is not null && !full.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+            throw new AgentRpcException("unsupported_format", $"The path must end in {extension}.");
+        var dir = Path.GetDirectoryName(full);
+        if (dir is null || !Directory.Exists(dir))
+            throw new AgentRpcException("not_found", $"The folder '{dir}' does not exist.");
+        full = Path.Combine(ResolveLinks(dir), Path.GetFileName(full));
+        if (currentProjectPath is not null && SamePath(full, Path.GetFullPath(currentProjectPath)))
+            throw new AgentRpcException("file_exists", "Agents cannot overwrite the open project with an export.");
+        if (File.Exists(full) || Directory.Exists(full) || new FileInfo(full).LinkTarget is not null)
+            throw new AgentRpcException("file_exists", $"'{full}' already exists. Agents only create new files; ask the user to overwrite it.");
+        return full;
+    }
+
     /// <summary>Path with symbolic links resolved (so a link inside an allowed folder cannot point outside it).</summary>
     public static string ResolveLinks(string fullPath)
     {

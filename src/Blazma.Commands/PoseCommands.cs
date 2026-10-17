@@ -119,6 +119,7 @@ static class S
 {
     public static (string, JsonObject, bool) Str(string n, string d, bool req) => (n, new JsonObject { ["type"] = "string", ["description"] = d, ["minLength"] = 1 }, req);
     public static (string, JsonObject, bool) Num(string n, string d, bool req) => (n, new JsonObject { ["type"] = "number", ["description"] = d }, req);
+    public static (string, JsonObject, bool) Int(string n, string d, bool req, long minimum = 0) => (n, new JsonObject { ["type"] = "integer", ["description"] = d, ["minimum"] = minimum }, req);
     public static (string, JsonObject, bool) Bool(string n, string d, bool req) => (n, new JsonObject { ["type"] = "boolean", ["description"] = d }, req);
 
     public static JsonObject Of(params (string Name, JsonObject Schema, bool Required)[] props)
