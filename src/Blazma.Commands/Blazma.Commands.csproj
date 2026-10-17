@@ -5,6 +5,7 @@
     <ProjectReference Include="..\Blazma.Rigging\Blazma.Rigging.csproj" />
     <ProjectReference Include="..\Blazma.Motion\Blazma.Motion.csproj" />
     <ProjectReference Include="..\Blazma.Export\Blazma.Export.csproj" />
+    <ProjectReference Include="..\Blazma.Physics\Blazma.Physics.csproj" />
   </ItemGroup>
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>

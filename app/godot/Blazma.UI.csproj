@@ -13,5 +13,6 @@
     <ProjectReference Include="../../src/Blazma.Motion/Blazma.Motion.csproj" />
     <ProjectReference Include="../../src/Blazma.Agent/Blazma.Agent.csproj" />
     <ProjectReference Include="../../src/Blazma.Export/Blazma.Export.csproj" />
+    <ProjectReference Include="../../src/Blazma.Physics/Blazma.Physics.csproj" />
   </ItemGroup>
 </Project>

@@ -69,6 +69,11 @@ Use as `blazma-anim exec <file> <id> --arg name=value ...`.
 | `marker.add` | mutating | `clipId`*:string, `frame`*:number, `name`*:string, `phase`:string | Add a named marker (optionally a key-pose phase) at a frame. Returns {markerId}. |
 | `marker.delete` | mutating | `clipId`*:string, `markerId`*:string | Delete a marker. |
 | `marker.update` | mutating | `clipId`*:string, `markerId`*:string, `frame`:number, `name`:string, `phase`:string | Change a marker's frame, name and/or phase (at least one). |
+| `physics.analyze` | readonly | `clipId`*:string, `characterId`:string, `startFrame`:integer, `endFrame`:integer, `summaryOnly`:boolean, `maxFrames`:integer, `metric`:string, `minMargin`:number, `contactHeight`:number | Balance analysis of a clip, frame by frame: centre of mass (COM), foot contacts, support polygon (convex hull of the touching sole points, XZ), signed margin of the tested point to the polygon (inside positive, metres) and balanced/unbalanced/airborne. Returns {summary:{unbalancedRanges…}, frames:[…]}. Does not change anything. |
+| `physics.auto_balance` | mutating | `clipId`*:string, `characterId`:string, `frames`:string, `startFrame`:integer, `endFrame`:integer, `margin`:number, `maxShift`:number | Move the COM inside the support polygon (by 'margin') on unbalanced frames by shifting the hips horizontally; supporting feet stay planted (legs re-solved with IK). Keys the pelvis translation (and leg rotations of unpinned supporting legs) on corrected frames, plus the original values on neighbouring frames. One undo step. Returns before/after margins per frame. |
+| `physics.com` | readonly | `characterId`*:string, `clipId`:string, `frame`:integer, `segments`:boolean | Centre of mass and static balance of a character: its working pose, or a clip frame when 'clipId' is given (with velocity, ZMP and capture point). Returns {com, totalMass, massSource, contacts, polygon, margin, state}. Does not change anything. |
+| `physics.secondary_motion` | mutating | `clipId`*:string, `characterId`:string, `bones`:string, `preset`:string, `stiffness`:number, `damping`:number, `maxAngle`:number, `startFrame`:integer, `endFrame`:integer | Bake follow-through / overlap: the chosen bones lag behind the clip's motion like damped springs (stiffness k 1/s², damping c 1/s; mass-independent, stable at any fps). Writes rotation keys on every frame of the range (one undo step). Give 'bones' and/or 'preset'. |
+| `physics.trajectories` | readonly | `clipId`*:string, `characterId`:string, `what`:string, `startFrame`:integer, `endFrame`:integer | Per-frame model-space paths of a clip for drawing: centre of mass, hips (pelvis) and/or feet (ankles). Returns arrays of [x,y,z]. Does not change anything. |
 | `pose.apply` | mutating | `characterId`*:string, `poseJson`*:string | Apply a pose given as JSON (from pose.get's 'pose' field or a copied pose). |
 | `pose.get` | readonly | `characterId`*:string | Current pose of a character: per-bone local rotation (Euler XYZ degrees) and model-space position, and control states. |
 | `pose.mirror` | mutating | `characterId`*:string | Mirror the pose left ↔ right. |
@@ -332,6 +337,75 @@ Change a marker's frame, name and/or phase (at least one). (effect: mutating)
 | `frame` | number | no | New frame. |
 | `name` | string | no | New name. (min length 1) |
 | `phase` | string | no | none \| initial \| anticipation \| main_action \| contact \| follow_through \| recovery \| final. (min length 1) |
+
+### `physics.analyze`
+
+Balance analysis of a clip, frame by frame: centre of mass (COM), foot contacts, support polygon (convex hull of the touching sole points, XZ), signed margin of the tested point to the polygon (inside positive, metres) and balanced/unbalanced/airborne. Returns {summary:{unbalancedRanges…}, frames:[…]}. Does not change anything. (effect: readonly)
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `clipId` | string | yes | Clip id. (min length 1) |
+| `characterId` | string | no | Character to evaluate the clip on (default: the first character using the clip's rig). (min length 1) |
+| `startFrame` | integer | no | First frame (default 0). (min 0) |
+| `endFrame` | integer | no | Last frame, inclusive (default: the clip's last frame). (min 0) |
+| `summaryOnly` | boolean | no | Only the summary, no per-frame list. |
+| `maxFrames` | integer | no | Most per-frame entries to return (default 120, max 2000); the rest is summarized. (min 1) |
+| `metric` | string | no | com (static, default) \| zmp (zero-moment point, uses COM acceleration) \| capture (capture point, uses COM velocity). (min length 1) |
+| `minMargin` | number | no | Margin (m) a frame needs to count as balanced (default 0). |
+| `contactHeight` | number | no | Sole points at most this high above the ground (m) can touch (default 0.03). |
+
+### `physics.auto_balance`
+
+Move the COM inside the support polygon (by 'margin') on unbalanced frames by shifting the hips horizontally; supporting feet stay planted (legs re-solved with IK). Keys the pelvis translation (and leg rotations of unpinned supporting legs) on corrected frames, plus the original values on neighbouring frames. One undo step. Returns before/after margins per frame. (effect: mutating)
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `clipId` | string | yes | Clip id. (min length 1) |
+| `characterId` | string | no | Character to evaluate the clip on (default: the first character using the clip's rig). (min length 1) |
+| `frames` | string | no | Comma-separated frames to correct; omit to use startFrame/endFrame. (min length 1) |
+| `startFrame` | integer | no | First frame (default 0). (min 0) |
+| `endFrame` | integer | no | Last frame, inclusive (default: the clip's last frame). (min 0) |
+| `margin` | number | no | Distance (m) to keep the COM inside the polygon (default 0.02, max 0.5). |
+| `maxShift` | number | no | Largest hip shift (m, default 0.3, max 1). |
+
+### `physics.com`
+
+Centre of mass and static balance of a character: its working pose, or a clip frame when 'clipId' is given (with velocity, ZMP and capture point). Returns {com, totalMass, massSource, contacts, polygon, margin, state}. Does not change anything. (effect: readonly)
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `characterId` | string | yes | Character id. (min length 1) |
+| `clipId` | string | no | Evaluate this clip instead of the working pose. (min length 1) |
+| `frame` | integer | no | Clip frame (default 0). (min 0) |
+| `segments` | boolean | no | Also list each segment's mass and centre. |
+
+### `physics.secondary_motion`
+
+Bake follow-through / overlap: the chosen bones lag behind the clip's motion like damped springs (stiffness k 1/s², damping c 1/s; mass-independent, stable at any fps). Writes rotation keys on every frame of the range (one undo step). Give 'bones' and/or 'preset'. (effect: mutating)
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `clipId` | string | yes | Clip id. (min length 1) |
+| `characterId` | string | no | Character to evaluate the clip on (default: the first character using the clip's rig). (min length 1) |
+| `bones` | string | no | Comma-separated bone names or ids, parent before child for a chain. (min length 1) |
+| `preset` | string | no | spine \| head \| arms (humanoid-mapped bones). (min length 1) |
+| `stiffness` | number | no | Spring stiffness k (1/s², default 150 ≈ 1.9 Hz; max 10000). |
+| `damping` | number | no | Damping c (1/s, default 12; damping ratio = c / (2√k)). |
+| `maxAngle` | number | no | Largest lag in degrees (default 30). |
+| `startFrame` | integer | no | First frame (default 0). (min 0) |
+| `endFrame` | integer | no | Last frame, inclusive (default: the clip's last frame). (min 0) |
+
+### `physics.trajectories`
+
+Per-frame model-space paths of a clip for drawing: centre of mass, hips (pelvis) and/or feet (ankles). Returns arrays of [x,y,z]. Does not change anything. (effect: readonly)
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `clipId` | string | yes | Clip id. (min length 1) |
+| `characterId` | string | no | Character to evaluate the clip on (default: the first character using the clip's rig). (min length 1) |
+| `what` | string | no | com \| feet \| hips \| all (default all). (min length 1) |
+| `startFrame` | integer | no | First frame (default 0). (min 0) |
+| `endFrame` | integer | no | Last frame, inclusive (default: the clip's last frame). (min 0) |
 
 ### `pose.apply`
 

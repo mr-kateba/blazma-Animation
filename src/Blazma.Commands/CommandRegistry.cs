@@ -64,6 +64,7 @@ public sealed class CommandRegistry
         KeyCommands.Register(r);
         AnimationEditCommands.Register(r);
         ExportCommands.Register(r);
+        PhysicsCommands.Register(r);
         return r;
     }
 }

@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Blazma.Agent", "..\..\src\B
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Blazma.Export", "..\..\src\Blazma.Export\Blazma.Export.csproj", "{9ED8E07C-2A6F-4BA0-BD51-C680B8AF1228}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Blazma.Physics", "..\..\src\Blazma.Physics\Blazma.Physics.csproj", "{B328F29E-81C2-4711-BCA5-FBE71C88A519}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -111,6 +113,18 @@ Global
 		{9ED8E07C-2A6F-4BA0-BD51-C680B8AF1228}.Release|x64.Build.0 = Release|Any CPU
 		{9ED8E07C-2A6F-4BA0-BD51-C680B8AF1228}.Release|x86.ActiveCfg = Release|Any CPU
 		{9ED8E07C-2A6F-4BA0-BD51-C680B8AF1228}.Release|x86.Build.0 = Release|Any CPU
+		{B328F29E-81C2-4711-BCA5-FBE71C88A519}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B328F29E-81C2-4711-BCA5-FBE71C88A519}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B328F29E-81C2-4711-BCA5-FBE71C88A519}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B328F29E-81C2-4711-BCA5-FBE71C88A519}.Debug|x64.Build.0 = Debug|Any CPU
+		{B328F29E-81C2-4711-BCA5-FBE71C88A519}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B328F29E-81C2-4711-BCA5-FBE71C88A519}.Debug|x86.Build.0 = Debug|Any CPU
+		{B328F29E-81C2-4711-BCA5-FBE71C88A519}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B328F29E-81C2-4711-BCA5-FBE71C88A519}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B328F29E-81C2-4711-BCA5-FBE71C88A519}.Release|x64.ActiveCfg = Release|Any CPU
+		{B328F29E-81C2-4711-BCA5-FBE71C88A519}.Release|x64.Build.0 = Release|Any CPU
+		{B328F29E-81C2-4711-BCA5-FBE71C88A519}.Release|x86.ActiveCfg = Release|Any CPU
+		{B328F29E-81C2-4711-BCA5-FBE71C88A519}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

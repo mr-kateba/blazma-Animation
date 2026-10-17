@@ -32,10 +32,11 @@
 | التحقق من المقطع | 4 | Motion | Simple | ✓ | animation_validate |
 | MCP server + CLI + صلاحيات | 5 | Agent | Adv | — | — |
 | AI Workspace + مسودات + Approve | 5 | UI/AI | Simple | — | draft_apply / draft_reject |
-| مركز الكتلة + Support polygon | 6 | Physics | Simple | ✓ | physics_analyze |
-| Auto-balance | 6 | Physics | Adv | ✓ | physics_correct |
-| مسارات باليستية / قفز | 6 | Physics | Adv | ✓ | physics_trajectory |
-| الحركة الثانوية (Spring) | 6 | Physics | Adv | ✓ | physics_secondary |
+| ✅ مركز الكتلة + Support polygon + التوازن (COM/ZMP/Capture point) | 6 | Physics | Simple | ✓ | physics_analyze / physics_com |
+| ✅ Auto-balance | 6 | Physics | Adv | ✓ | physics_auto_balance |
+| ✅ مسارات COM/الورك/القدمين | 6 | Physics | Adv | ✓ | physics_trajectories |
+| مسارات باليستية / قفز (توقع مسار الطيران) | 6+ | Physics | Adv | ✓ | — |
+| ✅ الحركة الثانوية (Spring) | 6 | Physics | Adv | ✓ | physics_secondary_motion |
 | توليد حركة من نص (Kimodo) | 7 | AI | Simple | ✓ | motion_generate |
 | Retargeting | 7–8 | Rigging | Adv | ✓ | motion_retarget |
 | Blending / Retiming / Loop cleanup | 8 | Motion | Adv | ✓ | motion_* |

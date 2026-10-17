@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Physics assistance: centre of mass, support polygon, balance, auto-balance, trajectories, secondary motion. Godot-independent. -->
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>Blazma.Physics</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Blazma.Core/Blazma.Core.csproj" />
+    <ProjectReference Include="../Blazma.Rigging/Blazma.Rigging.csproj" />
+    <ProjectReference Include="../Blazma.Motion/Blazma.Motion.csproj" />
+  </ItemGroup>
+</Project>
