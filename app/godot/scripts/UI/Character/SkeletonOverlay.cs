@@ -21,6 +21,9 @@ public partial class SkeletonOverlay : Control, IStageInput
     public CharacterLayer Layer { get; }
     public SelectionState Sel { get; }
     public Gizmo Gizmo { get; }
+    /// <summary>Phase 8: props in the stage (set by the main window right after construction).</summary>
+    public PropLayer? Props { get; set; }
+    public PropGizmo PropGizmo { get; }
     public Palette Pal { get; private set; } = Palette.Dark;
 
     Transform3D _lastCam;
@@ -36,12 +39,14 @@ public partial class SkeletonOverlay : Control, IStageInput
         Layer = layer;
         Sel = sel;
         Gizmo = new Gizmo(this);
+        PropGizmo = new PropGizmo(this);
         MouseFilter = MouseFilterEnum.Ignore;
         LayoutDirection = LayoutDirectionEnum.Ltr;
         ClipContents = true;
         Layer.ViewsChanged += QueueRedraw;
         Sel.Changed += QueueRedraw;
         Gizmo.Changed += QueueRedraw;
+        PropGizmo.Changed += QueueRedraw;
     }
 
     public void SetPalette(Palette p) { Pal = p; QueueRedraw(); }
@@ -148,11 +153,11 @@ public partial class SkeletonOverlay : Control, IStageInput
     {
         switch (e)
         {
-            case InputEventKey { Pressed: true, Keycode: Key.Escape } when Gizmo.Dragging:
-                Gizmo.Cancel();
+            case InputEventKey { Pressed: true, Keycode: Key.Escape } when Gizmo.Dragging || PropGizmo.Dragging:
+                Gizmo.Cancel(); PropGizmo.Cancel();
                 return true;
-            case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Right } when Gizmo.Dragging:
-                Gizmo.Cancel();
+            case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Right } when Gizmo.Dragging || PropGizmo.Dragging:
+                Gizmo.Cancel(); PropGizmo.Cancel();
                 return true;
             case InputEventMouseButton { ButtonIndex: MouseButton.Left } mb:
                 _mouse = mb.Position;
@@ -160,10 +165,14 @@ public partial class SkeletonOverlay : Control, IStageInput
                 {
                     if (mb.ShiftPressed) return false;
                     if (Gizmo.TryBegin(mb.Position)) return true;
-                    ApplyPick(PickAt(mb.Position));
+                    if (PropGizmo.TryBegin(mb.Position)) return true;
+                    var pick = PickAt(mb.Position);
+                    if (pick is null && PickProp(mb.Position) is { } prop) { Sel.SelectProp(prop); return true; }
+                    ApplyPick(pick);
                     return true;
                 }
                 if (Gizmo.Dragging) { Gizmo.End(true); return true; }
+                if (PropGizmo.Dragging) { PropGizmo.End(true); return true; }
                 return false;
             case InputEventMouseMotion mm:
                 _mouse = mm.Position;
@@ -171,6 +180,12 @@ public partial class SkeletonOverlay : Control, IStageInput
                 {
                     if ((mm.ButtonMask & MouseButtonMask.Left) == 0) { Gizmo.End(true); return true; }
                     Gizmo.Update(mm.Position);
+                    return true;
+                }
+                if (PropGizmo.Dragging)
+                {
+                    if ((mm.ButtonMask & MouseButtonMask.Left) == 0) { PropGizmo.End(true); return true; }
+                    PropGizmo.Update(mm.Position);
                     return true;
                 }
                 UpdateHover(mm.Position);
@@ -181,8 +196,8 @@ public partial class SkeletonOverlay : Control, IStageInput
 
     void UpdateHover(Vector2 pos)
     {
-        var handleChanged = Gizmo.UpdateHover(pos);
-        var pick = Gizmo.HoverHandle >= 0 ? null : PickAt(pos);
+        var handleChanged = Gizmo.UpdateHover(pos) | PropGizmo.UpdateHover(pos);
+        var pick = Gizmo.HoverHandle >= 0 || PropGizmo.HoverHandle >= 0 ? null : PickAt(pos);
         var next = pick is { } p ? (p.CharacterId, p.BoneId, p.ControlId) : ((string, string?, string?)?)null;
         if (handleChanged || next != _hover) { _hover = next; QueueRedraw(); }
     }
@@ -265,6 +280,77 @@ public partial class SkeletonOverlay : Control, IStageInput
             }
         }
         Gizmo.Draw(this, font);
+        DrawSelectedProp(font);
+        PropGizmo.Draw(this, font);
+    }
+
+    // ---- props (Phase 8) ---------------------------------------------------------------------------------------------------
+
+    /// <summary>Half extents of the box that stands for a prop when picking and outlining (in the prop's own space).</summary>
+    public static Vector3 PropHalfExtents(Prop prop)
+    {
+        var s = new Vector3((float)prop.Size.X, (float)prop.Size.Y, (float)prop.Size.Z) / 2f;
+        if (prop.Shape == PropShape.Sphere) s = new Vector3(s.X, s.X, s.X);
+        else if (prop.Shape == PropShape.Cylinder) s = new Vector3(s.X, s.Y, s.X);
+        return new Vector3(Mathf.Max(s.X, 0.03f), Mathf.Max(s.Y, 0.03f), Mathf.Max(s.Z, 0.03f));
+    }
+
+    /// <summary>The prop under <paramref name="screen"/> (nearest along the camera ray), or null.</summary>
+    public string? PickProp(Vector2 screen)
+    {
+        if (Props is null) return null;
+        var ro = Cam.ProjectRayOrigin(screen);
+        var rd = Cam.ProjectRayNormal(screen);
+        string? best = null;
+        var bestT = float.MaxValue;
+        foreach (var prop in App.Session.Project.Props)
+        {
+            var id = prop.Id.ToString();
+            if (Props.WorldOf(id) is not { } w) continue;
+            var inv = CharacterView.ToT3(w).AffineInverse();
+            var o = inv * ro;
+            var d = inv.Basis * rd;
+            var h = PropHalfExtents(prop);
+            float t0 = 0, t1 = float.MaxValue;
+            var hit = true;
+            for (var a = 0; a < 3 && hit; a++)
+            {
+                var oa = o[a]; var da = d[a]; var ha = h[a];
+                if (Mathf.Abs(da) < 1e-8f) { if (oa < -ha || oa > ha) hit = false; continue; }
+                var ta = (-ha - oa) / da; var tb = (ha - oa) / da;
+                if (ta > tb) (ta, tb) = (tb, ta);
+                t0 = Mathf.Max(t0, ta); t1 = Mathf.Min(t1, tb);
+                if (t0 > t1) hit = false;
+            }
+            if (hit && t0 < bestT) { bestT = t0; best = id; }
+        }
+        return best;
+    }
+
+    /// <summary>Screen position of a prop's origin (used by the self-test to click on it).</summary>
+    public Vector2? ScreenOfProp(string propId) =>
+        Props?.WorldOf(propId) is { } w && Project(CharacterView.ToV3(w.Translation), out var s) ? s : null;
+
+    void DrawSelectedProp(Font font)
+    {
+        if (Props is null || Sel.PropId is not { } id || Props.Find(id) is not { } prop || Props.WorldOf(id) is not { } w) return;
+        var t = CharacterView.ToT3(w);
+        var h = PropHalfExtents(prop);
+        var corners = new Vector2[8];
+        for (var i = 0; i < 8; i++)
+        {
+            var c = new Vector3((i & 1) == 0 ? -h.X : h.X, (i & 2) == 0 ? -h.Y : h.Y, (i & 4) == 0 ? -h.Z : h.Z);
+            if (!Project(t * c, out corners[i])) return;
+        }
+        var col = Pal.Accent;
+        foreach (var (a, b) in new[] { (0, 1), (2, 3), (4, 5), (6, 7), (0, 2), (1, 3), (4, 6), (5, 7), (0, 4), (1, 5), (2, 6), (3, 7) })
+            DrawLine(corners[a], corners[b], col with { A = 0.9f }, 1.4f, true);
+        if (Project(t.Origin, out var o))
+        {
+            DrawCircle(o, 4.5f, Pal.Bg with { A = 0.95f });
+            DrawCircle(o, 3.4f, col);
+            DrawString(BlazmaTheme.Regular, o + new Vector2(10, -10), prop.Name, HorizontalAlignment.Left, -1, 12, Pal.Text);
+        }
     }
 
     void DrawBone(Vector2 a, Vector2 b, Color fill, Color outline, float width)

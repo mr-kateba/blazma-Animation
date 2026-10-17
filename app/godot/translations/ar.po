@@ -2019,3 +2019,698 @@ msgstr "أُضيفت"
 
 msgid "Procedural motion (not AI): a simple keyword cycle for testing and demos."
 msgstr "حركة إجرائية (ليست ذكاءً اصطناعيًا): دورة بسيطة مبنية على كلمات مفتاحية للاختبار والعرض."
+
+# ---- Phase 8: templates, retarget, foot lock, sequences, props ----
+
+msgid "Templates…"
+msgstr "القوالب…"
+
+msgid "Retarget Clip…"
+msgstr "إعادة توجيه مقطع…"
+
+msgid "Foot Lock…"
+msgstr "تثبيت القدمين…"
+
+msgid "Show Foot Contacts"
+msgstr "إظهار ملامسة القدمين"
+
+msgid "Sequence Editor"
+msgstr "محرر التسلسل"
+
+msgid "Props Panel"
+msgstr "لوحة الأجسام"
+
+msgid "Add Box"
+msgstr "إضافة صندوق"
+
+msgid "Add Sphere"
+msgstr "إضافة كرة"
+
+msgid "Add Cylinder"
+msgstr "إضافة أسطوانة"
+
+msgid "Import Prop…"
+msgstr "استيراد جسم…"
+
+msgid "Attach Prop to Selected Bone"
+msgstr "ربط الجسم بالعظمة المحددة"
+
+msgid "Detach Prop"
+msgstr "فصل الجسم"
+
+msgid "Key Prop"
+msgstr "تسجيل مفتاح للجسم"
+
+msgid "Remove Prop"
+msgstr "حذف الجسم"
+
+msgid "Props"
+msgstr "الأجسام"
+
+msgid "Show or hide the Props panel: add shapes or models, attach them to a bone, move them and key them."
+msgstr "إظهار لوحة الأجسام أو إخفاؤها: أضف أشكالًا أو نماذج، واربطها بعظمة، وحرّكها وسجّل لها مفاتيح."
+
+msgid "Select a prop and a bone first."
+msgstr "حدّد جسمًا وعظمة أولًا."
+
+msgid "Add a character first, then apply a template to it."
+msgstr "أضف شخصية أولًا، ثم طبّق عليها قالبًا."
+
+msgid "Clip added: {0}"
+msgstr "أُضيف المقطع: {0}"
+
+msgid "Create a clip first, then copy it onto another character."
+msgstr "أنشئ مقطعًا أولًا، ثم انسخه إلى شخصية أخرى."
+
+msgid "Add or import a second character first, then copy the clip onto it."
+msgstr "أضف شخصية ثانية أو استورِدها أولًا، ثم انسخ المقطع إليها."
+
+msgid "Key a clip for this character first, then lock its feet."
+msgstr "سجّل مقطعًا لهذه الشخصية أولًا، ثم ثبّت قدميها."
+
+msgid "Box"
+msgstr "صندوق"
+
+msgid "Sphere"
+msgstr "كرة"
+
+msgid "Cylinder"
+msgstr "أسطوانة"
+
+msgid "Import Prop"
+msgstr "استيراد جسم"
+
+msgid "Select a character first."
+msgstr "حدّد شخصية أولًا."
+
+msgid "Prop removed: {0}"
+msgstr "حُذف الجسم: {0}"
+
+msgid "Sequence {0}"
+msgstr "تسلسل {0}"
+
+msgid "New Sequence"
+msgstr "تسلسل جديد"
+
+msgid "Rename Sequence"
+msgstr "إعادة تسمية التسلسل"
+
+msgid "Add a character first, then make a sequence for it."
+msgstr "أضف شخصية أولًا، ثم أنشئ لها تسلسلًا."
+
+msgid "Sequence deleted: {0}"
+msgstr "حُذف التسلسل: {0}"
+
+msgid "That clip animates a different character than this sequence."
+msgstr "هذا المقطع يحرّك شخصية غير شخصية هذا التسلسل."
+
+msgid "Add a clip to the sequence first."
+msgstr "أضف مقطعًا إلى التسلسل أولًا."
+
+msgid "The sequence is too long to bake at once."
+msgstr "التسلسل أطول من أن يُحوَّل إلى مقطع دفعة واحدة."
+
+msgid "This character has no humanoid feet, so the foot phase could not be matched."
+msgstr "لا تملك هذه الشخصية قدمين بشريتين، لذا تعذّرت مطابقة طور القدمين."
+
+msgid "Baked into the clip “{0}”."
+msgstr "تم التحويل إلى المقطع «{0}»."
+
+msgid "Show clip"
+msgstr "إظهار المقطع"
+
+msgid "Clip Templates"
+msgstr "قوالب المقاطع"
+
+msgid "Apply to character"
+msgstr "تطبيق على الشخصية"
+
+msgid "Delete template"
+msgstr "حذف القالب"
+
+msgid "Save clip as template"
+msgstr "حفظ المقطع كقالب"
+
+msgid "Clip name"
+msgstr "اسم المقطع"
+
+msgid "Template name"
+msgstr "اسم القالب"
+
+msgid "Description"
+msgstr "الوصف"
+
+msgid "Save the current clip as a template"
+msgstr "حفظ المقطع الحالي كقالب"
+
+msgid "Start from a ready-made motion: pick a template, choose the character and the length, and Blazma adds it as a new clip and plays it."
+msgstr "ابدأ من حركة جاهزة: اختر قالبًا ثم الشخصية والطول، وسيضيفه Blazma كمقطع جديد ويشغّله."
+
+msgid "Add a character first: a template is applied to a character."
+msgstr "أضف شخصية أولًا: يُطبَّق القالب على شخصية."
+
+msgid "Built-in"
+msgstr "مدمج"
+
+msgid "Project template"
+msgstr "قالب المشروع"
+
+msgid "No description."
+msgstr "لا يوجد وصف."
+
+msgid "Default length {0} s. Loops."
+msgstr "الطول الافتراضي {0} ث. يتكرر."
+
+msgid "Default length {0} s."
+msgstr "الطول الافتراضي {0} ث."
+
+msgid "Default: the template name"
+msgstr "الافتراضي: اسم القالب"
+
+msgid "This character has no humanoid bone mapping, so templates cannot be applied to it. Map its bones first (Rigging > Bone Mapping)."
+msgstr "ليس لهذه الشخصية مطابقة عظام بشرية، لذا لا يمكن تطبيق القوالب عليها. طابِق عظامها أولًا (الهيكلة > مطابقة العظام)."
+
+msgid "The length must be between 0.2 and 30 seconds."
+msgstr "يجب أن يكون الطول بين 0.2 و30 ثانية."
+
+msgid "The template or the character no longer exists."
+msgstr "القالب أو الشخصية لم يعد موجودًا."
+
+msgid "The template could not be applied: {0}"
+msgstr "تعذّر تطبيق القالب: {0}"
+
+msgid "Template deleted."
+msgstr "حُذف القالب."
+
+msgid "Give the template a name."
+msgstr "أعطِ القالب اسمًا."
+
+msgid "This clip's character has no humanoid bone mapping, so it cannot be saved as a template."
+msgstr "ليس لشخصية هذا المقطع مطابقة عظام بشرية، لذا لا يمكن حفظه كقالب."
+
+msgid "The template could not be saved: {0}"
+msgstr "تعذّر حفظ القالب: {0}"
+
+msgid "Saved the template “{0}”."
+msgstr "تم حفظ القالب «{0}»."
+
+msgid "The template keeps the motion of the active clip together with its character's skeleton, so you can apply it to other characters later."
+msgstr "يحتفظ القالب بحركة المقطع النشط مع هيكل شخصيته، فيمكنك تطبيقه على شخصيات أخرى لاحقًا."
+
+msgid "Idle (breathing)"
+msgstr "سكون (تنفّس)"
+
+msgid "Standing idle with breathing and a slight sway; loops."
+msgstr "وقوف ساكن مع تنفّس وتمايل خفيف؛ يتكرر."
+
+msgid "Walk cycle"
+msgstr "دورة مشي"
+
+msgid "Walking forward at about 1.3 m/s; loops (root travels)."
+msgstr "مشي إلى الأمام بسرعة نحو 1.3 م/ث؛ يتكرر (يتحرك الجذر)."
+
+msgid "Run cycle"
+msgstr "دورة جري"
+
+msgid "Running forward with a short flight phase; loops (root travels)."
+msgstr "جري إلى الأمام مع طور طيران قصير؛ يتكرر (يتحرك الجذر)."
+
+msgid "Jump"
+msgstr "قفز"
+
+msgid "Crouch, take off, land and recover in place."
+msgstr "انحناء ثم انطلاق وهبوط واستعادة التوازن في المكان."
+
+msgid "Wave"
+msgstr "تلويح"
+
+msgid "Raise the right hand and wave."
+msgstr "رفع اليد اليمنى والتلويح بها."
+
+msgid "Attack swing"
+msgstr "ضربة هجوم"
+
+msgid "One-handed overhead swing with the right hand: wind-up, strike, follow-through, recovery."
+msgstr "ضربة من فوق الرأس بيد واحدة هي اليمنى: تحضير، فضربة، فمتابعة، فاستعادة."
+
+msgid "Retarget Clip"
+msgstr "إعادة توجيه مقطع"
+
+msgid "Retarget"
+msgstr "إعادة التوجيه"
+
+msgid "Copy a clip onto another character, for example an imported model with different proportions. The original clip is not changed: a new clip is added."
+msgstr "انسخ مقطعًا إلى شخصية أخرى، مثل نموذج مستورد بنسب مختلفة. لا يتغير المقطع الأصلي: يُضاف مقطع جديد."
+
+msgid "Clip to copy"
+msgstr "المقطع المراد نسخه"
+
+msgid "Plays now on"
+msgstr "يعمل الآن على"
+
+msgid "Copy onto"
+msgstr "نسخ إلى"
+
+msgid "Lock the feet on the ground"
+msgstr "تثبيت القدمين على الأرض"
+
+msgid "Keep the feet planted where the original clip has the feet on the ground, so the new character does not slide."
+msgstr "يُبقي القدمين ثابتتين حيث تلمس القدمان الأرض في المقطع الأصلي، فلا تنزلق الشخصية الجديدة."
+
+msgid "New clip name"
+msgstr "اسم المقطع الجديد"
+
+msgid "Default: clip name and target character"
+msgstr "الافتراضي: اسم المقطع والشخصية الهدف"
+
+msgid "Add or import a second character to copy a clip onto it."
+msgstr "أضف شخصية ثانية أو استورِدها لنسخ مقطع إليها."
+
+msgid "Choose a different character to copy onto."
+msgstr "اختر شخصية مختلفة للنسخ إليها."
+
+msgid "One of the characters has no humanoid bone mapping. Map its bones first (Rigging > Bone Mapping)."
+msgstr "إحدى الشخصيتين بلا مطابقة عظام بشرية. طابِق عظامها أولًا (الهيكلة > مطابقة العظام)."
+
+msgid "The clip animates a different character than the one chosen as “Plays now on”."
+msgstr "المقطع يحرّك شخصية غير المختارة في «يعمل الآن على»."
+
+msgid "The clip is too long to copy at once."
+msgstr "المقطع أطول من أن يُنسخ دفعة واحدة."
+
+msgid "The clip could not be copied: {0}"
+msgstr "تعذّر نسخ المقطع: {0}"
+
+msgid "Done. The new clip is selected and playing."
+msgstr "تم. المقطع الجديد محدد ويعمل."
+
+msgid "{0} bones copied."
+msgstr "نُسخت {0} عظمة."
+
+msgid "{0} bones have no match and stay at rest: {1}"
+msgstr "{0} عظمة بلا مقابل وتبقى في وضع الراحة: {1}"
+
+msgid "Feet locked on {0} contacts."
+msgstr "ثُبّتت القدمان عند {0} ملامسة."
+
+msgid "Foot Lock"
+msgstr "تثبيت القدمين"
+
+msgid "Lock feet"
+msgstr "تثبيت القدمين"
+
+msgid "Stop the feet from sliding: wherever a foot rests on the ground, Blazma holds it at one spot. Frames away from a contact keep exactly their pose. Ctrl+Z undoes it."
+msgstr "امنع انزلاق القدمين: أينما استقرت قدم على الأرض يثبّتها Blazma في مكان واحد. الإطارات البعيدة عن الملامسة تبقى بوضعيتها تمامًا. يمكن التراجع بـ Ctrl+Z."
+
+msgid "Ground height"
+msgstr "ارتفاع الأرض"
+
+msgid "Maximum foot speed"
+msgstr "أقصى سرعة للقدم"
+
+msgid "Shortest contact (frames)"
+msgstr "أقصر ملامسة (إطارات)"
+
+msgid "Ease in and out (frames)"
+msgstr "انسيابية الدخول والخروج (إطارات)"
+
+msgid "Show the contacts under the timeline"
+msgstr "إظهار الملامسات تحت الخط الزمني"
+
+msgid "Detect contacts"
+msgstr "كشف الملامسات"
+
+msgid "A foot counts as on the ground when its sole is lower than this."
+msgstr "تُعدّ القدم على الأرض عندما يكون أخمصها أخفض من هذا الارتفاع."
+
+msgid "…and moves slower than this."
+msgstr "…وتتحرك أبطأ من هذه السرعة."
+
+msgid "Shorter contacts are ignored."
+msgstr "تُهمَل الملامسات الأقصر."
+
+msgid "Frames over which the foot eases onto the spot and off it again."
+msgstr "عدد الإطارات التي تنساب فيها القدم نحو المكان ثم تغادره."
+
+msgid "No clip is selected."
+msgstr "لم يُحدَّد أي مقطع."
+
+msgid "Clip: {0}"
+msgstr "المقطع: {0}"
+
+msgid "This character has no humanoid feet to lock. Map its bones first (Rigging > Bone Mapping)."
+msgstr "ليس لهذه الشخصية قدمان بشريتان لتثبيتهما. طابِق عظامها أولًا (الهيكلة > مطابقة العظام)."
+
+msgid "No foot contact found. Try a higher ground height or a higher foot speed."
+msgstr "لم تُعثر على أي ملامسة للقدم. جرّب ارتفاع أرض أكبر أو سرعة قدم أعلى."
+
+msgid "{0} foot contacts found."
+msgstr "عُثر على {0} ملامسة للقدمين."
+
+msgid "Left foot: frames {0}"
+msgstr "القدم اليسرى: الإطارات {0}"
+
+msgid "Right foot: frames {0}"
+msgstr "القدم اليمنى: الإطارات {0}"
+
+msgid "Locked {0} foot contacts."
+msgstr "تم تثبيت {0} ملامسة."
+
+msgid "The feet stay within {0} mm of their spot. Frames outside the contacts changed by at most {1} mm."
+msgstr "تبقى القدمان ضمن {0} مم من مكانهما. الإطارات خارج الملامسات تغيّرت بما لا يتجاوز {1} مم."
+
+msgid "Feet locked. Ctrl+Z undoes it."
+msgstr "ثُبّتت القدمان. Ctrl+Z يتراجع عنه."
+
+msgid "No foot contact found in that range. Try a higher ground height or a higher foot speed."
+msgstr "لم تُعثر على ملامسة للقدم في هذا النطاق. جرّب ارتفاع أرض أكبر أو سرعة قدم أعلى."
+
+msgid "The feet have no leg IK, so they cannot be locked."
+msgstr "ليس للقدمين IK للساق، لذا لا يمكن تثبيتهما."
+
+msgid "A track needed for the lock is locked. Unlock it in the dope sheet first."
+msgstr "مسار لازم للتثبيت مقفل. افتح قفله في ورقة المفاتيح أولًا."
+
+msgid "A track needed for the lock is muted. Unmute it in the dope sheet first."
+msgstr "مسار لازم للتثبيت مكتوم. ألغِ كتمه في ورقة المفاتيح أولًا."
+
+msgid "That range is too long. Lock a shorter range."
+msgstr "هذا النطاق طويل جدًا. ثبّت نطاقًا أقصر."
+
+msgid "Foot lock failed: {0}"
+msgstr "فشل تثبيت القدمين: {0}"
+
+msgid "Foot contacts"
+msgstr "ملامسة القدمين"
+
+msgid "Left foot"
+msgstr "القدم اليسرى"
+
+msgid "Right foot"
+msgstr "القدم اليمنى"
+
+msgid "{0}: frames {1}–{2}"
+msgstr "{0}: الإطارات {1}–{2}"
+
+msgid "Import .glb…"
+msgstr "استيراد ‎.glb…"
+
+msgid "Add a box prop of the size below."
+msgstr "أضف جسمًا صندوقيًا بالحجم أدناه."
+
+msgid "Add a sphere prop (its diameter is the first size)."
+msgstr "أضف جسمًا كرويًا (قطره هو الحجم الأول)."
+
+msgid "Add a cylinder prop (diameter = first size, length = second size)."
+msgstr "أضف جسمًا أسطوانيًا (القطر = الحجم الأول، الطول = الحجم الثاني)."
+
+msgid "Add a prop from a .glb model file. The model is stored inside the project."
+msgstr "أضف جسمًا من ملف نموذج ‎.glb. يُخزَّن النموذج داخل المشروع."
+
+msgid "Use selected bone"
+msgstr "استخدام العظمة المحددة"
+
+msgid "Pick the bone that is selected in the viewport."
+msgstr "اختر العظمة المحددة في منفذ العرض."
+
+msgid "Attach to bone"
+msgstr "ربط بعظمة"
+
+msgid "Move to this bone"
+msgstr "نقل إلى هذه العظمة"
+
+msgid "Detach"
+msgstr "فصل"
+
+msgid "Keep its place in the world"
+msgstr "إبقاؤه في مكانه من العالم"
+
+msgid "Off: the prop jumps to the bone. On: it stays where it is and follows the bone from there."
+msgstr "معطّل: يقفز الجسم إلى العظمة. مفعّل: يبقى حيث هو ويتبع العظمة من هناك."
+
+msgid "Key prop"
+msgstr "مفتاح للجسم"
+
+msgid "Record the prop's position and rotation as a key at this frame (K)."
+msgstr "سجّل موضع الجسم وتدويره كمفتاح عند هذا الإطار (K)."
+
+msgid "Remove prop"
+msgstr "حذف الجسم"
+
+msgid "No props yet. Add a shape below, or import a model."
+msgstr "لا توجد أجسام بعد. أضف شكلًا أدناه أو استورِد نموذجًا."
+
+msgid "Add a prop"
+msgstr "إضافة جسم"
+
+msgid "Name (optional)"
+msgstr "الاسم (اختياري)"
+
+msgid "Name of the new prop (optional). The name is also used in the exported file."
+msgstr "اسم الجسم الجديد (اختياري). يُستخدم الاسم أيضًا في الملف المصدَّر."
+
+msgid "Size"
+msgstr "الحجم"
+
+msgid "Width (box) or diameter (sphere, cylinder), in metres."
+msgstr "العرض (صندوق) أو القطر (كرة، أسطوانة)، بالمتر."
+
+msgid "Height (box) or length (cylinder), in metres."
+msgstr "الارتفاع (صندوق) أو الطول (أسطوانة)، بالمتر."
+
+msgid "Depth (box), in metres."
+msgstr "العمق (صندوق)، بالمتر."
+
+msgid "Position X"
+msgstr "الموضع X"
+
+msgid "Position Y"
+msgstr "الموضع Y"
+
+msgid "Position Z"
+msgstr "الموضع Z"
+
+msgid "Rotation X"
+msgstr "التدوير X"
+
+msgid "Rotation Y"
+msgstr "التدوير Y"
+
+msgid "Rotation Z"
+msgstr "التدوير Z"
+
+msgid "Close the Props panel"
+msgstr "إغلاق لوحة الأجسام"
+
+msgid "Attached to {0}"
+msgstr "مربوط بـ {0}"
+
+msgid "a bone that no longer exists"
+msgstr "عظمة لم تعد موجودة"
+
+msgid "Not attached: it stays where you put it in the scene."
+msgstr "غير مربوط: يبقى حيث وضعته في المشهد."
+
+msgid "Offset from the bone"
+msgstr "الإزاحة عن العظمة"
+
+msgid "Position in the scene"
+msgstr "الموضع في المشهد"
+
+msgid "Box, {0} × {1} × {2} m"
+msgstr "صندوق، {0} × {1} × {2} م"
+
+msgid "Sphere, diameter {0} m"
+msgstr "كرة، القطر {0} م"
+
+msgid "Cylinder, diameter {0} m, length {1} m"
+msgstr "أسطوانة، القطر {0} م، الطول {1} م"
+
+msgid "Model, about {0} × {1} × {2} m"
+msgstr "نموذج، نحو {0} × {1} × {2} م"
+
+msgid "Sequence"
+msgstr "التسلسل"
+
+msgid "New…"
+msgstr "جديد…"
+
+msgid "Create an empty sequence for the selected character."
+msgstr "أنشئ تسلسلًا فارغًا للشخصية المحددة."
+
+msgid "Delete the sequence. The clips stay. Ctrl+Z brings it back."
+msgstr "احذف التسلسل. تبقى المقاطع. Ctrl+Z يعيده."
+
+msgid "Continue from the previous clip"
+msgstr "المتابعة من المقطع السابق"
+
+msgid "Each clip starts where the previous one left the character, instead of jumping back to its own start."
+msgstr "يبدأ كل مقطع من حيث ترك السابق الشخصية، بدل القفز إلى بدايته هو."
+
+msgid "Keep facing"
+msgstr "إبقاء الاتجاه"
+
+msgid "Also turn each clip to face the way the character already faces."
+msgstr "أدِر كل مقطع أيضًا ليواجه الاتجاه الذي تواجهه الشخصية."
+
+msgid "Add clip"
+msgstr "إضافة مقطع"
+
+msgid "Add the chosen clip at the end of the sequence, fading in over the end of the previous one."
+msgstr "أضف المقطع المختار في نهاية التسلسل، يظهر تدريجيًا فوق نهاية السابق."
+
+msgid "Match foot phase"
+msgstr "مطابقة طور القدمين"
+
+msgid "Start the new clip at the point of its stride that fits the feet at the transition, so they slide less."
+msgstr "ابدأ المقطع الجديد من نقطة الخطوة التي تناسب القدمين عند الانتقال، فينزلقان أقل."
+
+msgid "Play"
+msgstr "تشغيل"
+
+msgid "Stop"
+msgstr "إيقاف"
+
+msgid "Play the sequence in the viewport (Space)."
+msgstr "شغّل التسلسل في منفذ العرض (Space)."
+
+msgid "Bake to clip"
+msgstr "تحويل إلى مقطع"
+
+msgid "Turn the sequence into a normal clip that plays exactly the same. The sequence stays."
+msgstr "حوّل التسلسل إلى مقطع عادي يعمل بالطريقة نفسها تمامًا. يبقى التسلسل."
+
+msgid "Also lock the feet on the ground in the baked clip."
+msgstr "ثبّت القدمين على الأرض في المقطع الناتج أيضًا."
+
+msgid "Export…"
+msgstr "تصدير…"
+
+msgid "Bake the sequence into a clip, then open the export dialog for it."
+msgstr "حوّل التسلسل إلى مقطع ثم افتح نافذة التصدير له."
+
+msgid "Start"
+msgstr "البداية"
+
+msgid "From"
+msgstr "من"
+
+msgid "To"
+msgstr "إلى"
+
+msgid "Speed"
+msgstr "السرعة"
+
+msgid "Repeat"
+msgstr "التكرار"
+
+msgid "Fade in"
+msgstr "التلاشي الداخل"
+
+msgid "Sequence frame where this clip starts."
+msgstr "إطار التسلسل الذي يبدأ عنده هذا المقطع."
+
+msgid "First frame of the clip that is played."
+msgstr "أول إطار من المقطع يُشغَّل."
+
+msgid "Frame of the clip where each pass ends."
+msgstr "إطار المقطع الذي ينتهي عنده كل تشغيل."
+
+msgid "Playback speed: 2 is twice as fast."
+msgstr "سرعة التشغيل: 2 تعني ضعف السرعة."
+
+msgid "How many times the part from “From” to “To” is played."
+msgstr "عدد مرات تشغيل الجزء من «من» إلى «إلى»."
+
+msgid "Frames over which this clip fades in over the previous clips."
+msgstr "عدد الإطارات التي يظهر فيها هذا المقطع تدريجيًا فوق المقاطع السابقة."
+
+msgid "Smooth"
+msgstr "سلس"
+
+msgid "Ease in"
+msgstr "بطيء البداية"
+
+msgid "Ease out"
+msgstr "بطيء النهاية"
+
+msgid "How the fade-in progresses. Smooth keeps the motion free of sudden speed changes."
+msgstr "كيف يتقدّم الظهور التدريجي. «سلس» يُبقي الحركة خالية من تغيّرات السرعة المفاجئة."
+
+msgid "Remove clip"
+msgstr "إزالة المقطع"
+
+msgid "Remove this clip from the sequence. The clip itself is not deleted."
+msgstr "أزل هذا المقطع من التسلسل. لا يُحذف المقطع نفسه."
+
+msgid "No sequence yet"
+msgstr "لا يوجد تسلسل بعد"
+
+msgid "This character has no clips to add yet. Key or generate a clip first."
+msgstr "ليس لهذه الشخصية مقاطع لإضافتها بعد. سجّل مقطعًا أو ولّده أولًا."
+
+msgid "{0} items could not be played and are skipped."
+msgstr "تعذّر تشغيل {0} عنصر وتم تخطيه."
+
+msgid "Track A"
+msgstr "المسار أ"
+
+msgid "Track B"
+msgstr "المسار ب"
+
+msgid "No sequence yet. Press New to make one, then add clips."
+msgstr "لا يوجد تسلسل بعد. اضغط «جديد» لإنشاء واحد ثم أضف مقاطع."
+
+msgid "Add a clip to start this sequence."
+msgstr "أضف مقطعًا لبدء هذا التسلسل."
+
+msgid "This sequence cannot be played: a clip or the character it uses is missing or does not fit."
+msgstr "لا يمكن تشغيل هذا التسلسل: مقطع أو الشخصية التي يستخدمها مفقودة أو غير مناسبة."
+
+msgid "{0}: starts at frame {1}, fade-in {2} frames, speed {3}, repeats {4}"
+msgstr "{0}: يبدأ عند الإطار {1}، التلاشي {2} إطارًا، السرعة {3}، التكرار {4}"
+
+msgid "Drag to change the fade-in length."
+msgstr "اسحب لتغيير طول الظهور التدريجي."
+
+msgid "Drag to change the speed."
+msgstr "اسحب لتغيير السرعة."
+
+msgid "Drag to move this clip in time."
+msgstr "اسحب لتحريك هذا المقطع في الزمن."
+
+msgid "Start from a ready-made motion: idle, walk, run, jump, wave, attack. Apply it to a character as a new clip."
+msgstr "ابدأ من حركة جاهزة: سكون، مشي، جري، قفز، تلويح، هجوم. طبّقها على شخصية كمقطع جديد."
+
+msgid "Foot lock…"
+msgstr "تثبيت القدمين…"
+
+msgid "Stop the feet from sliding on the ground in this clip."
+msgstr "امنع انزلاق القدمين على الأرض في هذا المقطع."
+
+msgid "Retarget…"
+msgstr "إعادة توجيه…"
+
+msgid "Copy a clip onto another character."
+msgstr "انسخ مقطعًا إلى شخصية أخرى."
+
+msgid "Show foot contacts"
+msgstr "إظهار ملامسة القدمين"
+msgid "Too many clips blend at the same time (at most 8). Move a clip so fewer overlap."
+msgstr "تتمازج مقاطع كثيرة في الوقت نفسه (8 كحد أقصى). حرّك مقطعًا ليتداخل عدد أقل."
+
+msgid "This file is not a valid .glb model."
+msgstr "هذا الملف ليس نموذج ‎.glb صالحًا."
+
+msgid "This kind of model file is not supported."
+msgstr "هذا النوع من ملفات النماذج غير مدعوم."
+
+msgid "Something went wrong inside Blazma. Your project is unchanged. Please try again."
+msgstr "حدث خطأ داخل Blazma. مشروعك لم يتغير. حاول مرة أخرى."
+
+msgid "The sequence is too big: it has too many clips or is too long to process."
+msgstr "التسلسل كبير جدًا: فيه مقاطع كثيرة أو هو أطول من أن يُعالَج."
+
+msgid "This sequence is too big to play: it has too many clips or is too long."
+msgstr "هذا التسلسل كبير جدًا للتشغيل: فيه مقاطع كثيرة أو هو طويل جدًا."
+

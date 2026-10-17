@@ -128,8 +128,10 @@ public partial class AppController : Node
     {
         _version++;
         BeforeSessionNotify(args);
+        Phase8Before(args);
         SessionChanged?.Invoke(args);
         AfterSessionNotify(args);
+        Phase8After(args);
     }
 
     // ---- Files -------------------------------------------------------------------------------

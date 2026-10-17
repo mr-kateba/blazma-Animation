@@ -150,7 +150,9 @@ public partial class MainWindow
         Timeline.Canvas.QueueRedraw(); Timeline.Dope.QueueRedraw(); Timeline.Graph.Canvas.QueueRedraw();
         Timeline.KeyPoses.Rebuild(true);
         Timeline.Graph.Rebuild(true);
+        SyncPropsUi();
         SyncPhysicsUi();
+        Timeline.Contacts.Sync();
     }
 
     // ---- hooks into the shell -----------------------------------------------------------------------------------------
@@ -177,11 +179,12 @@ public partial class MainWindow
 
     // ---- keying actions ------------------------------------------------------------------------------------------------
 
-    public bool KeyAll() => App.KeyAtCurrent(null);
+    public bool KeyAll() => Selection.PropId is { } propId ? App.KeyPropAtCurrent(propId) : App.KeyAtCurrent(null);
 
     /// <summary>Key only the selected bone, or the selected IK control with the bones it drives.</summary>
     public bool KeySelected()
     {
+        if (Selection.PropId is { } propId) return App.KeyPropAtCurrent(propId);
         if (SelectedCharacter is not { } c) return App.KeyAtCurrent(null);
         string[]? targets = null;
         if (Selection.BoneId is { } b) targets = new[] { b };

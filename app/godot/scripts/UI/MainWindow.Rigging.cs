@@ -46,6 +46,7 @@ public partial class MainWindow
         Overlay.Gizmo.DragEnded += AfterTransaction;
         Selection.Changed += OnSelectionChanged;
         Selection.Changed += () => App.SetFocusCharacter(Selection.CharacterId);
+        BuildPropLayer();
     }
 
     void BuildRigDialogs()

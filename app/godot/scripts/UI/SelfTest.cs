@@ -320,6 +320,14 @@ public partial class SelfTest : Node
         await Settle();
         await ShotMenu(1, "en-dark-menu-edit");
 
+        if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_P8") == "1")
+        {
+            // Development shortcut: only the Phase 8 scenario (it starts from a new project).
+            await RunPhase8();
+            Finish();
+            return;
+        }
+
         // Phase 2: characters, posing, IK, pose library, import and bone mapping.
         await RunPhase2();
 
@@ -337,6 +345,9 @@ public partial class SelfTest : Node
 
         // Phase 7: text-to-motion dialog, drafts, AI settings.
         await RunPhase7();
+
+        // Phase 8: templates, retarget, foot lock, sequences, props.
+        await RunPhase8();
 
         // Restore the user's settings.
         App.SetLanguage(backup.Language); App.SetTheme(backup.Theme); App.SetAdvancedMode(backup.AdvancedMode);

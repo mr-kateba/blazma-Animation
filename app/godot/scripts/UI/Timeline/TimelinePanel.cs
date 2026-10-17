@@ -12,13 +12,23 @@ namespace Blazma.UI.Views;
 /// </summary>
 public partial class TimelinePanel : PanelContainer
 {
-    public const int TabTimeline = 0, TabDope = 1, TabGraph = 2, TabClips = 3, TabPoses = 4;
+    public const int TabTimeline = 0, TabDope = 1, TabGraph = 2, TabClips = 3, TabPoses = 4, TabSequence = 5;
 
     readonly MainWindow _host;
     public ClipStrip Strip { get; }
     public TimelineCanvas Canvas { get; }
     public KeyPoseStrip KeyPoses { get; }
     public BalanceStrip Balance { get; }
+    /// <summary>Phase 8: foot contacts under the canvas.</summary>
+    public ContactStrip Contacts { get; }
+    /// <summary>Phase 8: the sequence editor (Advanced).</summary>
+    public SequenceView Sequence { get; }
+    /// <summary>Phase 8: opens the Templates browser (prominent in Simple mode).</summary>
+    public Button TemplatesButton { get; }
+    /// <summary>Phase 8: opens the Foot lock dialog.</summary>
+    public Button FootLockButton { get; }
+    /// <summary>Phase 8: opens the Retarget dialog (Advanced).</summary>
+    public Button RetargetButton { get; }
     public DopeSheetView Dope { get; }
     public GraphView Graph { get; }
     public Segmented Tabs { get; }
@@ -67,7 +77,7 @@ public partial class TimelinePanel : PanelContainer
         // header: tabs, clip picker, add marker
         var head = new HBoxContainer { LayoutDirection = LayoutDirectionEnum.Locale };
         head.AddThemeConstantOverride("separation", 10);
-        Tabs = new Segmented("Timeline", "Dope Sheet", "Graph", "Clips", "Poses");
+        Tabs = new Segmented("Timeline", "Dope Sheet", "Graph", "Clips", "Poses", "Sequence");
         Tabs.Selected += i => SelectTab(i);
         head.AddChild(Tabs);
         var clipLabel = W.Label("Clip", "Dim");
@@ -94,10 +104,22 @@ public partial class TimelinePanel : PanelContainer
         draft.Visible = false;
         DraftBar = draft; // placed in the transport row below (the header has no room for it next to the AI dock)
         head.AddChild(W.Spacer());
+        TemplatesButton = new Button { Text = "Templates…", ThemeTypeVariation = "Primary", FocusMode = FocusModeEnum.None,
+            TooltipText = "Start from a ready-made motion: idle, walk, run, jump, wave, attack. Apply it to a character as a new clip." };
+        TemplatesButton.Pressed += () => _host.OpenTemplatesDialog();
+        head.AddChild(TemplatesButton);
         GenerateButton = new Button { Text = "Generate motion…", ThemeTypeVariation = "Primary", FocusMode = FocusModeEnum.None,
             TooltipText = "Describe a movement in words and add it to your project as a draft clip." };
         GenerateButton.Pressed += () => _host.OpenGenerateDialog();
         head.AddChild(GenerateButton);
+        FootLockButton = new Button { Text = "Foot lock…", ThemeTypeVariation = "Transport", FocusMode = FocusModeEnum.None,
+            TooltipText = "Stop the feet from sliding on the ground in this clip." };
+        FootLockButton.Pressed += () => _host.OpenFootLockDialog();
+        head.AddChild(FootLockButton);
+        RetargetButton = new Button { Text = "Retarget…", ThemeTypeVariation = "Transport", FocusMode = FocusModeEnum.None,
+            TooltipText = "Copy a clip onto another character." };
+        RetargetButton.Pressed += () => _host.OpenRetargetDialog();
+        head.AddChild(RetargetButton);
         AddMarkerButton = new Button { Text = "+ Marker", ThemeTypeVariation = "Transport", FocusMode = FocusModeEnum.None,
             TooltipText = "Add a marker at the playhead. Double-click a marker to rename it." };
         AddMarkerButton.Pressed += () => _host.AddMarkerAtPlayhead();
@@ -165,15 +187,18 @@ public partial class TimelinePanel : PanelContainer
         Canvas = new TimelineCanvas(host) { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         KeyPoses = new KeyPoseStrip(host) { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
         Balance = new BalanceStrip(host, Canvas) { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        Contacts = new ContactStrip(host, Canvas) { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         tl.AddChild(Canvas);
         tl.AddChild(Balance);
+        tl.AddChild(Contacts);
         tl.AddChild(KeyPoses);
         _timelineTab = tl;
         Dope = new DopeSheetView(host);
         Graph = new GraphView(host);
         Strip = new ClipStrip(host);
         Strip.Embed();
-        foreach (var c in new Control[] { tl, Dope, Graph, Strip }) { W.Fill(c); stack.AddChild(c); }
+        Sequence = new SequenceView(host);
+        foreach (var c in new Control[] { tl, Dope, Graph, Strip, Sequence }) { W.Fill(c); stack.AddChild(c); }
         root.AddChild(stack);
 
         App.PlaybackChanged += Sync;
@@ -208,26 +233,31 @@ public partial class TimelinePanel : PanelContainer
 
     public void SelectTab(int index)
     {
-        if (index == TabGraph && !App.Settings.AdvancedMode) index = TabTimeline;
+        if (index is TabGraph or TabSequence && !App.Settings.AdvancedMode) index = TabTimeline;
         _tab = index;
         Tabs.SetIndex(_tab);
         _timelineTab.Visible = _tab == TabTimeline;
         Dope.Visible = _tab == TabDope;
         Graph.Visible = _tab == TabGraph;
-        Strip.Visible = _tab >= TabClips;
+        Strip.Visible = _tab is TabClips or TabPoses;
+        Sequence.Visible = _tab == TabSequence;
         _transport.Visible = _tab <= TabGraph;
         AddMarkerButton.Visible = _tab <= TabGraph;
-        if (_tab >= TabClips) Strip.SetPosesMode(_tab == TabPoses);
+        if (_tab is TabClips or TabPoses) Strip.SetPosesMode(_tab == TabPoses);
+        App.SetSequenceMode(_tab == TabSequence);
+        if (_tab == TabSequence) Sequence.Sync();
         if (_tab == TabGraph) Graph.Rebuild(true);
         Dope.QueueRedraw(); Canvas.QueueRedraw();
-        CustomMinimumSize = new Vector2(0, _tab switch { TabDope => 336, TabGraph => 350, _ => 284 });
+        CustomMinimumSize = new Vector2(0, _tab switch { TabDope => 336, TabGraph => 350, TabSequence => 336, _ => 284 });
     }
 
     /// <summary>Graph is an Advanced-mode tab.</summary>
     public void ApplyMode(bool advanced)
     {
         Tabs[TabGraph].Visible = advanced;
-        if (!advanced && _tab == TabGraph) SelectTab(TabTimeline);
+        Tabs[TabSequence].Visible = advanced;
+        RetargetButton.Visible = advanced;
+        if (!advanced && _tab is TabGraph or TabSequence) SelectTab(TabTimeline);
     }
 
     // ---- sync ------------------------------------------------------------------------------------------------------------------
@@ -253,13 +283,19 @@ public partial class TimelinePanel : PanelContainer
         var dirty = App.PoseDirty;
         UnkeyedDot.Visible = dirty;
         UnkeyedDot.SetColor(_host.Palette.Warn);
-        KeyButton.TooltipText = Tr("Key the whole pose at this frame (K). Shift+K keys only the selected bone or control.")
+        var propKey = _host.Selection.PropId is not null;
+        KeyButton.TooltipText = propKey ? Tr("Record the prop's position and rotation as a key at this frame (K).")
+            : Tr("Key the whole pose at this frame (K). Shift+K keys only the selected bone or control.")
             + (dirty ? "\n" + Tr("Unkeyed changes are lost when you change frame") : "");
-        KeyButton.Disabled = _host.SelectedCharacter is null;
+        KeyButton.Disabled = _host.SelectedCharacter is null && _host.Selection.PropId is null;
+        KeyButton.Text = propKey ? "Key prop" : "Key";
         DeleteKeyButton.Disabled = clip is null;
         DraftBar.Visible = clip is { IsDraft: true };
         _draftLabel.AddThemeColorOverride("font_color", _host.Palette.Accent);
         GenerateButton.Disabled = App.Session.Project.Characters.Count == 0;
+        TemplatesButton.Disabled = App.Session.Project.Characters.Count == 0;
+        FootLockButton.Disabled = clip is null || !App.Physics.TryResolve(out _, out _, out _);
+        RetargetButton.Disabled = App.Session.Project.Clips.Count == 0 || App.Session.Project.Characters.Count < 2;
     }
 
     void OnFrameTyped(string text)

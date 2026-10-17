@@ -25,6 +25,10 @@ public sealed class AppSettings
     public bool ShowPhysicsPaths { get; set; }
     /// <summary>Phase 6: the Physics panel is open.</summary>
     public bool PhysicsPanel { get; set; }
+    /// <summary>Phase 8: foot contact spans as a thin strip under the timeline.</summary>
+    public bool ShowContacts { get; set; }
+    /// <summary>Phase 8: the Props panel is open.</summary>
+    public bool PropsPanel { get; set; }
     public List<string> RecentFiles { get; } = new();
     /// <summary>Folder of the last animation export (Phase 4).</summary>
     public string LastExportDir { get; set; } = "";
@@ -62,6 +66,8 @@ public sealed class AppSettings
         ShowPhysics = (bool)cfg.GetValue("ui", "show_physics", ShowPhysics);
         ShowPhysicsPaths = (bool)cfg.GetValue("ui", "show_physics_paths", ShowPhysicsPaths);
         PhysicsPanel = (bool)cfg.GetValue("ui", "physics_panel", PhysicsPanel);
+        ShowContacts = (bool)cfg.GetValue("ui", "show_contacts", ShowContacts);
+        PropsPanel = (bool)cfg.GetValue("ui", "props_panel", PropsPanel);
         AutosaveMinutes = Math.Clamp((int)cfg.GetValue("files", "autosave_minutes", AutosaveMinutes), 0, 60);
         RecentFiles.Clear();
         RecentFiles.AddRange(((string[])cfg.GetValue("files", "recent", Array.Empty<string>())).Take(MaxRecent));
@@ -93,6 +99,8 @@ public sealed class AppSettings
         cfg.SetValue("ui", "show_physics", ShowPhysics);
         cfg.SetValue("ui", "show_physics_paths", ShowPhysicsPaths);
         cfg.SetValue("ui", "physics_panel", PhysicsPanel);
+        cfg.SetValue("ui", "show_contacts", ShowContacts);
+        cfg.SetValue("ui", "props_panel", PropsPanel);
         cfg.SetValue("files", "autosave_minutes", AutosaveMinutes);
         cfg.SetValue("files", "recent", RecentFiles.ToArray());
         cfg.SetValue("files", "last_export_dir", LastExportDir);

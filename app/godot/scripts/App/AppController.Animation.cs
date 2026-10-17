@@ -141,6 +141,7 @@ public partial class AppController
     /// <summary>Go to a frame (scrubbing). Stops playback; shows the clip's pose there when the clip has keys.</summary>
     public void GoToFrame(long frame)
     {
+        if (_seqMode) { SetSequenceFrame(frame); return; }
         if (_playing) _playing = false;
         _frame = Math.Clamp(frame, 0, Math.Max(0, FrameCount - 1));
         _playFrames = _frame;
@@ -148,10 +149,10 @@ public partial class AppController
         PlaybackChanged?.Invoke();
     }
 
-    public void StepFrames(int delta) => GoToFrame(_frame + delta);
+    public void StepFrames(int delta) => GoToFrame((_seqMode ? (long)_seqFrame : _frame) + delta);
 
     public void GoToStart() => GoToFrame(0);
-    public void GoToEnd() => GoToFrame(FrameCount - 1);
+    public void GoToEnd() => GoToFrame(_seqMode ? SequenceLastFrame : FrameCount - 1);
 
     /// <summary>Distinct key frames of the active clip, sorted.</summary>
     public IReadOnlyList<long> ActiveKeyFrames() => ActiveClip is { } c ? ClipEvaluator.KeyFrames(c) : Array.Empty<long>();
@@ -177,6 +178,7 @@ public partial class AppController
     /// </summary>
     public bool ApplyFrame()
     {
+        if (_seqMode) return false; // the sequence editor owns the pose while it is shown
         var clip = ActiveClip;
         var character = FocusCharacter;
         if (clip is null || character is null || !HasKeys(clip) || clip.Skeleton != character.Rig) return false;
@@ -228,6 +230,7 @@ public partial class AppController
 
     public void TogglePlay()
     {
+        if (_seqMode) { ToggleSequencePlay(); return; }
         if (_playing) Pause(); else Play();
     }
 
@@ -277,6 +280,7 @@ public partial class AppController
     /// <summary>Advance playback by real elapsed time. Called from _Process; the self-test calls it with fixed steps.</summary>
     public void AdvancePlayback(double delta)
     {
+        if (_seqPlaying) { AdvanceSequence(delta); return; }
         if (!_playing) return;
         var clip = ActiveClip;
         if (clip is null || !HasKeys(clip)) { StopPlaying(); PlaybackChanged?.Invoke(); return; }

@@ -99,6 +99,7 @@ public partial class MainWindow : Control
         OnSettingsChanged();
         SelectFirstIfNone();
         InitCharacters();
+        Props.Rebuild();
         RefreshAll();
 
         CallDeferred(nameof(StartupChecks));
@@ -145,7 +146,7 @@ public partial class MainWindow : Control
     }
 
     /// <summary>Top-level menu popup by index (Project, Edit, Animation, Rigging, Settings); used by screenshot tests.</summary>
-    public PopupMenu MenuPopup(int index) => index switch { 0 => _mProject, 1 => _mEdit, 2 => _mAnim, 3 => _mRigging, 5 => _mPhysics, _ => _mSettings };
+    public PopupMenu MenuPopup(int index) => index switch { 0 => _mProject, 1 => _mEdit, 2 => _mAnim, 3 => _mRigging, 5 => _mPhysics, 7 => _mProps, _ => _mSettings };
 
     // ---- UI construction ---------------------------------------------------------------------
 
@@ -208,7 +209,9 @@ public partial class MainWindow : Control
         PhysicsPanelNode.SizeFlagsHorizontal = SizeFlags.Fill;
         _rightDock = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.Fill, SizeFlagsVertical = SizeFlags.ExpandFill };
         _rightDock.AddThemeConstantOverride("separation", 10);
+        PropsPanelNode.SizeFlagsHorizontal = SizeFlags.Fill;
         _rightDock.AddChild(PhysicsPanelNode);
+        _rightDock.AddChild(PropsPanelNode);
         _rightDock.AddChild(HistoryPanel);
         _splitInner.AddChild(_rightDock);
 
@@ -269,6 +272,7 @@ public partial class MainWindow : Control
         row.AddChild(_segMode);
         row.AddChild(_segLang);
         row.AddChild(_segTheme);
+        row.AddChild(BuildPropsPanelToggle());
         row.AddChild(BuildPhysicsPanelToggle());
         row.AddChild(BuildAiButton());
 
@@ -346,10 +350,12 @@ public partial class MainWindow : Control
         _mAnim = new PopupMenu { Name = "Animation" };
         _mRigging = new PopupMenu { Name = "Rigging" };
         _mPhysics = new PopupMenu { Name = "Physics" };
+        _mProps = new PopupMenu { Name = "Props" };
         _mSettings = new PopupMenu { Name = "Settings" };
-        foreach (var m in new[] { _mProject, _mEdit, _mAnim, _mRigging, _mPhysics, _mSettings }) _menuBar.AddChild(m);
+        foreach (var m in new[] { _mProject, _mEdit, _mAnim, _mRigging, _mPhysics, _mProps, _mSettings }) _menuBar.AddChild(m);
         BuildRiggingMenu();
         BuildPhysicsMenu();
+        BuildPropsMenu();
 
         _mProject.AddItem("New", MNew);
         _mProject.AddItem("Open…", MOpen);
@@ -385,6 +391,7 @@ public partial class MainWindow : Control
         _mAnim.AddItem("Delete Clip", MDeleteClip);
         BuildMotionMenu();
         BuildAnimationMenu();
+        BuildPhase8AnimationMenu();
         _mAnim.AboutToPopup += UpdateMenus;
         _mAnim.IdPressed += id => OnMenu((int)id);
 
@@ -432,6 +439,7 @@ public partial class MainWindow : Control
             case MNewClip: PromptNewClip(); break;
             case MRenameClip: if (SelectedClipId is { } r) PromptRenameClip(r); break;
             case MDeleteClip: if (SelectedClipId is { } d) ConfirmDeleteClip(d); break;
+            case >= MTemplates and <= MSeqEditor: OnPhase8Menu(id); break;
             case >= MGenMotion and <= MDiscardDraft: OnMotionMenu(id); break;
             case MAgentAllow: App.SetAllowAgents(!App.Settings.AllowAgents); break;
             case MAgentFolders: ShowAgentFolders(); break;
@@ -490,10 +498,12 @@ public partial class MainWindow : Control
         _menuBar.SetMenuTitle(2, Tr("Animation"));
         _menuBar.SetMenuTitle(3, Tr("Rigging"));
         _menuBar.SetMenuTitle(4, Tr("Physics"));
-        _menuBar.SetMenuTitle(5, Tr("Settings"));
+        _menuBar.SetMenuTitle(5, Tr("Props"));
+        _menuBar.SetMenuTitle(6, Tr("Settings"));
         UpdateRiggingMenu();
         UpdatePhysicsMenu();
         UpdateMotionMenu();
+        UpdatePhase8Menu();
     }
 
     static void SetItemText(PopupMenu m, int id, string text, bool disabled)
@@ -556,6 +566,7 @@ public partial class MainWindow : Control
         AddChild(ExportDlg);
         BuildPhysicsDialogs();
         BuildMotionDialogs();
+        BuildPhase8Dialogs();
     }
 
     /// <summary>Text is translated here, then the dialog's own auto-translation is off so user content is never "translated".</summary>
@@ -780,7 +791,7 @@ public partial class MainWindow : Control
         ValidateSelection(replaced);
         if (activeBefore != SelectedClipId) Timeline.SyncClips(); // the selection was repaired silently (for example a first generated clip)
         // Pose edits (gizmo drags fire one per mouse step) only touch the 3D view, the inspector and the status.
-        var poseOnly = args.Changes.All(c => c.Kind is Change.PoseChanged or Change.SaveStateChanged);
+        var poseOnly = args.Changes.All(c => c.Kind is Change.PoseChanged or Change.SaveStateChanged or Change.PropChanged or Change.SequenceChanged or Change.TemplateChanged);
         // Key / marker / curve edits that do not change the clip list only touch the timeline, the inspector and the status.
         var sig = ClipSignature();
         var clipLight = !replaced && !poseOnly && sig == _clipSig
@@ -810,6 +821,7 @@ public partial class MainWindow : Control
         UpdateStatus();
         UpdateChip();
         UpdateMenus();
+        RefreshPhase8Ui();
     }
 
     void UpdateChip()
@@ -854,6 +866,7 @@ public partial class MainWindow : Control
         Gizmo.Bind(Stage.Camera, _palette);
         Overlay.SetPalette(_palette);
         Characters.SetPalette(_palette);
+        Props.SetPalette(_palette);
         Inspector.ApplyPaletteToFields(_palette);
 
         _segMode.SetIndex(s.AdvancedMode ? 1 : 0);
@@ -916,6 +929,7 @@ public partial class MainWindow : Control
     {
         _lastError = message;
         if (_suppressToast) return;
+        if (CodeMessage(App.LastErrorCode) is { } friendly) { _toast.Notify(friendly, _palette.Err); return; }
         if (App.LastErrorCode == "driven_by_ik") { ShowDrivenToast(); return; }
         if (App.LastErrorCode == "rig_mismatch") { _toast.Notify(Tr("This clip animates a different character. Pick or create another clip for this one."), _palette.Err); return; }
         if (App.LastErrorCode == "track_locked") { _toast.Notify(Tr("That channel is locked. Unlock it in the dope sheet first."), _palette.Err); return; }
@@ -1026,6 +1040,12 @@ public partial class MainWindow : Control
     public override void _UnhandledKeyInput(InputEvent e)
     {
         if (HandleToolKey(e)) { GetViewport().SetInputAsHandled(); return; }
+        if (e is InputEventKey { Pressed: true, Echo: false, Keycode: Godot.Key.Delete } && Selection.PropId is { } propId)
+        {
+            RemovePropNow(propId);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         if (e is InputEventKey { Pressed: true, Echo: false, Keycode: Godot.Key.Delete } && SelectedClipId is { } id)
         {
             ConfirmDeleteClip(id);
