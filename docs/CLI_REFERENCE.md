@@ -24,6 +24,10 @@ Every command except `new`, `commands` and `docs` also accepts `--attach` (omit 
 | `run` | Runs a JSON-lines script (one `{"command":"key.set","args":{...}}` per line; blank lines and lines starting with `#` are skipped) in ONE task. Stops at the first failure without saving; otherwise saves once. Script variables: `${character}` (the project's first character) and `${clip}` (its last clip) are replaced inside string arguments; `"save":{"name":"field"}` on a line stores `data.field` of its result as `${name}` for later lines (e.g. `{"command":"clip.create","args":{"name":"Walk"},"save":{"clip":"clipId"}}`). |
 | `docs` | Writes `MCP_TOOLS.md` and `CLI_REFERENCE.md` into the folder. |
 
+## File access (headless)
+
+Commands read files (`rig_import`, `animation_validate`) from the project folder, the current folder, `--allow-read DIR` (repeatable) or `BLAZMA_ALLOW_READ`, and the write folders. Commands that write files (`animation_export`) only create NEW files, in the project folder, the current folder (unless it is a filesystem root) and `--allow-write DIR` (repeatable) or `BLAZMA_ALLOW_WRITE`. Read folders never grant write. Environment lists use the OS path separator (`;` on Windows, `:` elsewhere). Symbolic links anywhere in a path are resolved before the check. Everything else fails with `path_not_allowed`.
+
 ## Output and exit codes
 
 Default output is human-readable text; `--json` prints machine-readable JSON on stdout (for `exec`: the `CommandResult`; for `run`: `{ok, steps:[...], saved}`). Errors go to stderr.
@@ -44,7 +48,7 @@ Use as `blazma-anim exec <file> <id> --arg name=value ...`.
 |---|---|---|---|
 | `anim.evaluate` | readonly | `clipId`*:string, `characterId`*:string, `frame`*:number | The pose a clip produces at a frame (does not change anything). Returns per-bone rotation/position and the pose JSON. |
 | `anim.pose_from_frame` | mutating | `clipId`*:string, `characterId`*:string, `frame`*:number | Set the character's working pose to what the clip gives at a frame (undoable). |
-| `animation.export` | readonly | `clipId`*:string, `characterId`:string, `path`*:string, `rootMotion`:string, `startFrame`:integer, `endFrame`:integer, `sidecar`:boolean, `overwrite`:boolean | Export a clip as a .glb animation (glTF 2.0 binary) plus a '<name>.blazma.json' sidecar (fps, loop, markers, events, root motion, bone map). The built-in mannequin gets a new file with a simple mesh; an imported character's original file is kept and the animation is appended. Writes files outside the project (the project itself is not changed); agents may only create new files. The written file is re-read and validated. |
+| `animation.export` | readonly | `clipId`*:string, `characterId`:string, `path`*:string, `rootMotion`:string, `startFrame`:integer, `endFrame`:integer, `sidecar`:boolean, `overwrite`:boolean, `validate`:boolean | Export a clip as a .glb animation (glTF 2.0 binary) plus a '<name>.blazma.json' sidecar (fps, loop, markers, events, root motion, bone map). The built-in mannequin gets a new file with a simple mesh; an imported character's original file is kept and the animation is appended. Writes files outside the project (the project itself is not changed); agents may only create new files. The written file is re-read and validated. |
 | `animation.validate` | readonly | `path`*:string, `clipId`*:string, `characterId`:string | Re-read an exported .glb and compare it with the clip frame by frame (position 1e-4 m, rotation 0.01°, scale 1e-4) and check its glTF structure, hierarchy and duration. Returns ok, max errors and issues. |
 | `character.remove` | destructive | `characterId`*:string | Remove a character from the scene (undoable). |
 | `clip.add_phase_markers` | mutating | `clipId`*:string | Add the 7 key-pose phase markers (Initial … Final) spread over the clip; phases that already have a marker are skipped. Returns {added, markers:[{markerId,name,frame,phase}]}. |
@@ -118,10 +122,11 @@ Export a clip as a .glb animation (glTF 2.0 binary) plus a '<name>.blazma.json' 
 | `characterId` | string | no | Character to export with (default: the first character using the clip's rig). (min length 1) |
 | `path` | string | yes | Absolute path of the .glb to create; its folder must exist. (min length 1) |
 | `rootMotion` | string | no | keep (default) \| in_place (remove the root's horizontal X/Z travel, keep height) \| in_place_all (remove all root translation). (min length 1) |
-| `startFrame` | integer | no | First frame to export (default 0); it becomes time 0 in the file. (min 0) |
-| `endFrame` | integer | no | Last frame to export, inclusive (default: clip length). (min 0) |
+| `startFrame` | integer | no | First frame to export (default 0, or the loop start when the clip loops over part of its length); it becomes time 0 in the file. (min 0) |
+| `endFrame` | integer | no | Last frame to export, inclusive (default: clip length, or the loop end when the clip loops over part of its length). (min 0) |
 | `sidecar` | boolean | no | Also write '<name>.blazma.json' next to the .glb (default true). |
 | `overwrite` | boolean | no | Replace existing files (default false). Ignored for agents, which can only create new files. |
+| `validate` | boolean | no | Re-read the written file and validate it (default true). |
 
 ### `animation.validate`
 

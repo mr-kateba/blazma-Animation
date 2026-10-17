@@ -43,36 +43,39 @@ public static class AgentPaths
     }
 
     /// <summary>
-    /// Where an agent may write an exported file: a NEW file with the required extension, in a folder that
-    /// exists, never the open project. The folder's links are resolved, so the returned path is the
-    /// real location (the caller checks it against the allowed folders).
+    /// Where an agent may write an exported file: a NEW file with the required extension and a portable
+    /// name, in a folder that exists, never the open project. Every component of the folder is resolved
+    /// (<see cref="FilePaths.Canonicalize"/>), so the returned path is the real location: the caller checks
+    /// it against the allowed folders and must write to exactly this path.
     /// </summary>
     public static string ValidateNewFileTarget(string? path, string? extension, string? currentProjectPath)
     {
         var full = Normalize(path);
+        var name = Path.GetFileName(full);
+        if (!FilePaths.IsPortableFileName(name))
+            throw new AgentRpcException("invalid_path", $"'{name}' is not a valid file name (no ':', wildcards, control characters or trailing dot/space).");
         if (extension is not null && !full.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
             throw new AgentRpcException("unsupported_format", $"The path must end in {extension}.");
         var dir = Path.GetDirectoryName(full);
         if (dir is null || !Directory.Exists(dir))
             throw new AgentRpcException("not_found", $"The folder '{dir}' does not exist.");
-        full = Path.Combine(ResolveLinks(dir), Path.GetFileName(full));
-        if (currentProjectPath is not null && SamePath(full, Path.GetFullPath(currentProjectPath)))
+        full = Path.Combine(ResolveLinks(dir), name);
+        if (currentProjectPath is not null && SamePath(full, ResolveLinks(Path.GetFullPath(currentProjectPath))))
             throw new AgentRpcException("file_exists", "Agents cannot overwrite the open project with an export.");
         if (File.Exists(full) || Directory.Exists(full) || new FileInfo(full).LinkTarget is not null)
             throw new AgentRpcException("file_exists", $"'{full}' already exists. Agents only create new files; ask the user to overwrite it.");
         return full;
     }
 
-    /// <summary>Path with symbolic links resolved (so a link inside an allowed folder cannot point outside it).</summary>
+    /// <summary>
+    /// Path with the symbolic links of EVERY component resolved (so a link anywhere inside an allowed
+    /// folder cannot point outside it). Invalid paths or link loops are an <see cref="AgentRpcException"/>.
+    /// </summary>
     public static string ResolveLinks(string fullPath)
     {
-        try
-        {
-            var info = new FileInfo(fullPath);
-            var target = info.LinkTarget is null ? null : info.ResolveLinkTarget(returnFinalTarget: true);
-            return target?.FullName ?? fullPath;
-        }
-        catch (IOException) { return fullPath; }
+        try { return FilePaths.Canonicalize(fullPath); }
+        catch (IOException e) { throw new AgentRpcException("invalid_path", e.Message); }
+        catch (UnauthorizedAccessException e) { throw new AgentRpcException("invalid_path", e.Message); }
     }
 
     public static bool SamePath(string a, string b) =>

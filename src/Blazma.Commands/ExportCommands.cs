@@ -25,12 +25,14 @@ public static class ExportCommands
                  S.Str("characterId", "Character to export with (default: the first character using the clip's rig).", false),
                  S.Str("path", "Absolute path of the .glb to create; its folder must exist.", true),
                  S.Str("rootMotion", "keep (default) | in_place (remove the root's horizontal X/Z travel, keep height) | in_place_all (remove all root translation).", false),
-                 S.Int("startFrame", "First frame to export (default 0); it becomes time 0 in the file.", false),
-                 S.Int("endFrame", "Last frame to export, inclusive (default: clip length).", false),
+                 S.Int("startFrame", "First frame to export (default 0, or the loop start when the clip loops over part of its length); it becomes time 0 in the file.", false),
+                 S.Int("endFrame", "Last frame to export, inclusive (default: clip length, or the loop end when the clip loops over part of its length).", false),
                  S.Bool("sidecar", "Also write '<name>.blazma.json' next to the .glb (default true).", false),
-                 S.Bool("overwrite", "Replace existing files (default false). Ignored for agents, which can only create new files.", false)),
+                 S.Bool("overwrite", "Replace existing files (default false). Ignored for agents, which can only create new files.", false),
+                 S.Bool("validate", "Re-read the written file and validate it (default true).", false)),
             a => new ExportAnimation(S.Id(a, "clipId"), S.OptId(a, "characterId"), S.Text(a, "path"), RootMotion(a),
-                Frame(a, "startFrame"), Frame(a, "endFrame"), (bool?)a["sidecar"] ?? true, (bool?)a["overwrite"] ?? false))
+                Frame(a, "startFrame"), Frame(a, "endFrame"), (bool?)a["sidecar"] ?? true, (bool?)a["overwrite"] ?? false,
+                (bool?)a["validate"] ?? true))
         {
             FileArg = new FileArgument("path", Write: true, Extension: ".glb", OverwriteArgument: "overwrite"),
         });
@@ -76,7 +78,7 @@ public static class ExportCommands
 }
 
 public sealed class ExportAnimation(ObjectId clipId, ObjectId? characterId, string path, RootMotionMode rootMotion,
-    long? startFrame, long? endFrame, bool sidecar, bool overwrite) : ICommand
+    long? startFrame, long? endFrame, bool sidecar, bool overwrite, bool validate = true) : ICommand
 {
     static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
 
@@ -87,42 +89,53 @@ public sealed class ExportAnimation(ObjectId clipId, ObjectId? characterId, stri
     public CommandOutcome Execute(Project p)
     {
         var (clip, rig) = ExportCommands.Resolve(p, clipId, characterId);
-        var full = Path.GetFullPath(path);
-        if (!full.EndsWith(".glb", StringComparison.OrdinalIgnoreCase))
+        var given = Path.GetFullPath(path);
+        var name = Path.GetFileName(given);
+        if (!FilePaths.IsPortableFileName(name))
+            throw new CommandException("invalid_path", $"'{name}' is not a valid file name (no ':', wildcards, control characters or trailing dot/space).");
+        if (!name.EndsWith(".glb", StringComparison.OrdinalIgnoreCase))
             throw new CommandException("unsupported_format", "The export path must end in .glb.");
-        var dir = Path.GetDirectoryName(full);
-        if (dir is null || !Directory.Exists(dir))
-            throw new CommandException("not_found", $"The folder '{dir}' does not exist.");
+        var givenDir = Path.GetDirectoryName(given);
+        if (givenDir is null || !Directory.Exists(givenDir))
+            throw new CommandException("not_found", $"The folder '{givenDir}' does not exist.");
+        // Write to the real folder (every link resolved); it is checked again right before writing.
+        var dir = RealFolder(givenDir);
+        var full = Path.Combine(dir, name);
         var sidecarPath = AnimationExporter.SidecarPathFor(full);
         foreach (var target in sidecar ? new[] { full, sidecarPath } : new[] { full })
         {
             if (Directory.Exists(target)) throw new CommandException("file_exists", $"'{target}' is a folder.");
-            if (!overwrite && File.Exists(target))
+            if (!overwrite && (File.Exists(target) || new FileInfo(target).LinkTarget is not null))
                 throw new CommandException("file_exists", $"'{target}' already exists; pass overwrite=true to replace it.");
         }
 
         var options = new ExportOptions { StartFrame = startFrame, EndFrame = endFrame, RootMotion = rootMotion };
         ExportResult result;
-        try { result = AnimationExporter.Export(p, clip, rig, options, Path.GetFileName(full)); }
+        try { result = AnimationExporter.Export(p, clip, rig, options, name); }
         catch (ExportException e) { throw ExportCommands.Map(e); }
 
-        try
+        // Baking can take a while: the folder must still be the one that was checked (no link swapped in).
+        if (!string.Equals(RealFolder(givenDir), dir, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            throw new CommandException("path_changed", $"The folder '{givenDir}' changed while exporting (it no longer resolves to '{dir}'). Nothing was written.");
+
+        var glbExisted = File.Exists(full);
+        Write(full, result.Glb, verify: tmp => GlbContainer.Parse(File.ReadAllBytes(tmp)));
+        if (sidecar)
         {
-            AtomicFile.Write(full, s => s.Write(result.Glb), tmp => GlbContainer.Parse(File.ReadAllBytes(tmp)), keepBackup: false);
-            if (sidecar)
+            try { Write(sidecarPath, JsonSerializer.SerializeToUtf8Bytes(result.Sidecar, Indented), verify: null); }
+            catch
             {
-                var json = JsonSerializer.SerializeToUtf8Bytes(result.Sidecar, Indented);
-                AtomicFile.Write(sidecarPath, s => s.Write(json), keepBackup: false);
+                // Do not leave half an export behind: remove the GLB, but only if this export created it.
+                if (!glbExisted) { try { File.Delete(full); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
+                throw;
             }
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ExportException)
-        {
-            throw new CommandException("io_error", $"Could not write the export: {e.Message}");
-        }
 
-        var report = ExportValidator.Validate(full, p, clip, rig, options);
+        // The written file is re-read and checked against the bake it was made from (no second bake),
+        // plus an independent FK check against the app's evaluation.
+        var report = validate ? ExportValidator.Validate(full, p, clip, rig, options, result.Baked) : null;
         var warnings = result.Warnings.Select(w => new Diagnostic("export", w)).ToList();
-        if (!report.Ok)
+        if (report is { Ok: false })
             warnings.Add(new Diagnostic("validation_failed", $"The exported file differs from the clip: {report.Issues[0]}"));
         var baked = result.Baked;
         return new(Array.Empty<Change>(), new JsonObject
@@ -140,8 +153,27 @@ public sealed class ExportAnimation(ObjectId clipId, ObjectId? characterId, stri
                 ? new JsonObject { ["mode"] = rm["mode"]!.DeepClone(), ["bone"] = rm["bone"]!.DeepClone(), ["totalDisplacement"] = rm["totalDisplacement"]!.DeepClone() }
                 : null,
             ["sidecarPath"] = sidecar ? sidecarPath : null,
-            ["validation"] = report.ToJson(5),
+            ["validation"] = report?.ToJson(5),
         }, warnings);
+    }
+
+    static string RealFolder(string dir)
+    {
+        try { return FilePaths.Canonicalize(dir); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { throw new CommandException("invalid_path", e.Message); }
+    }
+
+    void Write(string target, byte[] bytes, Action<string>? verify)
+    {
+        try { AtomicFile.Write(target, s => s.Write(bytes), verify, keepBackup: false, overwrite: overwrite); }
+        catch (FileAlreadyExistsException)
+        {
+            throw new CommandException("file_exists", $"'{target}' was created by someone else while exporting; it was not replaced.");
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ExportException)
+        {
+            throw new CommandException("io_error", $"Could not write the export: {e.Message}");
+        }
     }
 
     public IReadOnlyList<Change> Undo(Project p) => Array.Empty<Change>();

@@ -1,6 +1,8 @@
 using System.Text.Json.Nodes;
 using Blazma.Core.Mathematics;
 using Blazma.Core.Model;
+using Blazma.Core.Timing;
+using Blazma.Motion;
 using Blazma.Rigging;
 
 namespace Blazma.Export;
@@ -17,6 +19,12 @@ public sealed class ExportValidationReport
     public double MaxRotationErrorDegrees { get; set; }
     public double MaxScaleError { get; set; }
 
+    /// <summary>Frames on which joint positions/rotations were recomputed by FK through the file's own node
+    /// hierarchy and compared with the app's evaluation (independent of the exporter's bake).</summary>
+    public int WorldFramesChecked { get; set; }
+    public double MaxWorldPositionError { get; set; }
+    public double MaxWorldRotationErrorDegrees { get; set; }
+
     public JsonObject ToJson(int maxIssues = 20) => new()
     {
         ["ok"] = Ok,
@@ -27,50 +35,67 @@ public sealed class ExportValidationReport
         ["maxPositionError"] = MaxPositionError,
         ["maxRotationErrorDegrees"] = MaxRotationErrorDegrees,
         ["maxScaleError"] = MaxScaleError,
+        ["worldFramesChecked"] = WorldFramesChecked,
+        ["maxWorldPositionError"] = MaxWorldPositionError,
+        ["maxWorldRotationErrorDegrees"] = MaxWorldRotationErrorDegrees,
         ["issueCount"] = Issues.Count,
         ["issues"] = new JsonArray(Issues.Take(maxIssues).Select(i => (JsonNode?)i).ToArray()),
     };
 }
 
 /// <summary>
-/// Re-reads an exported GLB and checks it against a fresh bake of the clip: container and glTF
-/// structure, node hierarchy, animation duration, and every bone's local TRS on every frame
-/// (tolerances: <see cref="PositionTolerance"/> m, <see cref="RotationToleranceDegrees"/>°, <see cref="ScaleTolerance"/>).
+/// Re-reads an exported GLB and checks it against the clip:
+/// <list type="number">
+/// <item>container and glTF structure, node hierarchy, animation duration;</item>
+/// <item>every bone's local TRS on every frame against the bake (tolerances: <see cref="PositionTolerance"/> m,
+/// <see cref="RotationToleranceDegrees"/>°, <see cref="ScaleTolerance"/>);</item>
+/// <item>independently of the bake and of the bone → node binding: joint positions and rotations obtained by
+/// FK through the FILE's node hierarchy (including non-bone ancestors of imported characters) against
+/// <c>RigEvaluator.Model(ClipEvaluator.Evaluate(...))</c>, with the declared root motion (loop cycles,
+/// in-place removal) applied to the root-motion bone and its descendants
+/// (tolerances: <see cref="WorldPositionTolerance"/> m, <see cref="WorldRotationToleranceDegrees"/>°).</item>
+/// </list>
+/// Malformed files never throw: every problem becomes an issue.
 /// </summary>
 public static class ExportValidator
 {
     public const double PositionTolerance = 1e-4;
     public const double RotationToleranceDegrees = 0.01;
     public const double ScaleTolerance = 1e-4;
+    public const double WorldPositionTolerance = 5e-4;
+    public const double WorldRotationToleranceDegrees = 0.05;
 
-    public static ExportValidationReport Validate(string glbPath, Project project, Clip clip, Rig rig, ExportOptions? options = null)
+    /// <summary>At most this many frames (evenly spread, first and last included) get the independent FK check.</summary>
+    public const int MaxWorldFrames = 240;
+
+    /// <param name="expected">The bake the file was exported from (post-export validation reuses it instead of baking again).</param>
+    public static ExportValidationReport Validate(string glbPath, Project project, Clip clip, Rig rig, ExportOptions? options = null, BakedClip? expected = null)
     {
-        var report = new ExportValidationReport();
-        try { Check(File.ReadAllBytes(glbPath), project, clip, rig, options, report); }
-        catch (ExportException e) { report.Issues.Add($"{e.Code}: {e.Message}"); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { report.Issues.Add("io_error: " + e.Message); }
-        catch (Exception e) when (e is InvalidOperationException or FormatException or ArgumentException or InvalidCastException)
+        byte[] bytes;
+        try { bytes = File.ReadAllBytes(glbPath); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            report.Issues.Add("invalid_gltf: " + e.Message); // a JSON value of the wrong kind
+            var r = new ExportValidationReport();
+            r.Issues.Add("io_error: " + e.Message);
+            return r;
         }
-        return report;
+        return Validate(bytes, project, clip, rig, options, expected);
     }
 
-    public static ExportValidationReport Validate(byte[] glbBytes, Project project, Clip clip, Rig rig, ExportOptions? options = null)
+    /// <inheritdoc cref="Validate(string, Project, Clip, Rig, ExportOptions?, BakedClip?)"/>
+    public static ExportValidationReport Validate(byte[] glbBytes, Project project, Clip clip, Rig rig, ExportOptions? options = null, BakedClip? expected = null)
     {
         var report = new ExportValidationReport();
-        try { Check(glbBytes, project, clip, rig, options, report); }
+        try { Check(glbBytes, project, clip, rig, options, expected, report); }
         catch (ExportException e) { report.Issues.Add($"{e.Code}: {e.Message}"); }
-        catch (Exception e) when (e is InvalidOperationException or FormatException or ArgumentException or InvalidCastException)
-        {
-            report.Issues.Add("invalid_gltf: " + e.Message);
-        }
+        catch (OutOfMemoryException) { report.Issues.Add("invalid_gltf: the file declares more data than can be read."); }
+        catch (Exception e) { report.Issues.Add("invalid_gltf: " + e.Message); } // malformed input of any kind is a finding, not a crash
         return report;
     }
 
     /// <param name="options">The options the file was exported with; null reads them from the animation's
     /// "extras.blazma" (frame range and root motion), as written by <see cref="AnimationExporter"/>.</param>
-    static void Check(byte[] bytes, Project project, Clip clip, Rig rig, ExportOptions? options, ExportValidationReport report)
+    static void Check(byte[] bytes, Project project, Clip clip, Rig rig, ExportOptions? options, BakedClip? expectedBake, ExportValidationReport report)
     {
         var glb = GlbContainer.Parse(bytes);
         var issues = report.Issues;
@@ -114,11 +139,14 @@ public static class ExportValidator
         var anim = animations.LastOrDefault(a => a.BlazmaClipId == clip.Id.ToString())
             ?? animations.LastOrDefault(a => a.Name == (options?.AnimationName ?? clip.Name));
         if (anim is null) { issues.Add($"No animation for clip '{clip.Name}' in the file."); return; }
-        options ??= OptionsFrom(anim);
         report.AnimationName = anim.Name;
         report.DurationSeconds = anim.Duration;
 
-        var baked = AnimationBaker.Bake(clip, rig, options);
+        BakedClip baked;
+        if (expectedBake is not null && ReferenceEquals(expectedBake.Clip, clip) && ReferenceEquals(expectedBake.Rig, rig))
+            baked = expectedBake;
+        else
+            baked = AnimationBaker.Bake(clip, rig, options ?? OptionsFrom(anim));
         var expected = AnimationExporter.NodeLocals(baked, bindings);
         var halfFrame = 0.5 * baked.Fps.Denominator / baked.Fps.Numerator;
         if (Math.Abs(anim.Duration - baked.DurationSeconds) > halfFrame)
@@ -167,6 +195,103 @@ public static class ExportValidator
         report.MaxPositionError = maxP;
         report.MaxRotationErrorDegrees = maxR;
         report.MaxScaleError = maxS;
+
+        CheckWorld(nodes, anim, clip, rig, bindings, baked.StartFrame, baked.FrameCount, baked.RootMotion.Mode, report);
+    }
+
+    /// <summary>
+    /// Independent check: FK through the file's node hierarchy (every node, animated channels sampled) against the
+    /// app's own evaluation of the clip. Only the frame range and root-motion mode come from the export; the
+    /// expected root motion is recomputed here from the app's evaluation.
+    /// </summary>
+    static void CheckWorld(IReadOnlyList<GltfNodeInfo> nodes, GltfAnimation anim, Clip clip, Rig rig, NodeBinding[] bindings,
+        long startFrame, int frameCount, RootMotionMode mode, ExportValidationReport report)
+    {
+        var issues = report.Issues;
+        for (var i = 0; i < nodes.Count; i++)
+        {
+            var steps = 0;
+            for (var p = nodes[i].Parent; p is int pi; p = nodes[pi].Parent)
+                if (++steps > nodes.Count) { issues.Add("Cannot compute world transforms: the node hierarchy has a cycle."); return; }
+        }
+        foreach (var b in bindings)
+            if (b.Node < 0 || b.Node >= nodes.Count) { issues.Add($"Bone node {b.Node} is missing from the file."); return; }
+
+        var ev = new RigEvaluator(rig);
+        var rm = AnimationBaker.RootMotionBone(rig);
+        Transform[] AppModel(Flicks elapsed) =>
+            ev.Model(ClipEvaluator.Evaluate(clip, rig, clip.Loop.Enabled ? ClipEvaluator.PlaybackTime(clip, elapsed) : elapsed));
+        var cycle = Vec3.Zero;
+        if (clip.Loop.Enabled)
+        {
+            var (ls, le) = AnimationBaker.LoopRange(clip);
+            cycle = ev.Model(ClipEvaluator.Evaluate(clip, rig, le))[rm].Translation - ev.Model(ClipEvaluator.Evaluate(clip, rig, ls))[rm].Translation;
+        }
+        Vec3 Travelled(Flicks elapsed, Transform[] model) => model[rm].Translation + cycle * AnimationBaker.CyclesAt(clip, elapsed);
+        var firstElapsed = Flicks.FromFrame(startFrame, clip.Fps);
+        var origin = Travelled(firstElapsed, AppModel(firstElapsed));
+        var moved = Enumerable.Range(0, rig.Bones.Count).Select(i => ev.IsAncestorOrSelf(rm, i)).ToArray();
+
+        var frames = frameCount <= MaxWorldFrames
+            ? Enumerable.Range(0, frameCount)
+            : Enumerable.Range(0, MaxWorldFrames).Select(k => (int)Math.Round(k * (frameCount - 1.0) / (MaxWorldFrames - 1))).Distinct();
+        double maxP = 0, maxR = 0;
+        var worstP = (Bone: -1, Frame: 0L);
+        var worstR = (Bone: -1, Frame: 0L);
+        var checkedFrames = 0;
+        var fps = clip.Fps;
+        foreach (var f in frames)
+        {
+            var elapsed = Flicks.FromFrame(startFrame + f, fps);
+            var app = AppModel(elapsed);
+            var travelled = Travelled(elapsed, app);
+            var shift = travelled - app[rm].Translation - (mode == RootMotionMode.Keep ? Vec3.Zero : AnimationBaker.Extracted(travelled - origin, mode));
+            var world = FileWorld(nodes, anim, f * (double)fps.Denominator / fps.Numerator);
+            for (var i = 0; i < bindings.Length; i++)
+            {
+                var w = world[bindings[i].Node];
+                var expectedT = moved[i] ? app[i].Translation + shift : app[i].Translation;
+                var p = (w.Translation - expectedT).Length();
+                var r = Quat.AngleBetween(w.Rotation.Normalized(), app[i].Rotation.Normalized()) * 180 / Math.PI;
+                if (!(p <= maxP)) { maxP = p; worstP = (i, startFrame + f); }
+                if (!(r <= maxR)) { maxR = r; worstR = (i, startFrame + f); }
+            }
+            checkedFrames++;
+        }
+        report.WorldFramesChecked = checkedFrames;
+        report.MaxWorldPositionError = maxP;
+        report.MaxWorldRotationErrorDegrees = maxR;
+        if (!(maxP <= WorldPositionTolerance) && worstP.Bone >= 0)
+            issues.Add($"World check: joint '{rig.Bones[worstP.Bone].Name}' (FK through the file's nodes) is {maxP:G3} m from the app's pose at frame {worstP.Frame} (tolerance {WorldPositionTolerance:G3}).");
+        if (!(maxR <= WorldRotationToleranceDegrees) && worstR.Bone >= 0)
+            issues.Add($"World check: joint '{rig.Bones[worstR.Bone].Name}' (FK through the file's nodes) is rotated {maxR:G3}° from the app's pose at frame {worstR.Frame} (tolerance {WorldRotationToleranceDegrees:G3}).");
+    }
+
+    /// <summary>Scene-space transform of every node with the animation's channels sampled at <paramref name="t"/> seconds.</summary>
+    static Transform[] FileWorld(IReadOnlyList<GltfNodeInfo> nodes, GltfAnimation anim, double t)
+    {
+        var local = nodes.Select(n => n.Local).ToArray();
+        foreach (var ch in anim.Channels)
+        {
+            if (ch.Node < 0 || ch.Node >= local.Length) continue;
+            var v = ch.Sample(t);
+            local[ch.Node] = ch.Path switch
+            {
+                "translation" => local[ch.Node] with { Translation = new Vec3(v[0], v[1], v[2]) },
+                "rotation" => local[ch.Node] with { Rotation = new Quat(v[0], v[1], v[2], v[3]).Normalized() },
+                "scale" => local[ch.Node] with { Scale = new Vec3(v[0], v[1], v[2]) },
+                _ => local[ch.Node],
+            };
+        }
+        var world = new Transform?[nodes.Count];
+        Transform W(int i)
+        {
+            if (world[i] is { } done) return done;
+            var w = nodes[i].Parent is int p ? W(p) * local[i] : local[i];
+            world[i] = w;
+            return w;
+        }
+        return Enumerable.Range(0, nodes.Count).Select(W).ToArray();
     }
 
     /// <summary>Export options recorded in an animation's extras by this exporter (defaults when absent).</summary>

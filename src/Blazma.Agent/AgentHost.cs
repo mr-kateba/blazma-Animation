@@ -38,7 +38,11 @@ public sealed class AgentTask
 
 public sealed record AgentSessionInfo(string Id, string ClientName, DateTimeOffset Connected);
 
-public sealed record AgentPendingApproval(string Id, string SessionId, string Tool, JsonObject Args, string Reason);
+public sealed record AgentPendingApproval(string Id, string SessionId, string Tool, JsonObject Args, string Reason)
+{
+    /// <summary>Real location (all links resolved) of the request's file argument that the user is asked about, if any.</summary>
+    public string? CheckedPath { get; init; }
+}
 
 /// <summary>
 /// The one place where agents (MCP or CLI) edit a project. Wraps <see cref="ProjectSession"/> with:
@@ -73,10 +77,15 @@ public sealed class AgentHost
     public bool UserPresent { get; }
     public AgentMode Mode { get; set; } = AgentMode.Assisted;
 
-    /// <summary>Folders agents may import files from and export new files to (besides the project's own folder).</summary>
+    /// <summary>Folders agents may read (import, validate) files from, besides the project's own folder and
+    /// the write folders. Reading never implies writing.</summary>
     public List<string> AllowedReadRoots { get; } = new();
 
-    /// <summary>Folder of the open project file, if any (always readable).</summary>
+    /// <summary>Folders agents may create new files in (exports), besides the open project's own folder.
+    /// They are readable too.</summary>
+    public List<string> AllowedWriteRoots { get; } = new();
+
+    /// <summary>Folder of the open project file, if any (always readable and writable for new files).</summary>
     public Func<string?> ProjectFolder { get; set; } = () => null;
 
     public IReadOnlyCollection<AgentSessionInfo> Sessions => _sessions.Values;
@@ -146,11 +155,22 @@ public sealed class AgentHost
             args = (JsonObject)args.DeepClone();
             args[ow] = false;
         }
-        if (CheckPermission(descriptor, args) is { } denial)
+        var denial = CheckPermission(descriptor, args, out var file, out var checkedPath);
+        if (file is { Write: true } && checkedPath is not null)
+        {
+            // A command that writes must use exactly the location that was checked (all links resolved).
+            // (Reads keep the given path: a model file may be a link to a blob without the .glb name.)
+            args = (JsonObject)args.DeepClone();
+            args[file.Argument] = checkedPath;
+        }
+        if (denial is not null)
         {
             if (denial.Code == "approval_required" && UserPresent)
             {
-                var request = new AgentPendingApproval(ObjectId.New().ToString(), sessionId, commandId, (JsonObject)args.DeepClone(), denial.Message);
+                var request = new AgentPendingApproval(ObjectId.New().ToString(), sessionId, commandId, (JsonObject)args.DeepClone(), denial.Message)
+                {
+                    CheckedPath = checkedPath,
+                };
                 _pending.Add(request);
                 var r = new CommandResult(false, new JsonObject { ["approvalId"] = request.Id }, Array.Empty<Change>(),
                     Array.Empty<Diagnostic>(), denial, null);
@@ -185,6 +205,22 @@ public sealed class AgentHost
         _pending.Remove(p);
         if (!_registry.TryGet(p.Tool, out var d) || !_sessions.ContainsKey(p.SessionId))
             return CommandResult.Fail("expired", "The agent or command is no longer available.");
+        // Re-check the file target now: the user approved the location shown in the request, so it must
+        // still resolve to that same place (no link swapped in meanwhile) and still be a new file.
+        var denial = CheckPermission(d, p.Args, out var file, out var checkedPath);
+        if (denial is not null && denial.Code != "approval_required")
+        {
+            var fail = Record(p.SessionId, p.Tool, p.Args, CommandResult.Fail(denial.Code, denial.Message), track: false);
+            Changed?.Invoke();
+            return fail;
+        }
+        if (file is not null && !AgentPaths.SamePath(checkedPath ?? "", p.CheckedPath ?? ""))
+        {
+            var fail = Record(p.SessionId, p.Tool, p.Args, CommandResult.Fail("path_changed",
+                $"'{p.Args[file.Argument]}' now resolves to '{checkedPath}', not '{p.CheckedPath}'; the approved location changed. Ask the agent to try again."), track: false);
+            Changed?.Invoke();
+            return fail;
+        }
         var r = Execute(p.SessionId, d, p.Args);
         Changed?.Invoke();
         return r;
@@ -242,14 +278,17 @@ public sealed class AgentHost
         return r;
     }
 
-    /// <summary>Permission rules (docs/AI_INTEGRATION.md §3). Null = allowed.</summary>
-    ErrorInfo? CheckPermission(CommandDescriptor d, JsonObject args)
+    /// <summary>Permission rules (docs/AI_INTEGRATION.md §3). Null = allowed. <paramref name="checkedPath"/> is the
+    /// canonical location of the declared file argument (all links resolved) that the rules were applied to.</summary>
+    ErrorInfo? CheckPermission(CommandDescriptor d, JsonObject args, out FileArgument? file, out string? checkedPath)
     {
+        file = null;
+        checkedPath = null;
         if (d.Effect == CommandEffect.Destructive)
             return new ErrorInfo("approval_required", $"'{d.Id}' deletes something; the user must approve it.");
         // Files outside the project: declared by the descriptor, or "path" of an External command (read).
-        var file = d.FileArg ?? (d.Effect == CommandEffect.External ? new FileArgument("path") : null);
-        if (file is null || args[file.Argument] is null) return null;
+        file = d.FileArg ?? (d.Effect == CommandEffect.External ? new FileArgument("path") : null);
+        if (file is null || args[file.Argument] is null) { file = null; return null; }
         string full;
         try
         {
@@ -257,19 +296,29 @@ public sealed class AgentHost
                 ? AgentPaths.ValidateNewFileTarget((string?)args[file.Argument], file.Extension, _session().FilePath)
                 : AgentPaths.ResolveLinks(AgentPaths.Normalize((string?)args[file.Argument]));
         }
-        catch (AgentRpcException e) { return new ErrorInfo(e.Code, e.Message); }
-        if (IsUnderAllowedRoot(full)) return null;
+        catch (AgentRpcException e) { file = null; return new ErrorInfo(e.Code, e.Message); }
+        checkedPath = full;
+        if (file.Write ? IsUnderWriteRoot(full) : IsUnderAllowedRoot(full)) return null;
         var verb = file.Write ? "writes" : "reads";
         // Only an interactive user in Assisted mode can widen access case by case; headless and
         // Autonomous agents are limited to the allowed folders (docs/AI_INTEGRATION.md §3).
         return UserPresent && Mode == AgentMode.Assisted
-            ? new ErrorInfo("approval_required", $"'{d.Id}' {verb} '{full}', outside the allowed folders.")
-            : new ErrorInfo("path_not_allowed", $"'{full}' is outside the folders agents may use (the project folder and the allowed folders).");
+            ? new ErrorInfo("approval_required", $"'{d.Id}' {verb} '{full}', outside the folders agents may {(file.Write ? "write to" : "read")}.")
+            : new ErrorInfo("path_not_allowed", file.Write
+                ? $"'{full}' is outside the folders agents may write to (the project folder and the allowed write folders)."
+                : $"'{full}' is outside the folders agents may use (the project folder and the allowed folders).");
     }
 
-    public bool IsUnderAllowedRoot(string fullPath)
+    /// <summary>True if agents may read <paramref name="fullPath"/> (a canonical path): project folder, read or write folders.</summary>
+    public bool IsUnderAllowedRoot(string fullPath) =>
+        IsUnder(fullPath, AllowedReadRoots.Concat(AllowedWriteRoots));
+
+    /// <summary>True if agents may create a new file at <paramref name="fullPath"/> (a canonical path): project folder or write folders.</summary>
+    public bool IsUnderWriteRoot(string fullPath) => IsUnder(fullPath, AllowedWriteRoots);
+
+    bool IsUnder(string fullPath, IEnumerable<string> extraRoots)
     {
-        var roots = AllowedReadRoots.Concat(ProjectFolder() is { } pf ? new[] { pf } : Array.Empty<string>())
+        var roots = extraRoots.Concat(ProjectFolder() is { } pf ? new[] { pf } : Array.Empty<string>())
             .Select(r => { try { return AgentPaths.ResolveLinks(Path.GetFullPath(r)); } catch (Exception) { return r; } });
         var cmp = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         foreach (var root in roots)

@@ -1043,8 +1043,8 @@ msgstr "المجلدات التي يستطيع الوكلاء القراءة م�
 msgid "Folders agents may read"
 msgstr "المجلدات التي يستطيع الوكلاء القراءة منها"
 
-msgid "Agents can always read the project's own folder. Add other folders they may import files from."
-msgstr "يستطيع الوكلاء دائمًا القراءة من مجلد المشروع نفسه. أضف مجلدات أخرى يجوز لهم استيراد الملفات منها."
+msgid "Agents can always use the project's own folder. Add other folders they may import files from and save new files to (they never overwrite existing files)."
+msgstr "يستطيع الوكلاء دائمًا استخدام مجلد المشروع نفسه. أضف مجلدات أخرى يجوز لهم الاستيراد منها وحفظ ملفات جديدة فيها (لا يستبدلون أي ملف موجود)."
 
 msgid "Add folder…"
 msgstr "إضافة مجلد…"
@@ -1175,3 +1175,159 @@ msgstr "لا يوجد وكيل ذكاء اصطناعي متصل"
 msgid "Allow AI agents to connect"
 msgstr "السماح لوكلاء الذكاء الاصطناعي بالاتصال"
 
+
+msgid "Export Animation…"
+msgstr "تصدير الحركة…"
+
+msgid "Export Animation"
+msgstr "تصدير الحركة"
+
+msgid "Export"
+msgstr "تصدير"
+
+msgid "Save a clip as a .glb animation that other tools and game engines can open. The project itself is not changed."
+msgstr "احفظ المقطع كحركة بصيغة ‎.glb‎ تفتحها البرامج ومحركات الألعاب الأخرى. لا يتغير المشروع نفسه."
+
+msgid "Root motion"
+msgstr "حركة الجذر"
+
+msgid "Keep"
+msgstr "إبقاء"
+
+msgid "In place"
+msgstr "في المكان"
+
+msgid "In place (all)"
+msgstr "في المكان (كاملًا)"
+
+msgid "Keep: the root bone moves as animated. In place: removes sideways and forward travel but keeps height. In place (all): removes all root movement, so the character stays put."
+msgstr "إبقاء: يتحرك عظم الجذر كما حُرّك. في المكان: يزيل التنقل الجانبي والأمامي ويُبقي الارتفاع. في المكان (كاملًا): يزيل كل حركة الجذر فتبقى الشخصية في مكانها."
+
+msgid "Frame range"
+msgstr "نطاق الإطارات"
+
+msgid "Whole clip"
+msgstr "المقطع كاملًا"
+
+msgid "Export every frame of the clip, from the first to the last."
+msgstr "تصدير كل إطارات المقطع من الأول إلى الأخير."
+
+msgid "From frame"
+msgstr "من الإطار"
+
+msgid "To frame"
+msgstr "إلى الإطار"
+
+msgid "Write sidecar JSON"
+msgstr "كتابة ملف JSON مرافق"
+
+msgid "Also write a small .blazma.json file next to the .glb with frame rate, loop, markers, events and root motion details."
+msgstr "يكتب أيضًا ملف ‎.blazma.json‎ صغيرًا بجوار ملف ‎.glb‎ فيه معدل الإطارات والتكرار والعلامات والأحداث وتفاصيل حركة الجذر."
+
+msgid "Output file"
+msgstr "ملف الإخراج"
+
+msgid "Browse…"
+msgstr "استعراض…"
+
+msgid "Open folder"
+msgstr "فتح المجلد"
+
+msgid "Choose where to save the file."
+msgstr "اختر مكان حفظ الملف."
+
+msgid "That file name is not valid."
+msgstr "اسم الملف هذا غير صالح."
+
+msgid "The folder “{0}” does not exist."
+msgstr "المجلد «{0}» غير موجود."
+
+msgid "Replace existing file?"
+msgstr "استبدال الملف الموجود؟"
+
+msgid "“{0}” already exists. Do you want to replace it?"
+msgstr "«{0}» موجود بالفعل. هل تريد استبداله؟"
+
+msgid "Replace"
+msgstr "استبدال"
+
+msgid "Exporting…"
+msgstr "جارٍ التصدير…"
+
+msgid "The export failed: {0}"
+msgstr "فشل التصدير: {0}"
+
+msgid "Exported. The file matches the clip."
+msgstr "تم التصدير. الملف مطابق للمقطع."
+
+msgid "Exported, but the check found differences."
+msgstr "تم التصدير، لكن الفحص وجد اختلافات."
+
+msgid "File: {0}"
+msgstr "الملف: {0}"
+
+msgid "Size: {0}"
+msgstr "الحجم: {0}"
+
+msgid "Frames: {0} ({1} s)"
+msgstr "الإطارات: {0} ({1} ث)"
+
+msgid "Sidecar: {0}"
+msgstr "الملف المرافق: {0}"
+
+msgid "Validation: OK"
+msgstr "الفحص: سليم"
+
+msgid "Validation: {0} problem(s)"
+msgstr "الفحص: {0} مشكلة"
+
+msgid "Note"
+msgstr "ملاحظة"
+
+msgid "Animation exported."
+msgstr "تم تصدير الحركة."
+
+msgid "The export did not finish."
+msgstr "لم يكتمل التصدير."
+
+msgid "The clip or the character no longer exists."
+msgstr "المقطع أو الشخصية لم يعد موجودًا."
+
+msgid "This clip animates a different character. Choose the character the clip was made for."
+msgstr "هذا المقطع يحرّك شخصية مختلفة. اختر الشخصية التي صُنع المقطع من أجلها."
+
+msgid "The file name must end in .glb."
+msgstr "يجب أن ينتهي اسم الملف بـ ‎.glb‎."
+
+msgid "A file with this name already exists."
+msgstr "يوجد ملف بهذا الاسم بالفعل."
+
+msgid "Could not write the file: {0}"
+msgstr "تعذّرت كتابة الملف: {0}"
+
+msgid "The frame range is outside the clip."
+msgstr "نطاق الإطارات خارج حدود المقطع."
+
+msgid "The clip is too long to export in one file. Choose a shorter frame range."
+msgstr "المقطع أطول من أن يُصدَّر في ملف واحد. اختر نطاق إطارات أقصر."
+
+msgid "This character has no bones to export."
+msgstr "لا توجد عظام في هذه الشخصية لتصديرها."
+
+msgid "This imported character cannot be exported because its original file is missing or has changed."
+msgstr "لا يمكن تصدير هذه الشخصية المستوردة لأن ملفها الأصلي مفقود أو تغيّر."
+
+msgid "{0} frames at {1} fps"
+msgstr "{0} إطارًا بمعدل {1} إطارًا في الثانية"
+
+msgid "This project has no clips yet. Create a clip first."
+msgstr "لا توجد مقاطع في هذا المشروع بعد. أنشئ مقطعًا أولًا."
+
+msgid "Create a clip first, then export it."
+msgstr "أنشئ مقطعًا أولًا ثم صدّره."
+
+msgid "Add a character first, then export its animation."
+msgstr "أضف شخصية أولًا ثم صدّر حركتها."
+
+msgid "Export the clip as a .glb animation (Ctrl+E)."
+msgstr "تصدير المقطع كحركة بصيغة ‎.glb‎ (Ctrl+E)."

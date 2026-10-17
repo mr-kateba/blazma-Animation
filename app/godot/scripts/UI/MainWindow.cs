@@ -16,7 +16,7 @@ namespace Blazma.UI.Views;
 public partial class MainWindow : Control
 {
     // menu ids
-    const int MNew = 1, MOpen = 2, MSave = 3, MSaveAs = 4, MQuit = 5, MClearRecent = 99, MRecentBase = 100;
+    const int MNew = 1, MOpen = 2, MSave = 3, MSaveAs = 4, MQuit = 5, MExport = 6, MClearRecent = 99, MRecentBase = 100;
     const int MUndo = 10, MRedo = 11;
     const int MNewClip = 20, MRenameClip = 21, MDeleteClip = 22;
     const int MAddMannequin = 30, MImport = 31, MMapping = 32, MMirror = 33, MResetBone = 34, MResetPose = 35, MCopy = 36, MPaste = 37,
@@ -63,6 +63,7 @@ public partial class MainWindow : Control
 
     // dialogs
     FileDialog _fileDialog = null!;
+    public ExportDialog ExportDlg { get; private set; } = null!;
     ConfirmationDialog _unsavedDialog = null!, _deleteDialog = null!, _nameDialog = null!;
     AcceptDialog _errorDialog = null!;
     LineEdit _nameEdit = null!;
@@ -342,6 +343,8 @@ public partial class MainWindow : Control
         _mProject.AddItem("Save", MSave);
         _mProject.AddItem("Save As…", MSaveAs);
         _mProject.AddSeparator();
+        _mProject.AddItem("Export Animation…", MExport);
+        _mProject.AddSeparator();
         _mRecent = new PopupMenu { Name = "OpenRecent", AutoTranslateMode = AutoTranslateModeEnum.Disabled };
         _mProject.AddChild(_mRecent);
         _mProject.AddSubmenuNodeItem("Open Recent", _mRecent);
@@ -351,7 +354,9 @@ public partial class MainWindow : Control
         ShortcutOf(_mProject, MOpen, Combo(Godot.Key.O));
         ShortcutOf(_mProject, MSave, Combo(Godot.Key.S));
         ShortcutOf(_mProject, MSaveAs, Combo(Godot.Key.S, true));
+        ShortcutOf(_mProject, MExport, Combo(Godot.Key.E));
         _mProject.AboutToPopup += RebuildRecent;
+        _mProject.AboutToPopup += UpdateMenus;
         _mProject.IdPressed += id => OnMenu((int)id);
         _mRecent.IdPressed += id => OnMenu((int)id);
 
@@ -406,6 +411,7 @@ public partial class MainWindow : Control
             case MSave: RequestSave(); break;
             case MSaveAs: PromptSaveAs(null); break;
             case MQuit: RequestQuit(); break;
+            case MExport: OpenExportDialog(); break;
             case MUndo: DoUndo(); break;
             case MRedo: DoRedo(); break;
             case MNewClip: PromptNewClip(); break;
@@ -456,6 +462,10 @@ public partial class MainWindow : Control
         var has = SelectedClipId is not null;
         _mAnim.SetItemDisabled(_mAnim.GetItemIndex(MRenameClip), !has);
         _mAnim.SetItemDisabled(_mAnim.GetItemIndex(MDeleteClip), !has);
+
+        var canExport = App.Session.Project.Clips.Count > 0 && App.Session.Project.Characters.Count > 0;
+        _mProject.SetItemDisabled(_mProject.GetItemIndex(MExport), !canExport);
+        if (Timeline is { } tl) tl.ExportButton.Disabled = !canExport;
 
         UpdateAnimationMenu();
         _menuBar.SetMenuTitle(0, Tr("Project"));
@@ -522,6 +532,8 @@ public partial class MainWindow : Control
         AddChild(_errorDialog);
         BuildRigDialogs();
         BuildAgentDialogs();
+        ExportDlg = new ExportDialog(this);
+        AddChild(ExportDlg);
     }
 
     /// <summary>Text is translated here, then the dialog's own auto-translation is off so user content is never "translated".</summary>
@@ -576,7 +588,7 @@ public partial class MainWindow : Control
         else OpenPath(path);
     }
 
-    static string SafeFileName(string name)
+    public static string SafeFileName(string name)
     {
         var bad = System.IO.Path.GetInvalidFileNameChars();
         var s = new string(name.Select(c => bad.Contains(c) ? '_' : c).ToArray()).Trim();
@@ -625,6 +637,26 @@ public partial class MainWindow : Control
     }
 
     public bool SaveToPath(string path) => App.SaveAs(path);
+
+    // ---- export (Phase 4) ------------------------------------------------------------------------------------------------
+
+    /// <summary>Open the Export Animation dialog (menu, Ctrl+E, timeline button).</summary>
+    public void OpenExportDialog()
+    {
+        if (ExportDlg.Visible) return;
+        if (App.Session.Project.Clips.Count == 0) { _toast.Notify(Tr("Create a clip first, then export it."), _palette.Warn); return; }
+        if (App.Session.Project.Characters.Count == 0) { _toast.Notify(Tr("Add a character first, then export its animation."), _palette.Warn); return; }
+        Inspector.Flush(); // commit text typed in the inspector first
+        ExportDlg.Open();
+    }
+
+    /// <summary>Runs a command like every other UI action, but shows its error in the caller instead of as a toast.</summary>
+    public CommandResult ExecuteQuiet(string commandId, JsonObject args)
+    {
+        _suppressToast = true;
+        try { return App.Execute(commandId, args); }
+        finally { _suppressToast = false; }
+    }
 
     void QuitNow()
     {
@@ -940,6 +972,10 @@ public partial class MainWindow : Control
             case Godot.Key.V:
                 if (inText || k.ShiftPressed || GetViewport().GuiGetFocusOwner() is DopeSheetView) return;
                 PastePose();
+                break;
+            case Godot.Key.E:
+                if (k.ShiftPressed) return;
+                OpenExportDialog();
                 break;
             case Godot.Key.N: RequestNew(); break;
             case Godot.Key.O: RequestOpen(); break;

@@ -275,8 +275,18 @@ public static class AnimationExporter
     }
 
     /// <summary>Expected node-local transform of every bone on every baked frame.</summary>
-    public static Transform[][] NodeLocals(BakedClip baked, NodeBinding[] bindings) =>
-        baked.Locals.Select(frame => frame.Select((t, i) => bindings[i].ToNodeLocal(t)).ToArray()).ToArray();
+    /// <remarks>When no bone needs converting (built-in rigs, imported roots at scene level) the baked frames are returned as they are, not copied.</remarks>
+    public static Transform[][] NodeLocals(BakedClip baked, NodeBinding[] bindings)
+    {
+        if (bindings.All(b => b.ParentWorld is null)) return baked.Locals;
+        return baked.Locals.Select(frame =>
+        {
+            var copy = (Transform[])frame.Clone();
+            for (var i = 0; i < bindings.Length; i++)
+                if (bindings[i].ParentWorld is not null) copy[i] = bindings[i].ToNodeLocal(frame[i]);
+            return copy;
+        }).ToArray();
+    }
 
     static int AddAnimation(GltfBuilder b, BakedClip baked, NodeBinding[] bindings, string name, bool compact)
     {

@@ -20,6 +20,8 @@ public sealed class AppSettings
     public bool ShowOnion { get; set; }
     public int OnionFrames { get; set; } = 5;
     public List<string> RecentFiles { get; } = new();
+    /// <summary>Folder of the last animation export (Phase 4).</summary>
+    public string LastExportDir { get; set; } = "";
 
     /// <summary>Phase 5: AI agents (Claude Code etc.) may connect to this window over the local pipe.</summary>
     public bool AllowAgents { get; set; } = true;
@@ -46,6 +48,7 @@ public sealed class AppSettings
         AutosaveMinutes = Math.Clamp((int)cfg.GetValue("files", "autosave_minutes", AutosaveMinutes), 0, 60);
         RecentFiles.Clear();
         RecentFiles.AddRange(((string[])cfg.GetValue("files", "recent", Array.Empty<string>())).Take(MaxRecent));
+        LastExportDir = (string)cfg.GetValue("files", "last_export_dir", LastExportDir);
         AllowAgents = (bool)cfg.GetValue("agent", "allow", AllowAgents);
         AgentAutonomous = (bool)cfg.GetValue("agent", "autonomous", AgentAutonomous);
         AgentReadRoots.Clear();
@@ -68,6 +71,7 @@ public sealed class AppSettings
         cfg.SetValue("ui", "onion_frames", OnionFrames);
         cfg.SetValue("files", "autosave_minutes", AutosaveMinutes);
         cfg.SetValue("files", "recent", RecentFiles.ToArray());
+        cfg.SetValue("files", "last_export_dir", LastExportDir);
         cfg.SetValue("agent", "allow", AllowAgents);
         cfg.SetValue("agent", "autonomous", AgentAutonomous);
         cfg.SetValue("agent", "read_roots", AgentReadRoots.ToArray());

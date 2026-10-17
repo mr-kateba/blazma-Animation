@@ -52,20 +52,45 @@ public sealed class HeadlessBackend : IAgentBackend, IAgentHostServices
     {
         _host = new AgentHost(_registry, () => _session, userPresent: false);
         _host.ProjectFolder = () => _session.FilePath is { } p ? Path.GetDirectoryName(Path.GetFullPath(p)) : null;
-        // Headless agents may read only: the project folder, the folder the tool was started in, and
-        // folders the user listed (--allow-read DIR, or BLAZMA_ALLOW_READ separated by the OS path separator).
-        _host.AllowedReadRoots.Add(Directory.GetCurrentDirectory());
-        if (Environment.GetEnvironmentVariable("BLAZMA_ALLOW_READ") is { Length: > 0 } extra)
-            foreach (var dir in extra.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                AllowRead(dir);
+        // Headless agents may read: the project folder, the folder the tool was started in, the write
+        // folders, and folders the user listed (--allow-read DIR, or BLAZMA_ALLOW_READ separated by the OS
+        // path separator). Read folders never grant write.
+        // They may create NEW files (exports) only in: the project folder, the folder the tool was started
+        // in (the person who launched the headless tool chose it, and headless project_save/project_new
+        // already create new .blazanim files there), and folders listed with --allow-write DIR or
+        // BLAZMA_ALLOW_WRITE. A start folder that is a filesystem root (e.g. "/" when an MCP client starts
+        // the server there) is not made writable.
+        var cwd = Directory.GetCurrentDirectory();
+        _host.AllowedReadRoots.Add(cwd);
+        if (!IsFilesystemRoot(cwd)) _host.AllowedWriteRoots.Add(cwd);
+        foreach (var dir in EnvList("BLAZMA_ALLOW_READ")) AllowRead(dir);
+        foreach (var dir in EnvList("BLAZMA_ALLOW_WRITE")) AllowWrite(dir);
         _rpc = new AgentRpcHandler(_host, _registry, this);
     }
+
+    static IEnumerable<string> EnvList(string name) =>
+        Environment.GetEnvironmentVariable(name) is { Length: > 0 } v
+            ? v.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            : Array.Empty<string>();
+
+    static bool IsFilesystemRoot(string dir)
+    {
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(dir));
+        return Path.TrimEndingDirectorySeparator(Path.GetPathRoot(full) ?? "") == full;
+    }
+
+    /// <summary>Folders agents may create new files in (read-only access is <see cref="AllowedReadRoots"/>).</summary>
+    public IReadOnlyList<string> AllowedWriteRoots => _host.AllowedWriteRoots;
+    public IReadOnlyList<string> AllowedReadRoots => _host.AllowedReadRoots;
 
     public bool IsHeadless => true;
     public bool HasProject => _hasProject;
 
     /// <summary>Lets agents import files from <paramref name="dir"/> (validated: no network/device paths).</summary>
     public void AllowRead(string dir) => _host.AllowedReadRoots.Add(AgentPaths.Normalize(dir));
+
+    /// <summary>Lets agents create new files (exports) in <paramref name="dir"/> (validated: no network/device paths).</summary>
+    public void AllowWrite(string dir) => _host.AllowedWriteRoots.Add(AgentPaths.Normalize(dir));
     public CommandRegistry Registry => _registry;
 
     // IAgentHostServices

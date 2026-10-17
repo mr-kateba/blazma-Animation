@@ -95,13 +95,13 @@ public static class GltfAnimationReader
             var n = arr[i] as JsonObject ?? new JsonObject();
             Transform local;
             var hasMatrix = n["matrix"] is JsonArray;
-            if (n["matrix"] is JsonArray m && m.Count == 16)
-                local = GltfReader.DecomposeMatrix(m.Select(x => (double)x!).ToArray(), out _);
+            if (n["matrix"] is JsonArray m)
+                local = GltfReader.DecomposeMatrix(Doubles(m, 16, $"nodes[{i}].matrix") ?? throw Bad($"nodes[{i}].matrix must have 16 numbers."), out _);
             else
             {
-                var t = Doubles(n["translation"], 3) is { } tv ? new Vec3(tv[0], tv[1], tv[2]) : Vec3.Zero;
-                var r = Doubles(n["rotation"], 4) is { } rv ? new Quat(rv[0], rv[1], rv[2], rv[3]).Normalized() : Quat.Identity;
-                var s = Doubles(n["scale"], 3) is { } sv ? new Vec3(sv[0], sv[1], sv[2]) : Vec3.One;
+                var t = Doubles(n["translation"], 3, $"nodes[{i}].translation") is { } tv ? new Vec3(tv[0], tv[1], tv[2]) : Vec3.Zero;
+                var r = Doubles(n["rotation"], 4, $"nodes[{i}].rotation") is { } rv ? new Quat(rv[0], rv[1], rv[2], rv[3]).Normalized() : Quat.Identity;
+                var s = Doubles(n["scale"], 3, $"nodes[{i}].scale") is { } sv ? new Vec3(sv[0], sv[1], sv[2]) : Vec3.One;
                 local = new Transform(t, r, s);
             }
             list.Add(new GltfNodeInfo(i, (string?)n["name"], parents[i], Ints(n["children"]), local, hasMatrix, Int(n["mesh"]), Int(n["skin"])));
@@ -142,7 +142,14 @@ public static class GltfAnimationReader
                 var times = ReadFloats(glb, Int(sampler["input"]) ?? throw Bad("Sampler without input."), out var inComps);
                 var values = ReadFloats(glb, Int(sampler["output"]) ?? throw Bad("Sampler without output."), out var outComps);
                 if (inComps != 1) throw Bad($"animations[{a}].samplers[{si}] input is not SCALAR.");
-                if (path == "weights") outComps = times.Length == 0 ? 1 : values.Length / times.Length / (interp == "CUBICSPLINE" ? 3 : 1);
+                if (interp is not ("LINEAR" or "STEP" or "CUBICSPLINE")) throw Bad($"animations[{a}].samplers[{si}] has unknown interpolation '{interp}'.");
+                var perKey = interp == "CUBICSPLINE" ? 3 : 1;
+                if (path == "weights") outComps = times.Length == 0 ? 1 : Math.Max(1, values.Length / times.Length / perKey);
+                var expectedComps = path switch { "translation" or "scale" => 3, "rotation" => 4, _ => outComps };
+                if (outComps != expectedComps)
+                    throw Bad($"animations[{a}].samplers[{si}] output has {outComps} components; '{path}' needs {expectedComps}.");
+                if (times.Length == 0 || values.Length != (long)times.Length * outComps * perKey)
+                    throw Bad($"animations[{a}].samplers[{si}] has {values.Length / Math.Max(1, outComps)} output values for {times.Length} keys.");
                 channels.Add(new GltfAnimationChannel(node, path, interp, times, values, outComps));
             }
             result.Add(new GltfAnimation(a, (string?)anim["name"], anim["extras"]?.DeepClone(), channels));
@@ -158,17 +165,30 @@ public static class GltfAnimationReader
         components = GltfBuilder.Components((string?)acc["type"] ?? throw Bad($"Accessor {accessor} has no type."));
         var count = Int(acc["count"]) ?? throw Bad($"Accessor {accessor} has no count.");
         var ct = Int(acc["componentType"]) ?? throw Bad($"Accessor {accessor} has no componentType.");
-        var normalized = (bool?)acc["normalized"] ?? false;
+        var normalized = acc["normalized"] is JsonValue nv && nv.TryGetValue<bool>(out var nb) && nb;
         var size = ComponentSize(ct);
-        var result = new float[count * components];
-        if (acc["bufferView"] is null) return result; // all zeros per spec
+        if (count < 0) throw Bad($"Accessor {accessor} has a negative count.");
+        if (acc["bufferView"] is null)
+        {
+            // All zeros per spec; bounded so a bogus count cannot allocate gigabytes.
+            if ((long)count * components > MaxValuesWithoutData) throw Bad($"Accessor {accessor} has {count} elements and no data.");
+            return new float[count * components];
+        }
         var viewIndex = Int(acc["bufferView"]) ?? throw Bad($"Accessor {accessor} has an invalid bufferView.");
         var view = Item(glb.Json, "bufferViews", viewIndex);
         var data = BufferData(glb, Int(view["buffer"]) ?? 0);
         var viewOffset = Long(view["byteOffset"]) ?? 0;
         var viewLength = Long(view["byteLength"]) ?? 0;
-        var stride = Int(view["byteStride"]) ?? size * components;
+        var stride = (long?)Int(view["byteStride"]) ?? (long)size * components;
         var accOffset = Long(acc["byteOffset"]) ?? 0;
+        // Check the whole range BEFORE allocating: the declared count must fit in the view and the view in the buffer.
+        if (viewOffset < 0 || viewLength < 0 || accOffset < 0 || stride < (long)size * components)
+            throw Bad($"Accessor {accessor} has a negative offset/length or a stride smaller than its element.");
+        if (viewOffset + viewLength > data.Length)
+            throw Bad($"Buffer view {viewIndex} extends past the end of its buffer.");
+        if (count > 0 && accOffset + stride * (count - 1L) + (long)size * components > viewLength)
+            throw Bad($"Accessor {accessor} reads past the end of buffer view {viewIndex}.");
+        var result = new float[count * components];
         for (var i = 0; i < count; i++)
         {
             var p = viewOffset + accOffset + (long)i * stride;
@@ -237,6 +257,17 @@ public static class GltfAnimationReader
     public static int? Int(JsonNode? n) => Long(n) is long l && l is >= int.MinValue and <= int.MaxValue ? (int)l : null;
 
     static int[] Ints(JsonNode? n) => n is JsonArray a ? a.Select(x => Int(x) ?? throw Bad("Expected an integer.")).ToArray() : Array.Empty<int>();
-    static double[]? Doubles(JsonNode? n, int count) => n is JsonArray a && a.Count == count ? a.Select(x => (double)x!).ToArray() : null;
+    const long MaxValuesWithoutData = 1 << 24;
+
+    /// <summary>Numbers of an array property; null when the property is absent; invalid_gltf when it is not exactly <paramref name="count"/> numbers.</summary>
+    static double[]? Doubles(JsonNode? n, int count, string what)
+    {
+        if (n is null) return null;
+        if (n is not JsonArray a || a.Count != count) throw Bad($"{what} must be an array of {count} numbers.");
+        var r = new double[count];
+        for (var i = 0; i < count; i++)
+            r[i] = a[i] is JsonValue v && v.TryGetValue<double>(out var d) && double.IsFinite(d) ? d : throw Bad($"{what} must be an array of {count} numbers.");
+        return r;
+    }
     static ExportException Bad(string m) => new("invalid_gltf", m);
 }

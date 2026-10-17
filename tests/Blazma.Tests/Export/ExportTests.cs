@@ -281,13 +281,23 @@ public class MannequinExportTests
     }
 
     [Fact]
-    public void LoopingClip_EndFrameRepeatsTheLoopStart()
+    public void LoopingClip_EndFrameRepeatsTheLoopStart_CarriedForwardByOneCycle()
     {
         var (s, ch, clip) = ExportFixture.Walk();
         Assert.True(ExportFixture.Run(s, "clip.set_loop", new { clipId = clip, enabled = true }).Ok);
         var baked = AnimationBaker.Bake(ExportFixture.ClipOf(s, clip), ExportFixture.RigOf(s, ch));
+        var root = baked.RootMotion.BoneIndex;
+        Assert.True(baked.RootMotion.CycleDisplacement.ApproxEquals(new Vec3(0, 0, 0.6), 1e-9));
         for (var i = 0; i < baked.Locals[0].Length; i++)
-            Assert.Equal(baked.Locals[0][i], baked.Locals[^1][i]);
+        {
+            if (i == root)
+            {
+                // Same pose as the loop start, one cycle further along: the walk keeps going forward.
+                Assert.Equal(baked.Locals[0][i].Rotation, baked.Locals[^1][i].Rotation);
+                Assert.True((baked.Locals[^1][i].Translation - baked.Locals[0][i].Translation).ApproxEquals(new Vec3(0, 0, 0.6), 1e-9));
+            }
+            else Assert.Equal(baked.Locals[0][i], baked.Locals[^1][i]);
+        }
     }
 
     [Fact]
@@ -306,9 +316,11 @@ public class MannequinExportTests
         Assert.Equal("Walk", (string?)j["animation"]);
         Assert.Equal(30, (int)j["fps"]!["numerator"]!);
         Assert.Equal(1, (int)j["fps"]!["denominator"]!);
-        Assert.Equal(26, (int)j["frameCount"]!);
-        Assert.Equal(25 / 30.0, (double)j["durationSeconds"]!, 9);
+        // The loop (0..24) is a sub-range of the 25-frame clip: by default exactly the loop is exported.
+        Assert.Equal(25, (int)j["frameCount"]!);
+        Assert.Equal(24 / 30.0, (double)j["durationSeconds"]!, 9);
         Assert.True((bool)j["loop"]!["enabled"]!);
+        Assert.Equal(0, (long)j["loop"]!["startFrame"]!);
         Assert.Equal(24, (long)j["loop"]!["endFrame"]!);
         Assert.Equal(new[] { "Start:initial:0", "Pass:marker:12" },
             j["markers"]!.AsArray().Select(m => $"{m!["name"]}:{m["kind"]}:{m["frame"]}"));
@@ -319,10 +331,14 @@ public class MannequinExportTests
         Assert.Equal("stone", (string?)ev["payload"]!["surface"]);
         Assert.Equal("in_place", (string?)j["rootMotion"]!["mode"]);
         Assert.True((bool)j["rootMotion"]!["removed"]!);
-        // Looping: frames 24 and 25 wrap to the loop start (frames 0 and 1), as in playback.
+        // Looping: frame 24 wraps to the loop start's pose, carried one cycle (0.6 m) forward, so the
+        // root motion is the real travel of one cycle and no frame jumps back.
         Assert.Equal(result.Baked.RootMotion.Total.Z, (double)j["rootMotion"]!["totalDisplacement"]![2]!, 6);
-        Assert.InRange((double)j["rootMotion"]!["totalDisplacement"]![2]!, 0, 0.01);
-        Assert.Equal(26, j["rootMotion"]!["perFrameDelta"]!.AsArray().Count);
+        Assert.Equal(0.6, (double)j["rootMotion"]!["totalDisplacement"]![2]!, 6);
+        Assert.Equal(0.6, (double)j["rootMotion"]!["cycleDisplacement"]![2]!, 6);
+        var deltas = j["rootMotion"]!["perFrameDelta"]!.AsArray();
+        Assert.Equal(25, deltas.Count);
+        Assert.All(deltas, d => Assert.InRange((double)d![2]!, 0, 0.05));
         var bones = j["bones"]!.AsArray();
         Assert.Equal(rig.Bones.Count, bones.Count);
         var thigh = bones.Single(b => (string?)b!["name"] == H.Thigh(Side.Left))!;
@@ -585,7 +601,7 @@ public class ExportAgentSecurityTests
     {
         var (s, host, sid, clip) = Host(userPresent: false);
         using var dir = new TempDir();
-        host.AllowedReadRoots.Add(dir.Path);
+        host.AllowedWriteRoots.Add(dir.Path);
         var path = dir.File("walk.glb");
         var r = host.Call(sid, "animation.export", ExportFixture.A(new { clipId = clip, path }));
         Assert.True(r.Ok, r.Error?.Message);
@@ -642,7 +658,7 @@ public class ExportAgentSecurityTests
         using var outside = new TempDir();
         var link = Path.Combine(allowed.Path, "out");
         Directory.CreateSymbolicLink(link, outside.Path);
-        host.AllowedReadRoots.Add(allowed.Path);
+        host.AllowedWriteRoots.Add(allowed.Path);
         Assert.Equal("path_not_allowed", host.Call(sid, "animation.export", ExportFixture.A(new { clipId = clip, path = Path.Combine(link, "walk.glb") })).Error!.Code);
         Assert.Empty(Directory.GetFiles(outside.Path));
     }

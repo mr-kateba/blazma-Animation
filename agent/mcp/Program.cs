@@ -29,6 +29,7 @@ static class Program
         string? pipe = null, startProject = null;
         var forceHeadless = false;
         var allowRead = new List<string>();
+        var allowWrite = new List<string>();
         var forceAttach = false;
         for (var i = 0; i < args.Length; i++)
         {
@@ -38,10 +39,13 @@ static class Program
                 case "--attach": forceAttach = true; break;
                 case "--pipe" when i + 1 < args.Length: pipe = args[++i]; break;
                 case "--allow-read" when i + 1 < args.Length: allowRead.Add(args[++i]); break;
+                case "--allow-write" when i + 1 < args.Length: allowWrite.Add(args[++i]); break;
                 case "--project" when i + 1 < args.Length: startProject = args[++i]; break;
                 case "-h" or "--help":
-                    Console.Error.WriteLine("blazma-mcp [--headless | --attach] [--pipe NAME] [--project FILE] [--allow-read DIR]...\n" +
-                        "MCP server on stdio. Attaches to a running Blazma Animation window when there is one, otherwise runs headless.");
+                    Console.Error.WriteLine("blazma-mcp [--headless | --attach] [--pipe NAME] [--project FILE] [--allow-read DIR]... [--allow-write DIR]...\n" +
+                        "MCP server on stdio. Attaches to a running Blazma Animation window when there is one, otherwise runs headless.\n" +
+                        "Headless: agents read from the project folder, the start folder and --allow-read/BLAZMA_ALLOW_READ folders;\n" +
+                        "they create new files (exports) only in the project folder, the start folder and --allow-write/BLAZMA_ALLOW_WRITE folders.");
                     return 0;
                 default:
                     Console.Error.WriteLine($"blazma-mcp: unknown argument '{args[i]}'.");
@@ -68,6 +72,7 @@ static class Program
             {
                 var headless = new HeadlessBackend();
                 foreach (var dir in allowRead) headless.AllowRead(dir);
+                foreach (var dir in allowWrite) headless.AllowWrite(dir);
                 backend = headless;
             }
             Console.Error.WriteLine($"blazma-mcp: {(backend.IsHeadless ? "headless" : "attached to the running app")}");

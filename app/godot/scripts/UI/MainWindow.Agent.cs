@@ -123,7 +123,7 @@ public partial class MainWindow
     {
         _foldersDialog.Title = Tr("Folders agents may read");
         _foldersDialog.OkButtonText = Tr("Close");
-        _foldersIntro.Text = Tr("Agents can always read the project's own folder. Add other folders they may import files from.");
+        _foldersIntro.Text = Tr("Agents can always use the project's own folder. Add other folders they may import files from and save new files to (they never overwrite existing files).");
         _foldersAdd.Text = Tr("Add folder…");
         _foldersRemove.Text = Tr("Remove");
         _foldersList.Clear();

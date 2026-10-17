@@ -117,6 +117,10 @@ public partial class AppController
     {
         Agents.AllowedReadRoots.Clear();
         Agents.AllowedReadRoots.AddRange(Settings.AgentReadRoots);
+        // Folders the user added by hand in the app are also places agents may create new files
+        // (exports, save-as); they can never overwrite an existing file there.
+        Agents.AllowedWriteRoots.Clear();
+        Agents.AllowedWriteRoots.AddRange(Settings.AgentReadRoots);
     }
 
     // ---- user decisions on agent work ----------------------------------------------------------------
@@ -178,7 +182,7 @@ public partial class AppController
                 // network/device paths, and never over an existing file other than the open project.
                 var full = AgentPaths.ValidateSaveTarget(path, app.FilePath);
                 var same = app.FilePath is not null && AgentPaths.SamePath(full, System.IO.Path.GetFullPath(app.FilePath));
-                if (!same && !app.Agents.IsUnderAllowedRoot(full))
+                if (!same && !app.Agents.IsUnderWriteRoot(AgentPaths.ResolveLinks(full)))
                     throw new AgentRpcException("path_not_allowed", "Agents can only save inside the project folder or the folders the user allowed.");
                 path = full;
             }

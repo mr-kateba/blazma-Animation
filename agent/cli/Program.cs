@@ -22,7 +22,7 @@ sealed class Options
     public HashSet<string> Flags { get; } = new();
 
     static readonly HashSet<string> FlagNames = new() { "json", "attach", "no-save", "help" };
-    static readonly HashSet<string> ValueNames = new() { "name", "args", "arg", "pipe" };
+    static readonly HashSet<string> ValueNames = new() { "name", "args", "arg", "pipe", "allow-read", "allow-write" };
 
     public static Options Parse(string[] args)
     {
@@ -67,6 +67,9 @@ static class Program
           blazma-anim docs <out-dir>
 
         Add --attach (and leave out <file>) to drive the running Blazma Animation window instead of a file.
+        Headless file access: commands read files from the project folder, the current folder and --allow-read DIR
+        (or BLAZMA_ALLOW_READ); they create new files (animation_export) only in the project folder, the current
+        folder and --allow-write DIR (or BLAZMA_ALLOW_WRITE). Read folders never grant write.
         Exit codes: 0 ok, 1 user/input error or command failed, 2 validation failure, 3 internal error, 130 cancelled.
         """;
 
@@ -116,10 +119,19 @@ static class Program
             return new AgentConnection(backend, "cli");
         }
         if (file is null) throw new UsageException("Missing <file> (or use --attach).");
-        var headless = new HeadlessBackend();
+        var headless = Headless(o);
         try { await headless.CallAsync("project.open", new JsonObject { ["path"] = file }, ct); }
         catch { await headless.DisposeAsync(); throw; }
         return new AgentConnection(headless, "cli");
+    }
+
+    /// <summary>In-process backend with the folders from --allow-read / --allow-write (plus BLAZMA_ALLOW_READ / BLAZMA_ALLOW_WRITE).</summary>
+    static HeadlessBackend Headless(Options o)
+    {
+        var h = new HeadlessBackend();
+        foreach (var d in o.Many("allow-read")) h.AllowRead(d);
+        foreach (var d in o.Many("allow-write")) h.AllowWrite(d);
+        return h;
     }
 
     static void Print(Options o, JsonNode json, string human)
@@ -132,7 +144,7 @@ static class Program
 
     static async Task<int> Commands(Options o, CancellationToken ct)
     {
-        await using var conn = o.Has("attach") ? await Connect(o, null, ct) : new AgentConnection(new HeadlessBackend(), "cli");
+        await using var conn = o.Has("attach") ? await Connect(o, null, ct) : new AgentConnection(Headless(o), "cli");
         var tools = await conn.ListToolsAsync(ct);
         if (o.Has("json"))
         {
@@ -157,7 +169,7 @@ static class Program
     static async Task<int> New(Options o, CancellationToken ct)
     {
         var file = o.Positional.Count == 1 ? o.Positional[0] : throw new UsageException("Usage: blazma-anim new <file.blazanim> [--name NAME]");
-        await using var headless = new HeadlessBackend();
+        await using var headless = Headless(o);
         var args = new JsonObject { ["path"] = file };
         if (o.One("name") is { } n) args["name"] = n;
         var r = (JsonObject)(await headless.CallAsync("project.new", args, ct))!;
@@ -168,7 +180,7 @@ static class Program
     static async Task<int> Docs(Options o, CancellationToken ct)
     {
         var dir = o.Positional.Count == 1 ? o.Positional[0] : throw new UsageException("Usage: blazma-anim docs <out-dir>");
-        await using var conn = new AgentConnection(new HeadlessBackend(), "cli");
+        await using var conn = new AgentConnection(Headless(o), "cli");
         var tools = await conn.ListToolsAsync(ct);
         Directory.CreateDirectory(dir);
         await File.WriteAllTextAsync(Path.Combine(dir, "MCP_TOOLS.md"), DocsGenerator.McpTools(tools), Utf8, ct);

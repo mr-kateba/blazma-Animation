@@ -41,7 +41,7 @@ public static class DocsGenerator
         var sb = new StringBuilder(Banner);
         sb.AppendLine("# MCP tools (`blazma-mcp`)\n");
         sb.AppendLine("The MCP server exposes one tool per registry command plus a few session tools. Tool names are the command id with `.` replaced by `_` (`key.set` becomes `key_set`). Each result is the `CommandResult` as pretty JSON text (`ok`, `data`, `transactionId`, `warnings`, `error`); when `ok` is false the tool result has `isError = true`.\n");
-        sb.AppendLine("Effects: **readonly** runs immediately; **mutating** changes the project and can be undone; **destructive** needs the user's approval in the app (in headless mode it runs directly); **external** reads or writes files outside the project and needs approval unless the path is in an allowed folder.\n");
+        sb.AppendLine("Effects: **readonly** runs immediately; **mutating** changes the project and can be undone; **destructive** needs the user's approval in the app (in headless mode it runs directly); **external** reads files outside the project and needs approval unless the path is in an allowed folder. Commands that write files (e.g. `animation_export`) only ever create new files, in the project folder or an allowed write folder (`--allow-write` / `BLAZMA_ALLOW_WRITE` headless); read folders never grant write.\n");
         sb.AppendLine("## Session tools\n");
         sb.AppendLine("| Tool | Where | Description |");
         sb.AppendLine("|---|---|---|");
@@ -92,6 +92,8 @@ public static class DocsGenerator
         sb.AppendLine("| `run` | Runs a JSON-lines script (one `{\"command\":\"key.set\",\"args\":{...}}` per line; blank lines and lines starting with `#` are skipped) in ONE task. Stops at the first failure without saving; otherwise saves once. Script variables: `${character}` (the project's first character) and `${clip}` (its last clip) are replaced inside string arguments; `\"save\":{\"name\":\"field\"}` on a line stores `data.field` of its result as `${name}` for later lines (e.g. `{\"command\":\"clip.create\",\"args\":{\"name\":\"Walk\"},\"save\":{\"clip\":\"clipId\"}}`). |");
         sb.AppendLine("| `docs` | Writes `MCP_TOOLS.md` and `CLI_REFERENCE.md` into the folder. |");
         sb.AppendLine();
+        sb.AppendLine("## File access (headless)\n");
+        sb.AppendLine("Commands read files (`rig_import`, `animation_validate`) from the project folder, the current folder, `--allow-read DIR` (repeatable) or `BLAZMA_ALLOW_READ`, and the write folders. Commands that write files (`animation_export`) only create NEW files, in the project folder, the current folder (unless it is a filesystem root) and `--allow-write DIR` (repeatable) or `BLAZMA_ALLOW_WRITE`. Read folders never grant write. Environment lists use the OS path separator (`;` on Windows, `:` elsewhere). Symbolic links anywhere in a path are resolved before the check. Everything else fails with `path_not_allowed`.\n");
         sb.AppendLine("## Output and exit codes\n");
         sb.AppendLine("Default output is human-readable text; `--json` prints machine-readable JSON on stdout (for `exec`: the `CommandResult`; for `run`: `{ok, steps:[...], saved}`). Errors go to stderr.\n");
         sb.AppendLine("| Code | Meaning |");

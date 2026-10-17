@@ -4,7 +4,7 @@
 
 The MCP server exposes one tool per registry command plus a few session tools. Tool names are the command id with `.` replaced by `_` (`key.set` becomes `key_set`). Each result is the `CommandResult` as pretty JSON text (`ok`, `data`, `transactionId`, `warnings`, `error`); when `ok` is false the tool result has `isError = true`.
 
-Effects: **readonly** runs immediately; **mutating** changes the project and can be undone; **destructive** needs the user's approval in the app (in headless mode it runs directly); **external** reads or writes files outside the project and needs approval unless the path is in an allowed folder.
+Effects: **readonly** runs immediately; **mutating** changes the project and can be undone; **destructive** needs the user's approval in the app (in headless mode it runs directly); **external** reads files outside the project and needs approval unless the path is in an allowed folder. Commands that write files (e.g. `animation_export`) only ever create new files, in the project folder or an allowed write folder (`--allow-write` / `BLAZMA_ALLOW_WRITE` headless); read folders never grant write.
 
 ## Session tools
 
@@ -157,10 +157,11 @@ Effect: **readonly**. Command id: `animation.export`.
 | `characterId` | string | no | Character to export with (default: the first character using the clip's rig). (min length 1) |
 | `path` | string | yes | Absolute path of the .glb to create; its folder must exist. (min length 1) |
 | `rootMotion` | string | no | keep (default) \| in_place (remove the root's horizontal X/Z travel, keep height) \| in_place_all (remove all root translation). (min length 1) |
-| `startFrame` | integer | no | First frame to export (default 0); it becomes time 0 in the file. (min 0) |
-| `endFrame` | integer | no | Last frame to export, inclusive (default: clip length). (min 0) |
+| `startFrame` | integer | no | First frame to export (default 0, or the loop start when the clip loops over part of its length); it becomes time 0 in the file. (min 0) |
+| `endFrame` | integer | no | Last frame to export, inclusive (default: clip length, or the loop end when the clip loops over part of its length). (min 0) |
 | `sidecar` | boolean | no | Also write '<name>.blazma.json' next to the .glb (default true). |
 | `overwrite` | boolean | no | Replace existing files (default false). Ignored for agents, which can only create new files. |
+| `validate` | boolean | no | Re-read the written file and validate it (default true). |
 
 ### `animation_validate`
 

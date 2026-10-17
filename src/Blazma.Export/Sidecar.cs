@@ -22,7 +22,13 @@ public static class Sidecar
         long Rel(Flicks t) => t.ToFrame(fps) - baked.StartFrame;
         bool InRange(Flicks t) => Rel(t) is var f && f >= 0 && f < baked.FrameCount;
 
-        var loopEnd = clip.Loop.End.Value > 0 && clip.Loop.End < clip.Duration ? clip.Loop.End : clip.Duration;
+        // Loop range relative to the export, clamped to the exported frames (never negative); null when the
+        // exported frames do not overlap the loop at all.
+        var (ls, le) = AnimationBaker.LoopRange(clip);
+        long? loopStart = Rel(ls), loopEnd = Rel(le);
+        var clamped = loopStart < 0 || loopEnd > baked.FrameCount - 1;
+        if (loopEnd < 0 || loopStart > baked.FrameCount - 1) loopStart = loopEnd = null;
+        else { loopStart = Math.Max(0, loopStart!.Value); loopEnd = Math.Min(baked.FrameCount - 1, loopEnd!.Value); }
         var rm = baked.RootMotion;
         var asset = rig.Source.Kind == RigSourceKind.Imported ? project.FindAsset(rig.Source.Asset) : null;
 
@@ -42,8 +48,9 @@ public static class Sidecar
             ["loop"] = new JsonObject
             {
                 ["enabled"] = clip.Loop.Enabled,
-                ["startFrame"] = Rel(clip.Loop.Start),
-                ["endFrame"] = Rel(loopEnd),
+                ["startFrame"] = loopStart,
+                ["endFrame"] = loopEnd,
+                ["clampedToExport"] = clamped,
             },
             ["markers"] = new JsonArray(clip.Markers.Where(m => InRange(m.Time)).OrderBy(m => m.Time.Value).Select(m => (JsonNode?)new JsonObject
             {
@@ -65,6 +72,7 @@ public static class Sidecar
                 ["bone"] = rm.BoneName,
                 ["axes"] = rm.Mode == RootMotionMode.InPlaceAll ? "xyz" : "xz",
                 ["totalDisplacement"] = Vec(rm.Total),
+                ["cycleDisplacement"] = Vec(rm.CycleDisplacement),
                 ["perFrameDelta"] = new JsonArray(rm.Deltas.Select(d => (JsonNode?)Vec(d)).ToArray()),
             },
             ["bones"] = new JsonArray(rig.Bones.Select((b, i) => (JsonNode?)new JsonObject

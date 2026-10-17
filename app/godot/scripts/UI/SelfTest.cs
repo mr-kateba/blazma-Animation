@@ -326,6 +326,9 @@ public partial class SelfTest : Node
         // Phase 3: timeline, keys, playback, dope sheet, graph editor, markers, trail and onion skin.
         await RunPhase3();
 
+        // Phase 4: export dialog, .glb written and re-imported by Godot.
+        await RunPhase4();
+
         // Phase 5: the app hosts the agent API; AI Workspace panel.
         await RunPhase5();
 

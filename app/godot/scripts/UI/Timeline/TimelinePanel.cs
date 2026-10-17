@@ -23,6 +23,7 @@ public partial class TimelinePanel : PanelContainer
     public Segmented Tabs { get; }
     public OptionButton ClipPick { get; } = new() { AutoTranslateMode = AutoTranslateModeEnum.Disabled, FocusMode = FocusModeEnum.None, FitToLongestItem = false };
     public Button AddMarkerButton { get; }
+    public Button ExportButton { get; }
     public Button StartButton { get; }
     public Button PrevKeyButton { get; }
     public Button PlayButton { get; }
@@ -72,6 +73,10 @@ public partial class TimelinePanel : PanelContainer
             TooltipText = "Add a marker at the playhead. Double-click a marker to rename it." };
         AddMarkerButton.Pressed += () => _host.AddMarkerAtPlayhead();
         head.AddChild(AddMarkerButton);
+        ExportButton = new Button { Text = "Export", ThemeTypeVariation = "Transport", FocusMode = FocusModeEnum.None,
+            TooltipText = "Export the clip as a .glb animation (Ctrl+E)." };
+        ExportButton.Pressed += () => _host.OpenExportDialog();
+        head.AddChild(ExportButton);
         root.AddChild(head);
 
         // transport (always LTR: time order)
