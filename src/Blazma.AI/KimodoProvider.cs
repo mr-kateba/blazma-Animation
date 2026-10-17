@@ -23,11 +23,14 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
     Timer? _idleTimer;
     JsonObject? _hello;
     bool _disposed;
+    long _epoch; // bumped whenever the runner is stopped on purpose: a runner started before that is never kept
+    readonly EventHandler _onProcessExit;
 
     public KimodoProvider(KimodoSettings settings)
     {
         _settings = settings;
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => StopRunner("host exit");
+        _onProcessExit = (_, _) => StopRunner("host exit");
+        AppDomain.CurrentDomain.ProcessExit += _onProcessExit;
     }
 
     public string Id => ProviderId;
@@ -96,31 +99,42 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
         if (info.UnavailableReason is { } why) warnings.Add(why);
         if (probe && runner is not null)
         {
+            // Never wait behind a generation (it can run for minutes, and a headless host answers one call at a time):
+            // when the runner is busy, report what it said when it started.
+            if (!_gate.Wait(0))
+            {
+                details["runnerBusy"] = "true";
+                JsonObject? hello;
+                lock (_sync) hello = _hello?.DeepClone().AsObject();
+                foreach (var (k, v) in hello ?? new JsonObject()) details["runner." + k] = v?.ToJsonString().Trim('"');
+                warnings.Add("kimodo-runner is busy with a generation, so it was not probed again; the runner details are from when it started.");
+                return new ProviderDiagnostics(info, details, HardwareProbe.Probe(), warnings);
+            }
+            RunnerProcess? probed = null;
             try
             {
-                await _gate.WaitAsync(ct).ConfigureAwait(false);
-                try
+                probed = await EnsureRunnerAsync(s, ct).ConfigureAwait(false);
+                var d = await probed.CallAsync("diagnose", new JsonObject
                 {
-                    var r = await EnsureRunnerAsync(s, ct).ConfigureAwait(false);
-                    var d = await r.CallAsync("diagnose", new JsonObject
-                    {
-                        ["motionModel"] = motion, ["textModel"] = text, ["device"] = s.Device,
-                    }, null, s.DiagnoseTimeout, ct).ConfigureAwait(false);
-                    foreach (var (k, v) in _hello ?? new JsonObject()) details["runner." + k] = v?.ToJsonString().Trim('"');
-                    foreach (var (k, v) in d)
-                        if (k == "warnings" && v is JsonArray wa) warnings.AddRange(wa.Select(x => (string?)x ?? ""));
-                        else details["runner." + k] = v?.ToJsonString().Trim('"');
-                }
-                finally
-                {
-                    _gate.Release();
-                    ScheduleIdleStop();
-                }
+                    ["motionModel"] = motion, ["textModel"] = text, ["device"] = s.Device,
+                }, null, s.DiagnoseTimeout, ct).ConfigureAwait(false);
+                JsonObject? hello;
+                lock (_sync) hello = _hello?.DeepClone().AsObject();
+                foreach (var (k, v) in hello ?? new JsonObject()) details["runner." + k] = v?.ToJsonString().Trim('"');
+                foreach (var (k, v) in d)
+                    if (k == "warnings" && v is JsonArray wa) warnings.AddRange(wa.Select(x => (string?)x ?? ""));
+                    else details["runner." + k] = v?.ToJsonString().Trim('"');
             }
             catch (MotionGenerationException e)
             {
                 warnings.Add($"Runner probe failed [{e.Code}]: {e.Message}");
-                StopRunner("probe failed");
+                // Only the runner this probe used: still inside the gate, so no generation can be using it.
+                if (probed is not null) StopRunner(probed, "probe failed");
+            }
+            finally
+            {
+                _gate.Release();
+                ScheduleIdleStop();
             }
         }
         return new ProviderDiagnostics(info, details, HardwareProbe.Probe(), warnings);
@@ -132,7 +146,7 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
         var s = Settings;
         if (s.MissingReason() is { } missing) throw new MotionGenerationException("provider_unavailable", missing);
         var frames = request.FramesAt(SomaSkeleton.NativeFps);
-        if (frames > 10_000) throw new MotionGenerationException("invalid_request", "Kimodo accepts at most 10000 frames.");
+        if (frames > MaxFrames) throw new MotionGenerationException("invalid_request", $"Kimodo accepts at most {MaxFrames} frames.");
 
         progress?.Report(new GenerationProgress("queued", 0));
         await _gate.WaitAsync(ct).ConfigureAwait(false);
@@ -162,12 +176,12 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
             }
             catch (MotionGenerationException e) when (e.Code is "runner_crashed" or "runner_timeout" or "message_too_large" or "protocol_error" or "runner_stopped")
             {
-                StopRunner(e.Code);
+                StopRunner(runner, e.Code);
                 throw;
             }
             catch (OperationCanceledException)
             {
-                StopRunner("cancelled");
+                StopRunner(runner, "cancelled");
                 throw;
             }
             var motion = Parse(result, request);
@@ -183,12 +197,14 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
 
     async Task<RunnerProcess> EnsureRunnerAsync(KimodoSettings s, CancellationToken ct)
     {
+        long epoch;
         lock (_sync)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_disposed) throw new MotionGenerationException("runner_stopped", "The Kimodo provider was shut down.");
             if (_runner is { HasExited: false } live) return live;
             _runner?.Dispose();
             _runner = null;
+            epoch = _epoch;
         }
         var path = s.ResolveRunner() ?? throw new MotionGenerationException("provider_unavailable", s.MissingReason() ?? "kimodo-runner not found.");
         var runner = RunnerProcess.Start(path, s, Write);
@@ -200,6 +216,9 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
                 throw new MotionGenerationException("protocol_mismatch", $"kimodo-runner speaks protocol {hello["protocol"]}, Blazma needs {ProtocolVersion}. Update kimodo-runner.");
             lock (_sync)
             {
+                // Disposed, or stopped on purpose (new settings) while this one was starting: never keep it.
+                if (_disposed || _epoch != epoch)
+                    throw new MotionGenerationException("runner_stopped", _disposed ? "The Kimodo provider was shut down." : "kimodo-runner was stopped while it was starting (the settings changed).");
                 _hello = hello;
                 _runner = runner;
             }
@@ -212,13 +231,31 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
         }
     }
 
-    static MotionResult Parse(JsonObject r, MotionRequest request)
+    /// <summary>Largest motion the runner may return (the same limit the runner and <see cref="GenerateAsync"/> apply).</summary>
+    public const int MaxFrames = 10_000;
+
+    /// <summary>An integer field within [min, max] (integral JSON numbers only; checked before anything is allocated).</summary>
+    static int ReadInt(JsonNode? node, string name, int min, int max, int? fallback = null)
+    {
+        if (node is null && fallback is { } f) return f;
+        long value;
+        if (node is JsonValue v && v.TryGetValue<long>(out var l)) value = l;
+        else if (node is JsonValue iv && iv.TryGetValue<int>(out var i)) value = i;
+        else if (node is JsonValue d && d.TryGetValue<double>(out var x) && double.IsFinite(x) && Math.Floor(x) == x && Math.Abs(x) < 1e15) value = (long)x;
+        else throw new MotionGenerationException("invalid_motion", $"The result's '{name}' is not an integer.");
+        if (value < min || value > max) throw new MotionGenerationException("invalid_motion", $"The result's '{name}' ({value}) is outside {min}..{max}.");
+        return (int)value;
+    }
+
+    internal static MotionResult Parse(JsonObject r, MotionRequest request)
     {
         try
         {
             var skel = r["skeleton"] as JsonObject ?? throw new MotionGenerationException("invalid_motion", "The result has no skeleton.");
-            var names = (skel["names"] as JsonArray ?? new JsonArray()).Select(x => (string?)x ?? "").ToList();
-            var parents = (skel["parents"] as JsonArray ?? new JsonArray()).Select(x => (int)x!).ToList();
+            var namesNode = skel["names"] as JsonArray ?? new JsonArray();
+            if (namesNode.Count > SomaSkeleton.Names.Count) throw new MotionGenerationException("invalid_motion", "The result's skeleton has too many joints.");
+            var names = namesNode.Select(x => (string?)x ?? "").ToList();
+            var parents = (skel["parents"] as JsonArray ?? new JsonArray()).Select(x => ReadInt(x, "parents", -1, SomaSkeleton.Names.Count)).ToList();
             var offsets = (skel["offsets"] as JsonArray ?? new JsonArray()).Select(o => o is JsonArray a && a.Count == 3
                 ? new Vec3((double)a[0]!, (double)a[1]!, (double)a[2]!) : throw new MotionGenerationException("invalid_motion", "Bad offset.")).ToList();
             if ((string?)skel["up"] is { } up && up != "+Y" || (string?)skel["forward"] is { } fwd && fwd != "+Z")
@@ -226,21 +263,24 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
             var definition = SomaSkeleton.FromRunner((string?)skel["key"] ?? "", names, parents, offsets);
 
             var fps = (double?)r["fps"] ?? SomaSkeleton.NativeFps;
-            var frames = (int?)r["frames"] ?? 0;
-            var joints = (int?)r["joints"] ?? 0;
+            // Validate the sizes before allocating anything: a hostile or broken runner must not make Blazma allocate
+            // frames × joints arrays of its choosing (or overflow the multiplication).
+            var frames = ReadInt(r["frames"], "frames", 1, MaxFrames);
+            var joints = ReadInt(r["joints"], "joints", 1, SomaSkeleton.Names.Count);
             if (joints != definition.Count) throw new MotionGenerationException("invalid_motion", $"The result has {joints} joints, the skeleton {definition.Count}.");
             var rot = r["rotations"] as JsonArray ?? throw new MotionGenerationException("invalid_motion", "The result has no rotations.");
             var pos = r["rootPositions"] as JsonArray ?? throw new MotionGenerationException("invalid_motion", "The result has no root positions.");
-            if (frames <= 0 || rot.Count != frames * joints * 4 || pos.Count != frames * 3)
+            var quatCount = checked(frames * joints);
+            if (rot.Count != checked(quatCount * 4) || pos.Count != checked(frames * 3))
                 throw new MotionGenerationException("invalid_motion", "Rotation/position arrays do not match frames × joints.");
-            var q = new Quat[frames * joints];
+            var q = new Quat[quatCount];
             for (var i = 0; i < q.Length; i++) q[i] = new Quat((double)rot[i * 4]!, (double)rot[i * 4 + 1]!, (double)rot[i * 4 + 2]!, (double)rot[i * 4 + 3]!);
             var p = new Vec3[frames];
             for (var i = 0; i < frames; i++) p[i] = new Vec3((double)pos[i * 3]!, (double)pos[i * 3 + 1]!, (double)pos[i * 3 + 2]!);
 
             var warnings = new List<string> { "Kimodo generates the 30 SOMA body joints only: fingers and face stay at their rest pose (R5)." };
             if (request.Constraints is { IsEmpty: false }) warnings.Add("Constraints were ignored: kimodo.cpp does not support constraint input yet.");
-            warnings.AddRange((r["warnings"] as JsonArray ?? new JsonArray()).Select(x => (string?)x ?? "").Where(x => x.Length > 0));
+            warnings.AddRange((r["warnings"] as JsonArray ?? new JsonArray()).Take(20).Select(x => (string?)x ?? "").Where(x => x.Length > 0));
             var meta = new Dictionary<string, string>();
             if ((string?)r["model"] is { } model) meta["kimodo.model"] = Path.GetFileName(model);
             if ((string?)r["textModel"] is { } tm) meta["kimodo.textModel"] = Path.GetFileName(tm);
@@ -250,7 +290,8 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
             result.Validate();
             return result;
         }
-        catch (Exception e) when (e is InvalidOperationException or FormatException or InvalidCastException or NullReferenceException or System.Text.Json.JsonException)
+        catch (Exception e) when (e is InvalidOperationException or FormatException or InvalidCastException or NullReferenceException
+                                       or System.Text.Json.JsonException or OverflowException or ArgumentException or IndexOutOfRangeException)
         {
             throw new MotionGenerationException("invalid_motion", $"kimodo-runner returned a malformed result: {e.Message}", e);
         }
@@ -262,10 +303,15 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
         {
             if (_runner is null || _disposed) return;
             _idleTimer?.Dispose();
+            var runner = _runner;
             _idleTimer = new Timer(_ =>
             {
                 if (!_gate.Wait(0)) return; // busy again
-                try { StopRunner("idle"); }
+                try
+                {
+                    lock (_sync) if (!ReferenceEquals(_runner, runner)) return;
+                    StopRunner("idle");
+                }
                 finally { _gate.Release(); }
             }, null, _settings.IdleTimeout, Timeout.InfiniteTimeSpan);
         }
@@ -280,12 +326,13 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
         }
     }
 
-    /// <summary>Stops the runner process (the next request starts a new one).</summary>
+    /// <summary>Stops the runner process (the next request starts a new one). A runner that is still starting is not kept.</summary>
     public void StopRunner(string reason = "stopped")
     {
         RunnerProcess? r;
         lock (_sync)
         {
+            _epoch++;
             r = _runner;
             _runner = null;
             _idleTimer?.Dispose();
@@ -295,6 +342,22 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
         if (reason == "idle") r.Shutdown(TimeSpan.FromSeconds(2));
         else r.Kill(reason);
         r.Dispose();
+    }
+
+    /// <summary>Stops <paramref name="instance"/> only: a runner started in the meantime (by another request) is left alone.</summary>
+    void StopRunner(RunnerProcess instance, string reason)
+    {
+        lock (_sync)
+        {
+            if (ReferenceEquals(_runner, instance))
+            {
+                _runner = null;
+                _idleTimer?.Dispose();
+                _idleTimer = null;
+            }
+        }
+        instance.Kill(reason);
+        instance.Dispose();
     }
 
     void Write(string line)
@@ -309,7 +372,12 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
 
     public void Dispose()
     {
-        lock (_sync) _disposed = true;
+        lock (_sync)
+        {
+            if (_disposed) return;
+            _disposed = true;
+        }
+        AppDomain.CurrentDomain.ProcessExit -= _onProcessExit;
         StopRunner("disposed");
     }
 }

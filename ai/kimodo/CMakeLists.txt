@@ -29,11 +29,12 @@ else()
     GIT_SUBMODULES "ggml"
     GIT_SHALLOW FALSE)
 endif()
-# nlohmann/json (MIT), header-only, pinned release.
+# nlohmann/json (MIT), header-only: the release tarball, pinned by SHA-256 (supply chain: a moved tag
+# or a replaced asset fails the configure step instead of building other code).
 FetchContent_Declare(nlohmann_json
-  GIT_REPOSITORY "https://github.com/nlohmann/json.git"
-  GIT_TAG "v3.11.3"
-  GIT_SHALLOW TRUE)
+  URL "https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz"
+  URL_HASH "SHA256=d6c65aca6b1ed68e7a182f4757257b107ae403032760ed6ef121c9d55e81757d"
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
 set(JSON_BuildTests OFF CACHE INTERNAL "")
 FetchContent_MakeAvailable(kimodo_cpp nlohmann_json)
 
@@ -42,7 +43,13 @@ if(NOT EXISTS "${kimodo_cpp_SOURCE_DIR}/ggml/CMakeLists.txt")
 endif()
 
 add_executable(kimodo-runner src/main.cpp src/soma_skeleton.hpp)
-target_link_libraries(kimodo-runner PRIVATE kimodo nlohmann_json::nlohmann_json)
+if(WIN32)
+  # UTF-8 active code page (Windows 10 1903+): non-ASCII model paths work with kimodo.cpp's narrow-char file APIs.
+  # MSVC embeds .manifest sources with the linker's /MANIFESTINPUT.
+  target_sources(kimodo-runner PRIVATE src/kimodo-runner.manifest)
+endif()
+find_package(Threads REQUIRED)
+target_link_libraries(kimodo-runner PRIVATE kimodo nlohmann_json::nlohmann_json Threads::Threads)
 if(KIMODO_RUNNER_VULKAN AND TARGET ggml-vulkan)
   target_compile_definitions(kimodo-runner PRIVATE KIMODO_RUNNER_HAVE_VULKAN=1)
 endif()

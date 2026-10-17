@@ -23,6 +23,8 @@ run_godot() { # name, args...
 step "dotnet build"
 dotnet build "$ROOT/app/godot" 2>&1 | tail -3 || FAIL=1
 dotnet build "$ROOT/app/godot" >/dev/null 2>&1 || { echo "BUILD FAILED"; exit 1; }
+# Phase 7: the Kimodo path of the UI tests runs against the fake runner (no AI model involved).
+dotnet build "$ROOT/tests/Blazma.FakeKimodoRunner" >/dev/null 2>&1 || { echo "FAKE KIMODO RUNNER BUILD FAILED"; exit 1; }
 
 step "godot import"
 "$G" --headless --path "$ROOT/app/godot" --import >"$OUT/import.log" 2>&1
@@ -48,6 +50,9 @@ run_godot crash2 -- --crashtest-phase2="$SHOTS"; RC=$?
 grep -E "SELFTEST|recovery rows|SCRIPT ERROR|ERROR:" "$OUT/crash2.log" | grep -v "ALSA"
 grep -q "SELFTEST RESULT PASS" "$OUT/crash2.log" && [ $RC -eq 0 ] || { echo "crashtest phase 2 FAILED (exit $RC)"; FAIL=1; }
 
+echo
+echo "Phase 7 screenshots:"
+ls -1 "$SHOTS"/p7-*.png 2>/dev/null
 echo
 echo "Phase 2 screenshots (1440x900 unless a dialog):"
 ls -1 "$SHOTS"/p2-*.png 2>/dev/null

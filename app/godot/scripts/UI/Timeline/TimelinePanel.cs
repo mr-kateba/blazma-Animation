@@ -25,6 +25,12 @@ public partial class TimelinePanel : PanelContainer
     public OptionButton ClipPick { get; } = new() { AutoTranslateMode = AutoTranslateModeEnum.Disabled, FocusMode = FocusModeEnum.None, FitToLongestItem = false };
     public Button AddMarkerButton { get; }
     public Button ExportButton { get; }
+    /// <summary>Phase 7: opens the Generate motion dialog (prominent in Simple mode).</summary>
+    public Button GenerateButton { get; }
+    /// <summary>Phase 7: shown while the selected clip is a draft (generated motion): badge, Accept, Discard.</summary>
+    public Control DraftBar { get; }
+    public Button AcceptDraftButton { get; }
+    public Button DiscardDraftButton { get; }
     public Button StartButton { get; }
     public Button PrevKeyButton { get; }
     public Button PlayButton { get; }
@@ -38,6 +44,7 @@ public partial class TimelinePanel : PanelContainer
     public Dot UnkeyedDot { get; } = new();
     readonly Label _total = W.Label("", "MonoLabel", false);
     readonly Label _fps = W.Label("", "MonoLabel", false);
+    readonly Label _draftLabel;
     readonly Control _transport;
     readonly Control _timelineTab;
     int _tab;
@@ -65,11 +72,32 @@ public partial class TimelinePanel : PanelContainer
         head.AddChild(Tabs);
         var clipLabel = W.Label("Clip", "Dim");
         head.AddChild(clipLabel);
-        ClipPick.CustomMinimumSize = new Vector2(150, 0);
+        ClipPick.CustomMinimumSize = new Vector2(210, 0);
+        ClipPick.ClipText = true;
         ClipPick.TooltipText = "The clip you are animating. Keys go into this clip.";
         ClipPick.ItemSelected += OnClipPicked;
         head.AddChild(ClipPick);
+
+        var draft = new HBoxContainer();
+        draft.AddThemeConstantOverride("separation", 6);
+        var chip = new PanelContainer { ThemeTypeVariation = "DraftChip", SizeFlagsVertical = SizeFlags.ShrinkCenter, TooltipText = "This clip was generated and is still a draft. Review it, then accept or discard it." };
+        var chipLabel = W.Label("Draft", "MonoFaint");
+        _draftLabel = chipLabel;
+        chip.AddChild(chipLabel);
+        draft.AddChild(chip);
+        AcceptDraftButton = new Button { Text = "Accept", ThemeTypeVariation = "Primary", FocusMode = FocusModeEnum.None, TooltipText = "Keep this generated clip as a normal clip." };
+        AcceptDraftButton.Pressed += () => { if (App.ActiveClipId is { } id) _host.AcceptDraft(id); };
+        DiscardDraftButton = new Button { Text = "Discard", ThemeTypeVariation = "Transport", FocusMode = FocusModeEnum.None, TooltipText = "Remove this generated clip. Ctrl+Z brings it back." };
+        DiscardDraftButton.Pressed += () => { if (App.ActiveClipId is { } id) _host.DiscardDraft(id); };
+        draft.AddChild(AcceptDraftButton);
+        draft.AddChild(DiscardDraftButton);
+        draft.Visible = false;
+        DraftBar = draft; // placed in the transport row below (the header has no room for it next to the AI dock)
         head.AddChild(W.Spacer());
+        GenerateButton = new Button { Text = "Generate motion…", ThemeTypeVariation = "Primary", FocusMode = FocusModeEnum.None,
+            TooltipText = "Describe a movement in words and add it to your project as a draft clip." };
+        GenerateButton.Pressed += () => _host.OpenGenerateDialog();
+        head.AddChild(GenerateButton);
         AddMarkerButton = new Button { Text = "+ Marker", ThemeTypeVariation = "Transport", FocusMode = FocusModeEnum.None,
             TooltipText = "Add a marker at the playhead. Double-click a marker to rename it." };
         AddMarkerButton.Pressed += () => _host.AddMarkerAtPlayhead();
@@ -107,6 +135,8 @@ public partial class TimelinePanel : PanelContainer
         tr.AddChild(_total);
         tr.AddChild(new Control { CustomMinimumSize = new Vector2(8, 0) });
         tr.AddChild(_fps);
+        tr.AddChild(new Control { CustomMinimumSize = new Vector2(16, 0) });
+        tr.AddChild(DraftBar);
         tr.AddChild(W.Spacer());
         AutoKeyButton = new Button
         {
@@ -227,6 +257,9 @@ public partial class TimelinePanel : PanelContainer
             + (dirty ? "\n" + Tr("Unkeyed changes are lost when you change frame") : "");
         KeyButton.Disabled = _host.SelectedCharacter is null;
         DeleteKeyButton.Disabled = clip is null;
+        DraftBar.Visible = clip is { IsDraft: true };
+        _draftLabel.AddThemeColorOverride("font_color", _host.Palette.Accent);
+        GenerateButton.Disabled = App.Session.Project.Characters.Count == 0;
     }
 
     void OnFrameTyped(string text)
@@ -249,7 +282,7 @@ public partial class TimelinePanel : PanelContainer
     public void SyncClips(bool force = false)
     {
         var clips = App.Session.Project.Clips;
-        var sig = string.Join("|", clips.Select(c => c.Id + c.Name)) + "#" + App.ActiveClipId + TranslationServer.GetLocale();
+        var sig = string.Join("|", clips.Select(c => c.Id + c.Name + (c.IsDraft ? "~" : ""))) + "#" + App.ActiveClipId + TranslationServer.GetLocale();
         if (!force && sig == _clipSig) { Sync(); return; }
         _clipSig = sig;
         ClipPick.Clear();
@@ -263,7 +296,7 @@ public partial class TimelinePanel : PanelContainer
         else
         {
             ClipPick.Disabled = false;
-            foreach (var c in clips) ClipPick.AddItem(c.Name);
+            foreach (var c in clips) ClipPick.AddItem(c.IsDraft ? $"{c.Name} ({Tr("Draft")})" : c.Name);
             var idx = App.ActiveClipId is { } a ? _pickIds.IndexOf(a) : -1;
             if (idx >= 0) ClipPick.Select(idx); else ClipPick.Selected = -1;
         }

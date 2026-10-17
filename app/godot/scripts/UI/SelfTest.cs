@@ -335,6 +335,9 @@ public partial class SelfTest : Node
         // Phase 6: balance overlays, timeline strip, Physics panel, auto-balance and secondary motion.
         await RunPhase6();
 
+        // Phase 7: text-to-motion dialog, drafts, AI settings.
+        await RunPhase7();
+
         // Restore the user's settings.
         App.SetLanguage(backup.Language); App.SetTheme(backup.Theme); App.SetAdvancedMode(backup.AdvancedMode);
         App.SetAutosaveMinutes(backup.AutosaveMinutes);

@@ -9,4 +9,8 @@
     <ProjectReference Include="../Blazma.Rigging/Blazma.Rigging.csproj" />
     <ProjectReference Include="../Blazma.Motion/Blazma.Motion.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Protocol/environment helpers are unit-tested directly. -->
+    <InternalsVisibleTo Include="Blazma.Tests" />
+  </ItemGroup>
 </Project>

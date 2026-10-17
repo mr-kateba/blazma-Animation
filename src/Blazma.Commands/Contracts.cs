@@ -16,6 +16,16 @@ public sealed record CommandOrigin(CommandSource Source, string? AgentSessionId 
     public override string ToString() => AgentSessionId is null ? Source.ToString().ToLowerInvariant() : $"{Source.ToString().ToLowerInvariant()}:{AgentSessionId}";
 }
 
+/// <summary>
+/// A command that needs to know who issued it (e.g. generation jobs belong to the agent session that started them).
+/// <see cref="ProjectSession.Execute"/> sets <see cref="Origin"/> before the first execution; redo keeps it. Null (a command
+/// executed directly, outside a session) is treated like the user.
+/// </summary>
+public interface IOriginAwareCommand : ICommand
+{
+    CommandOrigin? Origin { get; set; }
+}
+
 /// <summary>What changed, so views refresh only the affected parts.</summary>
 public sealed record Change(string Kind, string? TargetId = null)
 {

@@ -235,6 +235,7 @@ public partial class AgentPanel : PanelContainer
         var host = App.Agents;
         if (host.PendingApprovals.Count > 0) BuildPending(host); // what needs the user comes first
         BuildConnection(host);
+        BuildMotion();
         BuildTasks(host);
         BuildLog(host);
     }
@@ -390,6 +391,93 @@ public partial class AgentPanel : PanelContainer
                 return string.Format(Tr("This action reads a file outside the allowed folders: {0}"), (string?)path ?? "");
         }
         return Tr("This action needs your approval.");
+    }
+
+    // ---- motion generation (Phase 7) -----------------------------------------------------------------------------------
+
+    /// <summary>Texts of the job cards, newest first (tests).</summary>
+    public List<string> JobRows { get; } = new();
+    public string KimodoStatusText { get; private set; } = "";
+
+    void BuildMotion()
+    {
+        JobRows.Clear();
+        var box = new VBoxContainer();
+        box.AddThemeConstantOverride("separation", 8);
+        box.AddChild(SectionHeader("Motion generation"));
+
+        var kimodo = App.MotionJobs.FindProvider(AiText.KimodoId)?.Describe();
+        var ok = kimodo?.Available == true;
+        var status = new HBoxContainer();
+        status.AddThemeConstantOverride("separation", 8);
+        var dot = new Dot(); dot.SetColor(ok ? P.Ok : P.Text3);
+        status.AddChild(dot);
+        KimodoStatusText = ok ? Tr("Kimodo: available") : Tr("Kimodo: not installed");
+        status.AddChild(Plain(KimodoStatusText, null, false));
+        box.AddChild(status);
+        if (!ok) box.AddChild(Plain(Tr("Nothing is downloaded automatically. Install it yourself, or use the Procedural generator (not AI)."), "Faint"));
+
+        var buttons = new HBoxContainer();
+        buttons.AddThemeConstantOverride("separation", 8);
+        var gen = new Button { Text = "Generate motion…", ThemeTypeVariation = "Primary", FocusMode = FocusModeEnum.None };
+        gen.Pressed += _host.OpenGenerateDialog;
+        var set = new Button { Text = "AI settings…", FocusMode = FocusModeEnum.None };
+        set.Pressed += _host.OpenAiSettings;
+        buttons.AddChild(gen); buttons.AddChild(set);
+        Buttons["motion:generate"] = gen;
+        Buttons["motion:settings"] = set;
+        box.AddChild(buttons);
+
+        var jobs = App.MotionJobs.List();
+        if (jobs.Count > 0)
+        {
+            box.AddChild(Plain(Tr("Generation jobs"), "Section"));
+            foreach (var j in jobs.OrderByDescending(j => j.Created).Take(8)) box.AddChild(BuildJobCard(j));
+        }
+        _body.AddChild(box);
+    }
+
+    Control BuildJobCard(MotionJobSnapshot j)
+    {
+        var card = Card(j.State == MotionJobState.Ready ? P.Warn : null);
+        var v = new VBoxContainer();
+        v.AddThemeConstantOverride("separation", 5);
+        var top = new HBoxContainer();
+        top.AddThemeConstantOverride("separation", 8);
+        var prompt = Plain(j.Prompt, null);
+        prompt.TextDirection = Control.TextDirection.Auto;
+        prompt.MaxLinesVisible = 2;
+        prompt.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
+        top.AddChild(prompt);
+        var color = j.State switch { MotionJobState.Running => P.Accent, MotionJobState.Ready => P.Warn, MotionJobState.Applied => P.Ok, MotionJobState.Cancelled => P.Text3, _ => P.Err };
+        top.AddChild(Chip(AiText.State(j.State), color));
+        v.AddChild(top);
+        var origin = App.IsUiJob(j.JobId) ? Tr("You") : Tr("AI agent");
+        var provider = j.Provider == AiText.ProceduralId ? Tr("Procedural — not AI") : Tr("Kimodo (local AI)");
+        var detail = $"{provider} · {origin}" + (j.State == MotionJobState.Running ? $" · {AiText.Ltr(((int)Math.Round(j.Progress * 100)).ToString(CultureInfo.InvariantCulture))}%" : "");
+        v.AddChild(Plain(detail, "Faint"));
+        JobRows.Add($"{j.State}|{j.Provider}|{origin}|{j.Prompt}");
+        if (j.State == MotionJobState.Failed) v.AddChild(Plain(AiText.Failure(j.ErrorCode, j.Message), "ErrLabel"));
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 8);
+        var id = j.JobId;
+        if (j.State == MotionJobState.Running)
+        {
+            var cancel = new Button { Text = "Cancel generation", FocusMode = FocusModeEnum.None };
+            cancel.Pressed += () => App.CancelMotionJob(id);
+            row.AddChild(cancel);
+            Buttons[$"job:{id}:cancel"] = cancel;
+        }
+        else if (j.State == MotionJobState.Ready && !App.IsUiJob(id))
+        {
+            var add = new Button { Text = "Add as draft", ThemeTypeVariation = "Primary", FocusMode = FocusModeEnum.None };
+            add.Pressed += () => _host.ApplyGenerated(id);
+            row.AddChild(add);
+            Buttons[$"job:{id}:apply"] = add;
+        }
+        if (row.GetChildCount() > 0) v.AddChild(row);
+        card.AddChild(v);
+        return card;
     }
 
     void BuildTasks(AgentHost host)

@@ -1640,3 +1640,382 @@ msgstr "مسار دوران كل العظام المختارة مكتوم. أل�
 
 msgid "That is too much to compute in one go. Use a shorter range."
 msgstr "هذا أكبر من أن يُحسب دفعة واحدة. استخدم نطاقًا أقصر."
+
+# ---- Phase 7: motion generation ----
+msgid "Generate Motion…"
+msgstr "توليد حركة…"
+
+msgid "Generate motion…"
+msgstr "توليد حركة…"
+
+msgid "Accept Draft"
+msgstr "قبول المسودة"
+
+msgid "Discard Draft"
+msgstr "تجاهل المسودة"
+
+msgid "Motion Generation (AI)…"
+msgstr "توليد الحركة (ذكاء اصطناعي)…"
+
+msgid "Accept"
+msgstr "قبول"
+
+msgid "This clip was generated and is still a draft. Review it, then accept or discard it."
+msgstr "هذا المقطع مولَّد وما زال مسودة. راجعه ثم اقبله أو تجاهله."
+
+msgid "Keep this generated clip as a normal clip."
+msgstr "احتفظ بهذا المقطع المولَّد كمقطع عادي."
+
+msgid "Remove this generated clip. Ctrl+Z brings it back."
+msgstr "احذف هذا المقطع المولَّد. يعيده Ctrl+Z."
+
+msgid "Describe a movement in words and add it to your project as a draft clip."
+msgstr "صِف حركة بالكلمات لتُضاف إلى مشروعك كمقطع مسودة."
+
+msgid "Generate motion"
+msgstr "توليد حركة"
+
+msgid "Generate"
+msgstr "توليد"
+
+msgid "Describe the motion, for example: a person walks forward and waves"
+msgstr "صِف الحركة، مثلًا: شخص يمشي إلى الأمام ويلوّح"
+
+msgid "Random"
+msgstr "عشوائي"
+
+msgid "Pick a new random seed. The same prompt and seed give the same motion."
+msgstr "اختر بذرة عشوائية جديدة. النص نفسه والبذرة نفسها يعطيان الحركة نفسها."
+
+msgid "AI settings…"
+msgstr "إعدادات الذكاء الاصطناعي…"
+
+msgid "Cancel generation"
+msgstr "إلغاء التوليد"
+
+msgid "Add a character first: motion is generated for a character."
+msgstr "أضف شخصية أولًا: تُولَّد الحركة لشخصية."
+
+msgid "Describe a movement and Blazma adds it to your project as a draft clip. Review it, then accept or discard it. Nothing is sent over the internet."
+msgstr "صِف حركة وسيضيفها Blazma إلى مشروعك كمقطع مسودة. راجعها ثم اقبلها أو تجاهلها. لا يُرسَل شيء عبر الإنترنت."
+
+msgid "What should it do?"
+msgstr "ماذا ستفعل الشخصية؟"
+
+msgid "Length"
+msgstr "الطول"
+
+msgid "Seed"
+msgstr "البذرة"
+
+msgid "Generator"
+msgstr "المولِّد"
+
+msgid "Length of the motion in seconds."
+msgstr "طول الحركة بالثواني."
+
+msgid "Kimodo (local AI)"
+msgstr "Kimodo (ذكاء اصطناعي محلي)"
+
+msgid "Procedural — not AI"
+msgstr "إجرائي — ليس ذكاءً اصطناعيًا"
+
+msgid "Kimodo (local AI) — not installed"
+msgstr "Kimodo (ذكاء اصطناعي محلي) — غير مثبّت"
+
+msgid "Kimodo: available"
+msgstr "Kimodo: متاح"
+
+msgid "Kimodo: not installed"
+msgstr "Kimodo: غير مثبّت"
+
+msgid "Runs on this computer. The first request loads the models and can take a while. Only the body is generated, not fingers or face."
+msgstr "يعمل على هذا الحاسوب. أول طلب يحمّل النماذج وقد يستغرق وقتًا. يُولَّد الجسم فقط دون الأصابع أو الوجه."
+
+msgid "Nothing is downloaded automatically. The “Procedural” generator below works without any setup."
+msgstr "لا يُنزَّل شيء تلقائيًا. المولِّد «إجرائي» يعمل دون أي إعداد."
+
+msgid "A small built-in generator that only recognises a few words. It does not understand sentences and no AI model is involved. Use it to try the workflow offline."
+msgstr "مولِّد صغير مدمج يتعرف على كلمات قليلة فقط. لا يفهم الجمل ولا يتدخل أي نموذج ذكاء اصطناعي. استخدمه لتجربة سير العمل دون اتصال."
+
+msgid "Words it understands: {0}"
+msgstr "الكلمات التي يفهمها: {0}"
+
+msgid "Arabic words:"
+msgstr "كلمات بالعربية:"
+
+msgid "Write what the character should do first."
+msgstr "اكتب أولًا ما ستفعله الشخصية."
+
+msgid "The text is too long (at most {0} characters)."
+msgstr "النص طويل جدًا (الحد الأقصى {0} حرفًا)."
+
+msgid "This character has no bone mapped to the pelvis. Map its bones first (Rigging menu)."
+msgstr "لا توجد عظمة مرتبطة بالحوض في هذه الشخصية. اربط عظامها أولًا (قائمة الهيكلة)."
+
+msgid "Nothing was generated."
+msgstr "لم يُولَّد شيء."
+
+msgid "Done. The motion was added as a draft and is playing."
+msgstr "تم. أُضيفت الحركة كمسودة وهي تعمل الآن."
+
+msgid "Draft clip: {0}"
+msgstr "مقطع المسودة: {0}"
+
+msgid "Accept it to keep it, or discard it. Ctrl+Z undoes either."
+msgstr "اقبلها للاحتفاظ بها أو تجاهلها. يتراجع Ctrl+Z عن أيٍّ منهما."
+
+msgid "Generation failed."
+msgstr "فشل التوليد."
+
+msgid "Cancelled. Nothing was added to the project."
+msgstr "أُلغي. لم يُضَف شيء إلى المشروع."
+
+msgid "Adding the motion…"
+msgstr "جارٍ إضافة الحركة…"
+
+msgid "Add a character first, then generate motion for it."
+msgstr "أضف شخصية أولًا ثم ولّد لها حركة."
+
+msgid "An AI agent added a draft clip: {0}"
+msgstr "أضاف وكيل ذكاء اصطناعي مقطع مسودة: {0}"
+
+msgid "The character's rig was changed while the motion was being generated. Generate it again."
+msgstr "تغيّر هيكل الشخصية أثناء توليد الحركة. ولّدها مرة أخرى."
+
+msgid "The generated motion could not be added: {0}"
+msgstr "تعذّرت إضافة الحركة المولَّدة: {0}"
+
+msgid "Draft added: {0}"
+msgstr "أُضيفت مسودة: {0}"
+
+msgid "Draft added: {0} ({1} notes)"
+msgstr "أُضيفت مسودة: {0} ({1} ملاحظات)"
+
+msgid "Draft accepted. It is now a normal clip."
+msgstr "تم قبول المسودة. صارت مقطعًا عاديًا."
+
+msgid "Draft discarded."
+msgstr "تم تجاهل المسودة."
+
+msgid "The Kimodo runner is not set up. Install it yourself, then choose its file in the AI settings."
+msgstr "لم يُعدّ مشغّل Kimodo. ثبّته بنفسك ثم اختر ملفه في إعدادات الذكاء الاصطناعي."
+
+msgid "The Kimodo runner file was not found at the chosen path."
+msgstr "لم يُعثر على ملف مشغّل Kimodo في المسار المختار."
+
+msgid "The Kimodo model folder is not set. Download the model files yourself, then choose their folder in the AI settings."
+msgstr "لم يُحدَّد مجلد نماذج Kimodo. نزّل ملفات النماذج بنفسك ثم اختر مجلدها في إعدادات الذكاء الاصطناعي."
+
+msgid "The Kimodo motion model file was not found in the models folder."
+msgstr "لم يُعثر على ملف نموذج الحركة في مجلد النماذج."
+
+msgid "The Kimodo text encoder file was not found in the models folder."
+msgstr "لم يُعثر على ملف مرمّز النص في مجلد النماذج."
+
+msgid "tokenizer.gguf must be next to the text encoder file."
+msgstr "يجب أن يكون tokenizer.gguf بجانب ملف مرمّز النص."
+
+msgid "Waiting to start"
+msgstr "في انتظار البدء"
+
+msgid "Starting the runner"
+msgstr "جارٍ تشغيل المشغّل"
+
+msgid "Generating the motion"
+msgstr "جارٍ توليد الحركة"
+
+msgid "Loading the models"
+msgstr "جارٍ تحميل النماذج"
+
+msgid "Decoding the motion"
+msgstr "جارٍ فك ترميز الحركة"
+
+msgid "Reading the prompt"
+msgstr "جارٍ قراءة النص"
+
+msgid "Fitting the motion to the character"
+msgstr "جارٍ ملاءمة الحركة للشخصية"
+
+msgid "Finishing"
+msgstr "جارٍ الإنهاء"
+
+msgid "Ready"
+msgstr "جاهز"
+
+msgid "Added to the project"
+msgstr "أُضيف إلى المشروع"
+
+msgid "Cancelled"
+msgstr "أُلغي"
+
+msgid "Failed"
+msgstr "فشل"
+
+msgid "The built-in provider only understands these words: {0}. Try one of them."
+msgstr "المولِّد المدمج يفهم هذه الكلمات فقط: {0}. جرّب إحداها."
+
+msgid "The Kimodo runner took too long and was stopped. Raise the timeout in the AI settings, or try a shorter motion."
+msgstr "استغرق مشغّل Kimodo وقتًا طويلًا فأُوقف. ارفع الحد الزمني في إعدادات الذكاء الاصطناعي أو جرّب حركة أقصر."
+
+msgid "The Kimodo runner stopped unexpectedly. Open the runner log in the AI settings for details."
+msgstr "توقف مشغّل Kimodo بشكل غير متوقع. افتح سجل المشغّل في إعدادات الذكاء الاصطناعي لمعرفة التفاصيل."
+
+msgid "The Kimodo runner could not be started: {0}"
+msgstr "تعذّر تشغيل مشغّل Kimodo: {0}"
+
+msgid "Generation failed: {0}"
+msgstr "فشل التوليد: {0}"
+
+msgid "Only the body was generated: fingers and face stay at their rest pose."
+msgstr "تم توليد الجسم فقط: الأصابع والوجه تبقى في وضعية الراحة."
+
+msgid "Constraints were ignored: Kimodo does not support them yet."
+msgstr "تم تجاهل القيود: Kimodo لا يدعمها بعد."
+
+msgid "Loop: this motion starts and ends in the same standing pose."
+msgstr "تكرار: تبدأ هذه الحركة وتنتهي بنفس وضعية الوقوف."
+
+msgid "{0} bones of this character are not driven by the motion and stay at rest: {1}"
+msgstr "{0} عظمة في هذه الشخصية لا تحركها الحركة وتبقى في وضعية الراحة: {1}"
+
+msgid "This character has no bone mapped to “{0}”, so that part of the motion is lost."
+msgstr "لا توجد عظمة مرتبطة بـ «{0}» في هذه الشخصية، فتضيع تلك الجزئية من الحركة."
+
+msgid "Foot cleanup was skipped for the {0} leg: its bones are not a direct parent and child chain."
+msgstr "تم تخطي تنظيف القدم للساق {0}: عظامها ليست سلسلة أب وابن مباشرة."
+
+msgid "left"
+msgstr "اليسرى"
+
+msgid "right"
+msgstr "اليمنى"
+
+msgid "Motion generation (AI)"
+msgstr "توليد الحركة (ذكاء اصطناعي)"
+
+msgid "Blazma can generate motion with Kimodo, an AI model that runs on this computer. Blazma never downloads anything by itself and nothing leaves your computer: you install the runner and the model files yourself, then tell Blazma where they are."
+msgstr "يستطيع Blazma توليد الحركة عبر Kimodo، وهو نموذج ذكاء اصطناعي يعمل على هذا الحاسوب. لا ينزّل Blazma أي شيء بنفسه ولا يغادر شيء حاسوبك: أنت تثبّت المشغّل وملفات النماذج بنفسك ثم تخبر Blazma بمكانها."
+
+msgid "Manual install steps are in the file docs/AI_INTEGRATION.md (sections 4 and 5) inside the Blazma folder: build or copy kimodo-runner, download the model files from their official pages, read their licences, then pick them below."
+msgstr "خطوات التثبيت اليدوي (بالعربية) في الملف docs/AI_INTEGRATION.md (القسمان 4 و5) داخل مجلد Blazma: ابنِ kimodo-runner أو انسخه، ونزّل ملفات النماذج من صفحاتها الرسمية، واقرأ تراخيصها، ثم اخترها أدناه."
+
+msgid "Open the install guide"
+msgstr "فتح دليل التثبيت"
+
+msgid "Kimodo runner"
+msgstr "مشغّل Kimodo"
+
+msgid "Models folder"
+msgstr "مجلد النماذج"
+
+msgid "Device"
+msgstr "الجهاز"
+
+msgid "Automatic"
+msgstr "تلقائي"
+
+msgid "CPU only"
+msgstr "المعالج فقط"
+
+msgid "GPU (Vulkan)"
+msgstr "كرت الشاشة (Vulkan)"
+
+msgid "Automatic uses the GPU when the runner supports it and falls back to the CPU."
+msgstr "يستخدم الوضع التلقائي كرت الشاشة إن دعمه المشغّل وإلا المعالج."
+
+msgid "Time limit"
+msgstr "الحد الزمني"
+
+msgid "Longest a single generation may take before it is stopped. The first one loads the models and is the slowest."
+msgstr "أطول مدة يستغرقها توليد واحد قبل إيقافه. أول توليد يحمّل النماذج وهو الأبطأ."
+
+msgid "Check"
+msgstr "فحص"
+
+msgid "Choose the Kimodo runner"
+msgstr "اختر مشغّل Kimodo"
+
+msgid "Choose the folder with the Kimodo model files"
+msgstr "اختر مجلد ملفات نماذج Kimodo"
+
+msgid "Runner found: {0}"
+msgstr "المشغّل موجود: {0}"
+
+msgid "Runner: not set"
+msgstr "المشغّل: غير محدد"
+
+msgid "Runner not found: {0}"
+msgstr "المشغّل غير موجود: {0}"
+
+msgid "Models: folder not set"
+msgstr "النماذج: لم يُحدَّد المجلد"
+
+msgid "Models found: motion model, text encoder and tokenizer."
+msgstr "النماذج موجودة: نموذج الحركة ومرمّز النص والمقطِّع."
+
+msgid "Models missing: {0}"
+msgstr "نماذج ناقصة: {0}"
+
+msgid "motion model"
+msgstr "نموذج الحركة"
+
+msgid "text encoder"
+msgstr "مرمّز النص"
+
+msgid "tokenizer"
+msgstr "المقطِّع"
+
+msgid "no GPU found"
+msgstr "لا يوجد كرت شاشة"
+
+msgid "This computer: {0} CPU cores, {1} RAM, GPU: {2}"
+msgstr "هذا الحاسوب: {0} أنوية معالج، ذاكرة {1}، كرت الشاشة: {2}"
+
+msgid "Checking…"
+msgstr "جارٍ الفحص…"
+
+msgid "The check failed: {0}"
+msgstr "فشل الفحص: {0}"
+
+msgid "The runner did not answer: {0}"
+msgstr "لم يستجب المشغّل: {0}"
+
+msgid "Everything needed for Kimodo was found and the runner answered."
+msgstr "وُجد كل ما يلزم لـ Kimodo وقد استجاب المشغّل."
+
+msgid "Show the runner log"
+msgstr "إظهار سجل المشغّل"
+
+msgid "Hide the runner log"
+msgstr "إخفاء سجل المشغّل"
+
+msgid "The runner has not written anything yet."
+msgstr "لم يكتب المشغّل شيئًا بعد."
+
+msgid "Open docs/AI_INTEGRATION.md in the Blazma folder (section 5)."
+msgstr "افتح docs/AI_INTEGRATION.md في مجلد Blazma (القسم 5)."
+
+msgid "Motion generation"
+msgstr "توليد الحركة"
+
+msgid "Nothing is downloaded automatically. Install it yourself, or use the Procedural generator (not AI)."
+msgstr "لا يُنزَّل شيء تلقائيًا. ثبّته بنفسك أو استخدم المولِّد الإجرائي (ليس ذكاءً اصطناعيًا)."
+
+msgid "Generation jobs"
+msgstr "مهام التوليد"
+
+msgid "You"
+msgstr "أنت"
+
+msgid "AI agent"
+msgstr "وكيل ذكاء اصطناعي"
+
+msgid "Add as draft"
+msgstr "إضافة كمسودة"
+
+msgid "Added"
+msgstr "أُضيفت"
+
+msgid "Procedural motion (not AI): a simple keyword cycle for testing and demos."
+msgstr "حركة إجرائية (ليست ذكاءً اصطناعيًا): دورة بسيطة مبنية على كلمات مفتاحية للاختبار والعرض."

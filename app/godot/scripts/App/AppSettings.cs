@@ -36,6 +36,14 @@ public sealed class AppSettings
     /// <summary>Folders agents may import files from besides the project's own folder.</summary>
     public List<string> AgentReadRoots { get; } = new();
 
+    /// <summary>Phase 7: where the user installed kimodo-runner and the model files (empty = not set; the BLAZMA_KIMODO_* environment variables still apply). Nothing is downloaded by the app.</summary>
+    public string KimodoRunner { get; set; } = "";
+    public string KimodoModels { get; set; } = "";
+    /// <summary>auto | cpu | vulkan</summary>
+    public string KimodoDevice { get; set; } = "auto";
+    /// <summary>Longest a single Kimodo generation may take (0 = the default of 15 minutes).</summary>
+    public int KimodoTimeoutSeconds { get; set; }
+
     /// <summary>Free-form layout values (panel sizes, window size) owned by the views.</summary>
     public Dictionary<string, Variant> Layout { get; } = new();
 
@@ -62,6 +70,10 @@ public sealed class AppSettings
         AgentAutonomous = (bool)cfg.GetValue("agent", "autonomous", AgentAutonomous);
         AgentReadRoots.Clear();
         AgentReadRoots.AddRange((string[])cfg.GetValue("agent", "read_roots", Array.Empty<string>()));
+        KimodoRunner = (string)cfg.GetValue("ai", "kimodo_runner", KimodoRunner);
+        KimodoModels = (string)cfg.GetValue("ai", "kimodo_models", KimodoModels);
+        KimodoDevice = (string)cfg.GetValue("ai", "kimodo_device", KimodoDevice) is var dev && (dev == "cpu" || dev == "vulkan") ? dev : "auto";
+        KimodoTimeoutSeconds = Math.Clamp((int)cfg.GetValue("ai", "kimodo_timeout_seconds", KimodoTimeoutSeconds), 0, 24 * 3600);
         if (cfg.HasSection("layout"))
             foreach (var key in cfg.GetSectionKeys("layout"))
                 Layout[key] = cfg.GetValue("layout", key);
@@ -87,6 +99,10 @@ public sealed class AppSettings
         cfg.SetValue("agent", "allow", AllowAgents);
         cfg.SetValue("agent", "autonomous", AgentAutonomous);
         cfg.SetValue("agent", "read_roots", AgentReadRoots.ToArray());
+        cfg.SetValue("ai", "kimodo_runner", KimodoRunner);
+        cfg.SetValue("ai", "kimodo_models", KimodoModels);
+        cfg.SetValue("ai", "kimodo_device", KimodoDevice);
+        cfg.SetValue("ai", "kimodo_timeout_seconds", KimodoTimeoutSeconds);
         foreach (var (k, v) in Layout) cfg.SetValue("layout", k, v);
         cfg.Save(Path);
     }

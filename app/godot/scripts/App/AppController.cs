@@ -58,6 +58,7 @@ public partial class AppController : Node
         GetTree().AutoAcceptQuit = false; // MainWindow asks about unsaved changes first
         ApplyLocale();
         InitAgents();
+        InitMotion();
     }
 
     public override void _Process(double delta)
@@ -274,6 +275,7 @@ public partial class AppController : Node
     public void ShutdownCleanly()
     {
         StopAgentServer();
+        DisposeMotion();
         CloseCurrent();
         Settings.Save();
     }

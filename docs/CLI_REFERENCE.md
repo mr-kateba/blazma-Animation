@@ -71,10 +71,10 @@ Use as `blazma-anim exec <file> <id> --arg name=value ...`.
 | `marker.delete` | mutating | `clipId`*:string, `markerId`*:string | Delete a marker. |
 | `marker.update` | mutating | `clipId`*:string, `markerId`*:string, `frame`:number, `name`:string, `phase`:string | Change a marker's frame, name and/or phase (at least one). |
 | `motion.generate` | readonly | `characterId`*:string, `prompt`*:string, `durationSeconds`*:number, `fps`:integer, `seed`:integer, `provider`:string, `name`:string, `footCleanup`:boolean, `reduceKeys`:boolean, `loop`:boolean, `inPlace`:boolean | Start generating a motion from a text prompt for a character. Runs in the background and returns a jobId; it does not change the project. Poll motion.job_status, then call motion.job_apply to add the result as a DRAFT clip (undoable), review it, and keep it with clip.accept_draft (or remove it with clip.delete). Provider: kimodo (local AI, must be installed by the user) by default; 'procedural' is a built-in keyword demo (walk, run, jump, wave, squat, idle), not AI. Body only: fingers and face are not generated. |
-| `motion.job_apply` | mutating | `jobId`*:string, `name`:string | Add a finished generation job's motion to the project as a new DRAFT clip (undoable). Returns clipId. Review it, edit keys, then clip.accept_draft. |
-| `motion.job_cancel` | readonly | `jobId`*:string | Cancel a running generation job (stops the Kimodo runner). Does not change the project. |
-| `motion.job_status` | readonly | `jobId`:string, `waitSeconds`:number | State of a generation job (running, ready, failed, cancelled, applied) with progress, warnings and, once applied, its clipId. Without jobId: all jobs. Headless only: waitSeconds blocks until the job finishes (max 600). |
-| `motion.providers` | readonly | `probe`:boolean | List the motion generation providers and diagnostics: is kimodo-runner configured and found, are the model files there, CPU/RAM/GPU (best effort, offline). Never downloads anything. |
+| `motion.job_apply` | mutating | `jobId`*:string, `name`:string | Add a finished generation job's motion to the project as a new DRAFT clip (undoable; undo makes the job ready again). Returns clipId. Review it, edit keys, then clip.accept_draft. Fails with job_stale when the project was replaced, or the character was removed, re-rigged or its rig/humanoid mapping changed since the job started; with job_applied when it was already applied. |
+| `motion.job_cancel` | readonly | `jobId`*:string | Cancel a running generation job you started (stops the Kimodo runner). Does not change the project. |
+| `motion.job_status` | readonly | `jobId`:string, `waitSeconds`:number | State of a generation job (running, ready, failed, cancelled, applied) with progress, warnings and, once applied, its clipId. Without jobId: all jobs. Agents see only the jobs they started. Headless only: waitSeconds blocks until the job finishes (at most 25 s per call; call again to keep waiting). |
+| `motion.providers` | readonly | `probe`:boolean | List the motion generation providers and diagnostics: is kimodo-runner configured and found, are the model files there, CPU/RAM/GPU (best effort, offline). Never downloads anything. Agents see file names and found flags, not absolute paths. |
 | `physics.analyze` | readonly | `clipId`*:string, `characterId`:string, `startFrame`:integer, `endFrame`:integer, `summaryOnly`:boolean, `maxFrames`:integer, `metric`:string, `minMargin`:number, `contactHeight`:number | Balance analysis of a clip, frame by frame: centre of mass (COM), foot contacts, support polygon (convex hull of the touching sole points, XZ), signed margin of the tested point to the polygon (inside positive, metres) and balanced/unbalanced/airborne. Returns {summary:{unbalancedRanges…}, frames:[…]}. Does not change anything. |
 | `physics.auto_balance` | mutating | `clipId`*:string, `characterId`:string, `frames`:string, `startFrame`:integer, `endFrame`:integer, `margin`:number, `maxShift`:number, `allowFootSlide`:boolean | Move the COM inside the support polygon (by 'margin') on unbalanced frames by shifting the hips horizontally; supporting feet stay planted (legs re-solved with IK). Keys the pelvis translation (and leg rotations of unpinned supporting legs) on corrected frames; every other frame keeps exactly its original pose (frames between the surrounding original keys are keyed with their original values). Refuses (no_leg_ik / track_locked / track_muted) when a supporting foot could not stay planted, unless allowFootSlide. At most 5000 frames and 200,000 keys (too_large). One undo step. Returns before/after margins per frame. |
 | `physics.com` | readonly | `characterId`*:string, `clipId`:string, `frame`:integer, `segments`:boolean | Centre of mass and static balance of a character: its working pose, or a clip frame when 'clipId' is given (with velocity, ZMP and capture point). Returns {com, totalMass, massSource, contacts, polygon, margin, state}. Does not change anything. |
@@ -372,7 +372,7 @@ Start generating a motion from a text prompt for a character. Runs in the backgr
 
 ### `motion.job_apply`
 
-Add a finished generation job's motion to the project as a new DRAFT clip (undoable). Returns clipId. Review it, edit keys, then clip.accept_draft. (effect: mutating)
+Add a finished generation job's motion to the project as a new DRAFT clip (undoable; undo makes the job ready again). Returns clipId. Review it, edit keys, then clip.accept_draft. Fails with job_stale when the project was replaced, or the character was removed, re-rigged or its rig/humanoid mapping changed since the job started; with job_applied when it was already applied. (effect: mutating)
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -381,7 +381,7 @@ Add a finished generation job's motion to the project as a new DRAFT clip (undoa
 
 ### `motion.job_cancel`
 
-Cancel a running generation job (stops the Kimodo runner). Does not change the project. (effect: readonly)
+Cancel a running generation job you started (stops the Kimodo runner). Does not change the project. (effect: readonly)
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -389,16 +389,16 @@ Cancel a running generation job (stops the Kimodo runner). Does not change the p
 
 ### `motion.job_status`
 
-State of a generation job (running, ready, failed, cancelled, applied) with progress, warnings and, once applied, its clipId. Without jobId: all jobs. Headless only: waitSeconds blocks until the job finishes (max 600). (effect: readonly)
+State of a generation job (running, ready, failed, cancelled, applied) with progress, warnings and, once applied, its clipId. Without jobId: all jobs. Agents see only the jobs they started. Headless only: waitSeconds blocks until the job finishes (at most 25 s per call; call again to keep waiting). (effect: readonly)
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `jobId` | string | no | Job id from motion.generate (omit to list all jobs). (min length 1) |
-| `waitSeconds` | number | no | Wait up to this long for the job to finish (headless mode only; ignored in the app). |
+| `waitSeconds` | number | no | Wait up to this long for the job to finish (headless mode only, capped at 25 s; ignored in the app). |
 
 ### `motion.providers`
 
-List the motion generation providers and diagnostics: is kimodo-runner configured and found, are the model files there, CPU/RAM/GPU (best effort, offline). Never downloads anything. (effect: readonly)
+List the motion generation providers and diagnostics: is kimodo-runner configured and found, are the model files there, CPU/RAM/GPU (best effort, offline). Never downloads anything. Agents see file names and found flags, not absolute paths. (effect: readonly)
 
 | Argument | Type | Required | Description |
 |---|---|---|---|

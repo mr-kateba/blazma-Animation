@@ -93,6 +93,7 @@ public partial class MainWindow : Control
         App.InfoRaised += OnInfo;
         App.PlaybackChanged += OnPlaybackForMenus;
         App.AgentChanged += OnAgentChanged;
+        App.MotionJobChanged += OnMotionJobChanged;
 
         RestoreWindowAndLayout();
         OnSettingsChanged();
@@ -112,6 +113,7 @@ public partial class MainWindow : Control
         App.InfoRaised -= OnInfo;
         App.PlaybackChanged -= OnPlaybackForMenus;
         App.AgentChanged -= OnAgentChanged;
+        App.MotionJobChanged -= OnMotionJobChanged;
     }
 
     void OnInfo(string message) => _toast.Notify(message, _palette.Warn);
@@ -381,6 +383,7 @@ public partial class MainWindow : Control
         _mAnim.AddItem("New Clip…", MNewClip);
         _mAnim.AddItem("Rename Clip…", MRenameClip);
         _mAnim.AddItem("Delete Clip", MDeleteClip);
+        BuildMotionMenu();
         BuildAnimationMenu();
         _mAnim.AboutToPopup += UpdateMenus;
         _mAnim.IdPressed += id => OnMenu((int)id);
@@ -411,6 +414,7 @@ public partial class MainWindow : Control
         _mSettings.AddSubmenuNodeItem("Mode", _mMode);
         BuildViewSettingsMenu();
         BuildAgentMenu();
+        BuildMotionSettingsMenu();
     }
 
     void OnMenu(int id)
@@ -428,6 +432,7 @@ public partial class MainWindow : Control
             case MNewClip: PromptNewClip(); break;
             case MRenameClip: if (SelectedClipId is { } r) PromptRenameClip(r); break;
             case MDeleteClip: if (SelectedClipId is { } d) ConfirmDeleteClip(d); break;
+            case >= MGenMotion and <= MDiscardDraft: OnMotionMenu(id); break;
             case MAgentAllow: App.SetAllowAgents(!App.Settings.AllowAgents); break;
             case MAgentFolders: ShowAgentFolders(); break;
             case MClearRecent: App.Settings.RecentFiles.Clear(); App.Settings.Save(); break;
@@ -488,6 +493,7 @@ public partial class MainWindow : Control
         _menuBar.SetMenuTitle(5, Tr("Settings"));
         UpdateRiggingMenu();
         UpdatePhysicsMenu();
+        UpdateMotionMenu();
     }
 
     static void SetItemText(PopupMenu m, int id, string text, bool disabled)
@@ -549,6 +555,7 @@ public partial class MainWindow : Control
         ExportDlg = new ExportDialog(this);
         AddChild(ExportDlg);
         BuildPhysicsDialogs();
+        BuildMotionDialogs();
     }
 
     /// <summary>Text is translated here, then the dialog's own auto-translation is off so user content is never "translated".</summary>
@@ -769,7 +776,9 @@ public partial class MainWindow : Control
         var onlySaveState = args.Changes.All(c => c.Kind == Change.SaveStateChanged);
         if (onlySaveState) { UpdateStatus(); UpdateChip(); UpdateMenus(); return; }
         var replaced = args.Changes.Any(c => c.Kind == Change.ProjectReplaced);
+        var activeBefore = SelectedClipId;
         ValidateSelection(replaced);
+        if (activeBefore != SelectedClipId) Timeline.SyncClips(); // the selection was repaired silently (for example a first generated clip)
         // Pose edits (gizmo drags fire one per mouse step) only touch the 3D view, the inspector and the status.
         var poseOnly = args.Changes.All(c => c.Kind is Change.PoseChanged or Change.SaveStateChanged);
         // Key / marker / curve edits that do not change the clip list only touch the timeline, the inspector and the status.

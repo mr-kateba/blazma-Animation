@@ -43,7 +43,9 @@ public sealed record RetargetResult(Clip Clip, IReadOnlyList<string> Warnings, I
 /// bone axes are. Bones between mapped ones and unmapped bones (fingers, face, twist bones) keep their rest
 /// rotation.</item>
 /// <item><b>Root:</b> the pelvis moves by the source hips' displacement from rest, scaled by the leg-length
-/// ratio (hip-height ratio when legs are not mapped).</item>
+/// ratio (hip-height ratio when legs are not mapped). When a bone mapped to "root" sits above the pelvis, the
+/// smoothed horizontal travel is moved onto it (the pelvis keeps height and sway relative to it; model-space
+/// result unchanged), so export rootMotion=in_place works and the root does not stay at the origin.</item>
 /// <item><b>Resampling</b> to the clip's frame rate (slerp/lerp between source frames).</item>
 /// <item><b>Foot cleanup</b> (optional): a foot that is low and nearly still is pinned to the mean position of
 /// its contact span with analytic two-bone IK (foot orientation kept).</item>
@@ -197,8 +199,50 @@ public static class MotionRetargeter
         }
 
         var pinned = options.FootCleanup ? PinFeet(rig, ev, tByStd, locals, fps, scale, warnings) : 0;
-        var clip = BuildClip(rig, options, locals, pairOf, tPelvis, frames, motion, out var keyCount);
+        var travelBone = MoveTravelToRoot(ev, tByStd, tPelvis, tRest, locals, fps);
+        var clip = BuildClip(rig, options, locals, pairOf, tPelvis, travelBone, frames, motion, out var keyCount);
         return new RetargetResult(clip, warnings, mapped, unmapped, scale, pinned, keyCount);
+    }
+
+    /// <summary>
+    /// When the rig has a bone mapped to "root" above the pelvis (the mannequin, most game rigs), the horizontal travel goes on
+    /// that bone: it follows the ground projection of the pelvis, smoothed over ±0.25 s (symmetric window), so the pelvis keeps its height, sway
+    /// and rest offset relative to it. Every bone below the pelvis keeps exactly the same model-space transform (feet, pinned
+    /// contacts), the root no longer stays at the origin (viewport bone, pole controls in root space), and export
+    /// rootMotion=in_place can remove the travel. Returns the root bone index, or −1 when the rig has no such bone.
+    /// </summary>
+    static int MoveTravelToRoot(RigEvaluator ev, Dictionary<string, int> byStd, int pelvis, Transform[] rest, Transform[][] locals, double fps)
+    {
+        if (!byStd.TryGetValue(H.Root, out var root) || root == pelvis || !ev.IsAncestorOrSelf(root, pelvis)) return -1;
+        var frames = locals.Length;
+        var models = locals.Select(ev.Model).ToArray();
+        var restOffset = rest[pelvis].Translation - rest[root].Translation;
+        // Ground-projected pelvis offset from where it sits over the root at rest, per frame.
+        var travel = models.Select(m =>
+        {
+            var d = m[pelvis].Translation - m[root].Translation - restOffset;
+            return new Vec3(d.X, 0, d.Z);
+        }).ToArray();
+        var half = Math.Max(0, (int)Math.Round(0.25 * fps));
+        for (var f = 0; f < frames; f++)
+        {
+            var sum = Vec3.Zero;
+            var n = 0;
+            // Symmetric window, narrowed near the ends, so steady travel is followed exactly (no lag or lead at the ends).
+            var h = Math.Min(half, Math.Min(f, frames - 1 - f));
+            for (var k = f - h; k <= f + h; k++) { sum += travel[k]; n++; }
+            var shift = sum / n;
+            var m = models[f];
+            var loc = locals[f];
+            var rp = ev.ParentOf(root);
+            var newRoot = m[root] with { Translation = m[root].Translation + shift };
+            loc[root] = rp < 0 ? newRoot : RigEvaluator.LocalFromModel(m[rp], newRoot);
+            // Bones between the root and the pelvis follow the root; the pelvis keeps its model transform.
+            var after = ev.Model(loc);
+            var pp = ev.ParentOf(pelvis);
+            loc[pelvis] = RigEvaluator.LocalFromModel(after[pp], m[pelvis]);
+        }
+        return root;
     }
 
     static double? LegLength(Transform[] rest, Dictionary<string, int> byStd)
@@ -276,7 +320,7 @@ public static class MotionRetargeter
 
     // ------------------------------------------------------------------ clip
 
-    static Clip BuildClip(Rig rig, RetargetOptions o, Transform[][] locals, int[] pairOf, int pelvis, int frames, MotionResult motion, out int keyCount)
+    static Clip BuildClip(Rig rig, RetargetOptions o, Transform[][] locals, int[] pairOf, int pelvis, int travelBone, int frames, MotionResult motion, out int keyCount)
     {
         var clip = new Clip
         {
@@ -314,7 +358,7 @@ public static class MotionRetargeter
                 clip.Tracks.Add(Track(bone, TrackChannels.Rotation, keep.Select(f => (f, new[] { values[f].X, values[f].Y, values[f].Z, values[f].W })), o.Fps, rig));
                 keyCount += keep.Count;
             }
-            if (b == pelvis)
+            if (b == pelvis || b == travelBone)
             {
                 var pos = locals.Select(l => l[b].Translation).ToArray();
                 var keep = o.ReduceKeys ? Reduce(frames, (i, j, k) => (Vec3.Lerp(pos[i], pos[j], (double)(k - i) / (j - i)) - pos[k]).Length() <= o.TranslationToleranceMetres)

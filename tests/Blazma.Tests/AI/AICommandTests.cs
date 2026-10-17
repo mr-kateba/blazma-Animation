@@ -136,10 +136,8 @@ public class AICommandTests
         Assert.True(s.Undo(CommandOrigin.Test).Ok);
         Assert.NotNull(s.Project.FindClip(clip.Id));
 
-        // Applying the same job again gives a second, separate clip.
-        var again = (string)Ok(reg, s, "motion.job_apply", new { jobId, name = "Walk 2" }).Data!["clipId"]!;
-        Assert.NotEqual(clipId, again);
-        Assert.Equal("Walk 2", s.Project.FindClip(Core.Ids.ObjectId.Parse(again))!.Name);
+        // The job handed its clip to the project: applying it again is refused (undo the apply to get it back).
+        Assert.Equal("job_applied", Run(reg, s, "motion.job_apply", new { jobId, name = "Walk 2" }).Error?.Code);
     }
 
     [Fact]

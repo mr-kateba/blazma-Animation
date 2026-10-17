@@ -7,33 +7,55 @@
 // This program never downloads anything and never opens a network connection. It loads only
 // the model files whose paths Blazma passes (chosen by the user).
 //
-// kimodo_generate blocks and cannot be interrupted, so "cancel" is acknowledged by Blazma
-// killing this process; the runner itself does nothing for it.
+// Lifetime (DECISIONS D29): stdin is read on its own thread, so the runner notices at once when
+// Blazma goes away, even in the middle of a generation that kimodo.cpp cannot interrupt:
+//  * end of stdin (Blazma exited, crashed or was killed: the pipe closes) -> std::_Exit;
+//  * "cancel" while a generation runs -> std::_Exit (Blazma also kills the process);
+//  * Linux: when Blazma passes KIMODO_RUNNER_PARENT_PID, PR_SET_PDEATHSIG(SIGKILL) as a second
+//    line of defence (Blazma starts the runner from a thread that lives as long as the host,
+//    because the signal fires when the creating *thread* exits);
+//  * Windows: Blazma puts the runner in a Job object with KILL_ON_JOB_CLOSE.
+// Requests are read with a hard size limit: an oversized line is skipped without buffering it.
 
 #include <kimodo/kimodo_capi.h>
 #include <nlohmann/json.hpp>
 
 #include "soma_skeleton.hpp"
 
+#include <atomic>
 #include <cmath>
+#include <condition_variable>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
 #include <filesystem>
-#include <iostream>
+#include <limits>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <string>
+#include <thread>
 
 #if defined(_WIN32)
 #include <fcntl.h>
 #include <io.h>
+#endif
+#if defined(__linux__)
+#include <csignal>
+#include <sys/prctl.h>
+#include <unistd.h>
 #endif
 
 namespace {
 
 using json = nlohmann::json;
 constexpr int protocol_version = 1;
-constexpr const char *runner_version = "0.1.0";
+constexpr const char *runner_version = "0.2.0";
 constexpr std::size_t max_request_bytes = 1u << 20; // requests are small (a prompt and paths)
+constexpr std::int64_t max_frames = 10000;
+constexpr std::int64_t max_steps = 1000;
+constexpr std::int64_t max_threads = 1024;
 
 struct model_deleter { void operator()(kimodo_model *m) const noexcept { kimodo_model_free(m); } };
 struct motion_deleter { void operator()(kimodo_motion *m) const noexcept { kimodo_motion_free(m); } };
@@ -43,6 +65,7 @@ using motion_ptr = std::unique_ptr<kimodo_motion, motion_deleter>;
 struct loaded_model {
     model_ptr model;
     std::string motion_path, text_path, device;
+    std::int64_t threads = 0;
 };
 loaded_model g_model;
 
@@ -51,14 +74,31 @@ struct rpc_error {
     std::string message;
 };
 
+std::mutex g_out_mutex;
+
 void send(const json &message) {
     // One line per message; dump() escapes control characters, so the message never contains '\n'.
     const std::string line = message.dump(-1, ' ', false, json::error_handler_t::replace) + "\n";
+    std::lock_guard<std::mutex> lock(g_out_mutex);
     std::fwrite(line.data(), 1, line.size(), stdout);
     std::fflush(stdout);
 }
 
-void log(const std::string &text) { std::cerr << text << '\n' << std::flush; }
+void log(const std::string &text) {
+    const std::string line = text + "\n";
+    std::fwrite(line.data(), 1, line.size(), stderr);
+    std::fflush(stderr);
+}
+
+[[noreturn]] void hard_exit(int code, const std::string &why) {
+    log(why);
+    std::fflush(stdout);
+    std::_Exit(code); // no destructors: a generation may be running on the main thread
+}
+
+void send_error(const json &id, int code, const std::string &message, const std::string &data_code) {
+    send({{"jsonrpc", "2.0"}, {"id", id}, {"error", {{"code", code}, {"message", message}, {"data", {{"code", data_code}}}}}});
+}
 
 void progress(const json &id, const char *stage, double fraction, const std::string &message = {}) {
     json p{{"id", id}, {"stage", stage}, {"fraction", fraction}};
@@ -68,7 +108,7 @@ void progress(const json &id, const char *stage, double fraction, const std::str
 
 void set_env(const char *name, const std::string &value) {
 #if defined(_WIN32)
-    _putenv_s(name, value.c_str());
+    _putenv_s(name, value.c_str()); // an empty value removes the variable
 #else
     if (value.empty()) unsetenv(name); else setenv(name, value.c_str(), 1);
 #endif
@@ -94,6 +134,43 @@ std::filesystem::path utf8_path(const std::string &s) {
     return std::filesystem::path(std::u8string(reinterpret_cast<const char8_t *>(s.data()), s.size()));
 }
 
+// ---------------------------------------------------------------- strict parameter reading
+
+// Integers only (no floats, booleans or strings), read as 64-bit and range-checked before any
+// narrowing, so 4294967396 cannot wrap to 100.
+std::int64_t get_int(const json &p, const char *key, std::int64_t fallback, std::int64_t lo, std::int64_t hi) {
+    if (!p.contains(key) || p[key].is_null()) return fallback;
+    const json &v = p[key];
+    const auto range = [&] {
+        return rpc_error{"invalid_request", std::string(key) + " must be an integer in " + std::to_string(lo) + ".." + std::to_string(hi)};
+    };
+    if (!v.is_number_integer()) throw range();
+    if (v.is_number_unsigned()) {
+        const auto u = v.get<std::uint64_t>();
+        if (u > static_cast<std::uint64_t>(hi)) throw range();
+        return static_cast<std::int64_t>(u);
+    }
+    const auto s = v.get<std::int64_t>();
+    if (s < lo || s > hi) throw range();
+    return s;
+}
+
+std::uint64_t get_seed(const json &p) {
+    if (!p.contains("seed") || p["seed"].is_null()) return 0;
+    const json &v = p["seed"];
+    if (!v.is_number_integer()) throw rpc_error{"invalid_request", "seed must be a non-negative integer"};
+    if (v.is_number_unsigned()) return v.get<std::uint64_t>();
+    const auto s = v.get<std::int64_t>();
+    if (s < 0) throw rpc_error{"invalid_request", "seed must be a non-negative integer"};
+    return static_cast<std::uint64_t>(s);
+}
+
+std::string get_string(const json &p, const char *key, const std::string &fallback) {
+    if (!p.contains(key) || p[key].is_null()) return fallback;
+    if (!p[key].is_string()) throw rpc_error{"invalid_request", std::string(key) + " must be a string"};
+    return p[key].get<std::string>();
+}
+
 std::string require_file(const json &p, const char *key) {
     if (!p.contains(key) || !p[key].is_string()) throw rpc_error{"invalid_request", std::string("missing '") + key + "'"};
     const auto path = p[key].get<std::string>();
@@ -102,6 +179,8 @@ std::string require_file(const json &p, const char *key) {
         throw rpc_error{"models_not_found", std::string(key) + " not found: " + path};
     return path;
 }
+
+// ---------------------------------------------------------------- methods
 
 json skeleton_json() {
     json names = json::array(), parents = json::array(), offsets = json::array();
@@ -137,43 +216,47 @@ json diagnose(const json &p) {
     return r;
 }
 
-kimodo_model *ensure_model(const json &id, const std::string &motion, const std::string &text, const std::string &device) {
-    if (g_model.model && g_model.motion_path == motion && g_model.text_path == text && g_model.device == device)
+kimodo_model *ensure_model(const json &id, const std::string &motion, const std::string &text, const std::string &device, std::int64_t threads) {
+    // kimodo.cpp reads KIMODO_BACKEND and KIMODO_THREADS from the environment; both are set for every
+    // request (an earlier request's value never leaks into a later one) and are part of the cache key.
+    set_env("KIMODO_BACKEND", device == "cpu" ? "cpu" : "");
+    set_env("KIMODO_THREADS", threads > 0 ? std::to_string(threads) : "");
+    if (g_model.model && g_model.motion_path == motion && g_model.text_path == text && g_model.device == device && g_model.threads == threads)
         return g_model.model.get();
     g_model.model.reset();
     if (device == "vulkan" && !vulkan_compiled()) throw rpc_error{"device_unavailable", "this kimodo-runner was built without Vulkan"};
-    // kimodo.cpp selects its backend from the environment (KIMODO_BACKEND=cpu forces CPU);
-    // kimodo_runtime_options is validated but not used by the reviewed revision.
-    set_env("KIMODO_BACKEND", device == "cpu" ? "cpu" : "");
     progress(id, "load_model", 0.05, "loading Kimodo models");
     log("loading motion model " + motion + " and text model " + text + " (device " + device + ")");
     kimodo_runtime_options options{};
     options.size = sizeof(options);
     options.device = device == "cpu" ? KIMODO_DEVICE_CPU : device == "vulkan" ? KIMODO_DEVICE_VULKAN : KIMODO_DEVICE_AUTO;
+    options.threads = static_cast<std::uint32_t>(threads);
     char err[1024] = {0};
     auto *m = kimodo_model_load(motion.c_str(), text.c_str(), nullptr, &options, err, static_cast<int>(sizeof(err)));
     if (!m) throw rpc_error{"model_load_failed", std::string("could not load the Kimodo model: ") + err};
-    g_model = {model_ptr(m), motion, text, device};
+    g_model.model.reset(m);
+    g_model.motion_path = motion;
+    g_model.text_path = text;
+    g_model.device = device;
+    g_model.threads = threads;
     return m;
 }
 
 json generate(const json &id, const json &p) {
-    if (!p.contains("prompt") || !p["prompt"].is_string() || p["prompt"].get<std::string>().empty())
-        throw rpc_error{"invalid_request", "missing prompt"};
-    const auto prompt = p["prompt"].get<std::string>();
+    const auto prompt = get_string(p, "prompt", "");
+    if (prompt.empty()) throw rpc_error{"invalid_request", "missing prompt"};
     if (prompt.size() > 4000) throw rpc_error{"invalid_request", "prompt too long"};
-    const auto frames = p.value("frames", 0);
-    if (frames < 1 || frames > 10000) throw rpc_error{"invalid_request", "frames must be in 1..10000"};
-    const auto steps = p.value("steps", 100);
-    if (steps < 1 || steps > 1000) throw rpc_error{"invalid_request", "steps must be in 1..1000"};
-    const auto seed = p.value("seed", static_cast<std::uint64_t>(0));
-    const auto device = p.value("device", std::string("auto"));
+    const auto frames = get_int(p, "frames", -1, 1, max_frames);
+    if (frames < 1) throw rpc_error{"invalid_request", "missing frames"};
+    const auto steps = get_int(p, "steps", 100, 1, max_steps);
+    const auto threads = get_int(p, "threads", 0, 0, max_threads);
+    const auto seed = get_seed(p);
+    const auto device = get_string(p, "device", "auto");
     if (device != "auto" && device != "cpu" && device != "vulkan") throw rpc_error{"invalid_request", "device must be auto, cpu or vulkan"};
-    if (p.value("threads", 0) > 0) set_env("KIMODO_THREADS", std::to_string(p.value("threads", 0)));
     const auto motion_path = require_file(p, "motionModel");
     const auto text_path = require_file(p, "textModel");
 
-    auto *model = ensure_model(id, motion_path, text_path, device);
+    auto *model = ensure_model(id, motion_path, text_path, device, threads);
     progress(id, "generate", 0.2, "generating motion");
     kimodo_generation_options o{};
     o.size = sizeof(o);
@@ -193,7 +276,7 @@ json generate(const json &id, const json &p) {
         throw rpc_error{"unsupported_skeleton", "the model predicts " + std::to_string(j) + " joints; only the 30-joint SOMA models are supported"};
     const float *rot = kimodo_motion_local_rotations_xyzw(motion.get());
     const float *pos = kimodo_motion_root_positions(motion.get());
-    if (t <= 0 || !rot || !pos) throw rpc_error{"generation_failed", "Kimodo returned an empty motion"};
+    if (t <= 0 || t > max_frames || !rot || !pos) throw rpc_error{"generation_failed", "Kimodo returned an empty or oversized motion"};
 
     json rotations = json::array(), roots = json::array();
     rotations.get_ref<json::array_t &>().reserve(static_cast<std::size_t>(t) * j * 4);
@@ -210,6 +293,117 @@ json generate(const json &id, const json &p) {
             {"model", motion_path}, {"textModel", text_path}, {"steps", steps}, {"seed", seed},
             {"runner", std::string("kimodo-runner ") + runner_version}, {"warnings", json::array()}};
 }
+
+// ---------------------------------------------------------------- input thread
+
+struct input_item {
+    enum class kind { message, parse_error, oversize, eof } k;
+    json message;     // kind::message
+    json id;          // kind::parse_error: the request id when it could be recovered, else null
+};
+
+std::mutex g_queue_mutex;
+std::condition_variable g_queue_cv;
+std::deque<input_item> g_queue;
+std::atomic<bool> g_busy{false}; // a generation is running on the main thread
+std::atomic<bool> g_eof{false};
+
+void push(input_item item) {
+    {
+        std::lock_guard<std::mutex> lock(g_queue_mutex);
+        g_queue.push_back(std::move(item));
+    }
+    g_queue_cv.notify_one();
+}
+
+// Best effort: the numeric "id" of a request that is not valid JSON, so its error can name it.
+json recover_id(const std::string &line) {
+    const auto at = line.find("\"id\"");
+    if (at == std::string::npos) return nullptr;
+    std::size_t i = at + 4;
+    while (i < line.size() && (line[i] == ' ' || line[i] == '\t')) ++i;
+    if (i >= line.size() || line[i] != ':') return nullptr;
+    ++i;
+    while (i < line.size() && (line[i] == ' ' || line[i] == '\t')) ++i;
+    std::size_t start = i;
+    while (i < line.size() && i - start < 18 && line[i] >= '0' && line[i] <= '9') ++i;
+    if (i == start || i - start >= 18) return nullptr;
+    return std::stoll(line.substr(start, i - start));
+}
+
+void handle_input_line(std::string &line) {
+    if (!line.empty() && line.back() == '\r') line.pop_back();
+    if (line.empty()) return;
+    json msg = json::parse(line, nullptr, false);
+    if (msg.is_discarded() || !msg.is_object()) {
+        push({input_item::kind::parse_error, nullptr, recover_id(line)});
+        return;
+    }
+    const bool notification = !msg.contains("id");
+    if (notification && msg.contains("method") && msg["method"].is_string()) {
+        const auto method = msg["method"].get<std::string>();
+        // Acted on here, not queued: the main thread may be blocked inside kimodo_generate.
+        if (method == "cancel" && g_busy.load()) hard_exit(130, "cancel received during a generation: exiting");
+        if (method == "cancel") return;
+    }
+    push({input_item::kind::message, std::move(msg), nullptr});
+}
+
+void read_input() {
+    std::string line;
+    line.reserve(4096);
+    bool overflow = false;
+    for (;;) {
+        const int c = std::fgetc(stdin);
+        if (c == EOF) {
+            // Blazma is gone (or closed our input): never keep computing for nobody. g_eof is set before
+            // g_busy is read, and the main thread sets g_busy before reading g_eof, so one of them sees the other.
+            g_eof.store(true);
+            if (g_busy.load()) hard_exit(0, "stdin closed during a generation: exiting");
+            push({input_item::kind::eof, nullptr, nullptr});
+            return;
+        }
+        if (c == '\n') {
+            if (overflow) push({input_item::kind::oversize, nullptr, nullptr});
+            else handle_input_line(line);
+            line.clear();
+            overflow = false;
+            continue;
+        }
+        if (overflow) continue; // skip the rest of an oversized line without storing it
+        if (line.size() >= max_request_bytes) {
+            overflow = true;
+            std::string().swap(line);
+            continue;
+        }
+        line.push_back(static_cast<char>(c));
+    }
+}
+
+input_item pop() {
+    std::unique_lock<std::mutex> lock(g_queue_mutex);
+    g_queue_cv.wait(lock, [] { return !g_queue.empty(); });
+    auto item = std::move(g_queue.front());
+    g_queue.pop_front();
+    return item;
+}
+
+#if defined(__linux__)
+void bind_to_parent() {
+    const char *v = std::getenv("KIMODO_RUNNER_PARENT_PID");
+    if (!v || !*v) return;
+    char *end = nullptr;
+    const long expected = std::strtol(v, &end, 10);
+    if (end == v || *end != '\0' || expected <= 1) return;
+    if (prctl(PR_SET_PDEATHSIG, SIGKILL) != 0) { log("prctl(PR_SET_PDEATHSIG) failed"); return; }
+    // The parent may have died before prctl took effect (then we were re-parented): check after setting it.
+    if (getppid() != static_cast<pid_t>(expected)) {
+        // Either Blazma is already gone, or a wrapper process sits in between; stdin EOF covers both.
+        log("parent process is not the one Blazma announced; relying on stdin EOF only");
+        prctl(PR_SET_PDEATHSIG, 0);
+    }
+}
+#endif
 
 } // namespace
 
@@ -229,42 +423,58 @@ int main(int argc, char **argv) {
     _setmode(_fileno(stdout), _O_BINARY);
     _setmode(_fileno(stdin), _O_BINARY);
 #endif
+#if defined(__linux__)
+    bind_to_parent();
+#endif
     log(std::string("kimodo-runner ") + runner_version + " ready (protocol " + std::to_string(protocol_version) + ")");
+    std::thread(read_input).detach();
 
-    std::string line;
-    while (std::getline(std::cin, line)) {
-        if (!line.empty() && line.back() == '\r') line.pop_back();
-        if (line.empty()) continue;
-        if (line.size() > max_request_bytes) {
-            send({{"jsonrpc", "2.0"}, {"id", nullptr}, {"error", {{"code", -32600}, {"message", "request too large"}, {"data", {{"code", "invalid_request"}}}}}});
+    for (;;) {
+        auto item = pop();
+        switch (item.k) {
+        case input_item::kind::eof:
+            log("stdin closed: exiting");
+            return 0;
+        case input_item::kind::oversize:
+            // The id cannot be known without buffering the line; Blazma fails its in-flight call on id:null errors.
+            send_error(nullptr, -32600, "request too large", "invalid_request");
             continue;
+        case input_item::kind::parse_error:
+            send_error(item.id, -32700, "parse error", "protocol_error");
+            continue;
+        case input_item::kind::message:
+            break;
         }
-        json msg = json::parse(line, nullptr, false);
-        if (msg.is_discarded() || !msg.is_object() || !msg.contains("method") || !msg["method"].is_string()) {
-            send({{"jsonrpc", "2.0"}, {"id", nullptr}, {"error", {{"code", -32700}, {"message", "parse error"}, {"data", {{"code", "protocol_error"}}}}}});
+        const json &msg = item.message;
+        const json id = msg.contains("id") ? msg["id"] : json(nullptr);
+        if (!msg.contains("method") || !msg["method"].is_string()) {
+            if (msg.contains("id")) send_error(id, -32600, "invalid request: no method", "protocol_error");
+            else send_error(nullptr, -32600, "invalid request: no method", "protocol_error");
             continue;
         }
         const auto method = msg["method"].get<std::string>();
         const json params = msg.contains("params") && msg["params"].is_object() ? msg["params"] : json::object();
-        if (!msg.contains("id")) { // notifications
+        if (!msg.contains("id")) { // notifications ("cancel" is handled on the input thread)
             if (method == "shutdown") { log("shutdown"); return 0; }
-            continue; // "cancel": the client stops this process
+            continue;
         }
-        const json id = msg["id"];
         try {
             json result;
             if (method == "hello") result = hello(params);
             else if (method == "diagnose") result = diagnose(params);
-            else if (method == "generate") result = generate(id, params);
-            else throw rpc_error{"unknown_method", "unknown method '" + method + "'"};
+            else if (method == "generate") {
+                g_busy.store(true);
+                struct clear_busy { ~clear_busy() { g_busy.store(false); } } guard;
+                if (g_eof.load()) continue; // Blazma is gone: do not start a long generation for nobody
+                result = generate(id, params);
+            } else throw rpc_error{"unknown_method", "unknown method '" + method + "'"};
             send({{"jsonrpc", "2.0"}, {"id", id}, {"result", std::move(result)}});
         } catch (const rpc_error &e) {
             log("error [" + e.code + "]: " + e.message);
-            send({{"jsonrpc", "2.0"}, {"id", id}, {"error", {{"code", -32000}, {"message", e.message}, {"data", {{"code", e.code}}}}}});
+            send_error(id, -32000, e.message, e.code);
         } catch (const std::exception &e) {
             log(std::string("internal error: ") + e.what());
-            send({{"jsonrpc", "2.0"}, {"id", id}, {"error", {{"code", -32603}, {"message", e.what()}, {"data", {{"code", "internal_error"}}}}}});
+            send_error(id, -32603, e.what(), "internal_error");
         }
     }
-    return 0;
 }

@@ -58,18 +58,57 @@ internal sealed class RunnerProcess : IDisposable
         };
         foreach (var a in settings.RunnerArguments) psi.ArgumentList.Add(a);
         psi.ArgumentList.Add("--stdio");
-        // kimodo.cpp reads its backend and thread count from the environment (the C API's runtime options are
-        // accepted but not used in the reviewed revision), so they are set for the child only.
-        if (settings.Device == "cpu") psi.Environment["KIMODO_BACKEND"] = "cpu";
-        if (settings.Threads > 0) psi.Environment["KIMODO_THREADS"] = settings.Threads.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        // A minimal environment (DECISIONS D29): the runner does not need, and should not see, the editor's
+        // variables (tokens, API keys of other tools...). psi.Environment starts as a copy of ours.
+        var env = RunnerEnvironment(settings, Environment.GetEnvironmentVariables(), Environment.ProcessId, OperatingSystem.IsWindows());
+        psi.Environment.Clear();
+        foreach (var (k, v) in env) psi.Environment[k] = v;
         Process? p;
-        try { p = Process.Start(psi); }
+        try { p = RunnerSpawner.Start(psi); }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {
             throw new MotionGenerationException("runner_start_failed", $"kimodo-runner could not be started: {e.Message}", e);
         }
         if (p is null) throw new MotionGenerationException("runner_start_failed", "kimodo-runner could not be started.");
+        if (OperatingSystem.IsWindows() && !RunnerJob.Assign(p, out var why)) log?.Invoke($"kimodo-runner is not tied to Blazma's lifetime ({why}); it still exits when its input closes.");
         return new RunnerProcess(p, settings.MaxMessageBytes, log);
+    }
+
+    /// <summary>Variables passed through from the host, by exact name (case-insensitive on Windows).</summary>
+    static readonly string[] PassThrough =
+    {
+        // Process basics: executable/DLL search, temp files, user profile (GPU driver caches).
+        "PATH", "TEMP", "TMP", "TMPDIR", "HOME", "USERPROFILE", "LOCALAPPDATA", "APPDATA",
+        "SystemRoot", "windir", "SystemDrive", "ProgramData", "ProgramFiles", "ProgramFiles(x86)", "NUMBER_OF_PROCESSORS",
+        // Linux: shared libraries and the Vulkan loader's ICD search (XDG dirs), GPU device access.
+        "LD_LIBRARY_PATH", "XDG_DATA_DIRS", "XDG_CONFIG_DIRS", "XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_RUNTIME_DIR", "XDG_CACHE_HOME",
+        // A runner started through the dotnet host (tests, or a managed wrapper).
+        "DOTNET_ROOT",
+    };
+
+    /// <summary>Prefixes passed through: Vulkan loader/driver (VK_*), GGML backend options (GGML_*), CUDA device selection (CUDA_*).</summary>
+    static readonly string[] PassThroughPrefixes = { "VK_", "GGML_", "CUDA_" };
+
+    /// <summary>
+    /// The runner's environment: the allow-listed host variables plus the KIMODO_* values Blazma sets. Any KIMODO_* of the host
+    /// is dropped (the runner gets the backend and thread count per request). On Linux KIMODO_RUNNER_PARENT_PID lets the
+    /// runner bind its lifetime to this process (PR_SET_PDEATHSIG).
+    /// </summary>
+    internal static Dictionary<string, string> RunnerEnvironment(KimodoSettings settings, System.Collections.IDictionary host, int hostPid, bool windows)
+    {
+        var cmp = windows ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var env = new Dictionary<string, string>(cmp);
+        foreach (System.Collections.DictionaryEntry e in host)
+        {
+            if (e.Key is not string k || e.Value is not string v) continue;
+            var allowed = PassThrough.Contains(k, cmp) || PassThroughPrefixes.Any(p => k.StartsWith(p, windows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+            if (allowed) env[k] = v;
+        }
+        // kimodo.cpp reads its backend from the environment (the C API's runtime options are accepted but not used in the
+        // reviewed revision). The runner also sets it, and KIMODO_THREADS, for every request.
+        if (settings.Device == "cpu") env["KIMODO_BACKEND"] = "cpu";
+        if (!windows) env["KIMODO_RUNNER_PARENT_PID"] = hostPid.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return env;
     }
 
     /// <summary>Calls a method and waits for its result. Notifications for this call (progress) go to <paramref name="onNotification"/>.
@@ -235,15 +274,28 @@ internal sealed class RunnerProcess : IDisposable
             return;
         }
 
+        if (msg["id"] is null && msg["error"] is JsonObject anon)
+        {
+            // An error the runner could not attribute (a request it could not parse, or one too large to read): it belongs to
+            // a call in flight, so fail those now instead of letting them run into their timeout.
+            var code = ErrorCode(anon, "protocol_error");
+            var e = new MotionGenerationException(code, $"kimodo-runner rejected a request: {(string?)anon["message"] ?? "error"}.");
+            foreach (var (_, p) in _pending) p.Tcs.TrySetException(e);
+            _log?.Invoke($"kimodo-runner rejected a request without an id [{code}].");
+            return;
+        }
         if (msg["id"] is not JsonValue rid || !rid.TryGetValue<long>(out var id) || !_pending.TryGetValue(id, out var pending)) return;
         if (msg["error"] is JsonObject err)
         {
-            var code = (string?)err["data"]?["code"] ?? "generation_failed";
+            var code = ErrorCode(err, "generation_failed");
             pending.Tcs.TrySetException(new MotionGenerationException(code, (string?)err["message"] ?? "kimodo-runner reported an error."));
         }
         else if (msg["result"] is JsonObject result) pending.Tcs.TrySetResult(result);
         else pending.Tcs.TrySetException(new MotionGenerationException("protocol_error", "kimodo-runner answered without a result object."));
     }
+
+    static string ErrorCode(JsonObject err, string fallback) =>
+        err["data"] is JsonObject d && d["code"] is JsonValue c && c.TryGetValue<string>(out var code) && code.Length is > 0 and <= 64 ? code : fallback;
 
     async Task ReadStderrAsync()
     {

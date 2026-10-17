@@ -32,6 +32,9 @@ public sealed record MotionJobSnapshot(
 {
     public bool IsFinished => State is not MotionJobState.Running;
 
+    /// <summary>Who started the job ("ui", "mcp:&lt;session&gt;", "test"); null when it was started without an origin.</summary>
+    public string? Owner { get; init; }
+
     public JsonObject ToJson() => new()
     {
         ["jobId"] = JobId,
@@ -50,17 +53,27 @@ public sealed record MotionJobSnapshot(
         ["frames"] = Frames,
         ["created"] = Created.ToString("O", CultureInfo.InvariantCulture),
         ["finished"] = Finished?.ToString("O", CultureInfo.InvariantCulture),
+        ["owner"] = Owner,
     };
 }
 
 /// <summary>
-/// Long-running motion generation (DECISIONS D12, D24). The synchronous command layer only <i>starts</i> a job
+/// Long-running motion generation (DECISIONS D12, D24, D29). The synchronous command layer only <i>starts</i> a job
 /// (<c>motion.generate</c>, which does not change the project). The job runs on a worker thread on an immutable
 /// snapshot of the target rig: provider → MotionResult → retarget → a finished draft <see cref="Clip"/> held in
 /// memory. Nothing touches the (single-threaded) <see cref="ProjectSession"/> from the worker. The clip enters the
 /// project only through the undoable <c>motion.job_apply</c> command, which the host runs on its session thread
 /// (the app: on the main thread when <see cref="JobChanged"/> reports Ready, or when the user clicks; agents: by
 /// calling the tool). Thread-safe.
+/// <para>Ownership: a job belongs to the origin that started it. Through the commands, agents see, wait for, cancel and
+/// apply only their own jobs (others: <c>not_owner</c>); the user (UI origin) sees all. The C# API without an origin
+/// (<see cref="List()"/>, <see cref="Get(string)"/>, <see cref="Cancel(string)"/>) is for the app itself and is unrestricted.</para>
+/// <para>Staleness: a job remembers the project, character, rig and a fingerprint of the rig (bones, parents, rest pose,
+/// humanoid map). Applying it into a different project, or after the character was removed or re-rigged or the rig was
+/// edited, fails with <c>job_stale</c>.</para>
+/// <para>Memory: the clip is held while the job is Ready; applying hands it to the undo history (undoing the apply gives it
+/// back and the job is Ready again). Finished jobs are kept for <see cref="FinishedRetention"/>, at most
+/// <see cref="MaxFinishedJobs"/>.</para>
 /// </summary>
 public sealed class MotionJobService : IDisposable
 {
@@ -72,9 +85,14 @@ public sealed class MotionJobService : IDisposable
         public required ulong Seed;
         public required string CharacterId;
         public required string ClipName;
+        public required ObjectId RigId;
+        public required string RigFingerprint;
+        public CommandOrigin? Owner;
+        public ObjectId? ProjectId;
         public readonly CancellationTokenSource Cts = new();
         public readonly TaskCompletionSource Done = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public MotionJobState State = MotionJobState.Running;
+        public bool CancelRequested;
         public string Stage = "queued";
         public double Progress;
         public string? ErrorCode;
@@ -83,16 +101,28 @@ public sealed class MotionJobService : IDisposable
         public Clip? Result;
         public string? ClipId;
         public int? Frames;
-        public DateTimeOffset Created = DateTimeOffset.UtcNow;
+        public DateTimeOffset Created;
         public DateTimeOffset? Finished;
     }
 
     public const int MaxRunningJobs = 4;
-    public const int MaxKeptJobs = 50;
+
+    /// <summary>Finished jobs (ready, applied, failed, cancelled) kept; the oldest are dropped first.</summary>
+    public const int MaxFinishedJobs = 20;
+
+    /// <summary>Most jobs held at once (running + finished).</summary>
+    public const int MaxKeptJobs = MaxRunningJobs + MaxFinishedJobs;
+
+    /// <summary>Finished jobs older than this are dropped (with their unapplied clip).</summary>
+    public static readonly TimeSpan FinishedRetention = TimeSpan.FromMinutes(30);
+
+    /// <summary>Default cap for a blocking <c>motion.job_status</c> wait (a headless host answers one call at a time).</summary>
+    public const int MaxWaitSeconds = 25;
 
     readonly object _lock = new();
     readonly List<Job> _jobs = new();
     readonly List<IMotionGenerationProvider> _providers;
+    readonly CancellationTokenSource _disposed = new();
 
     public MotionJobService(IEnumerable<IMotionGenerationProvider> providers)
     {
@@ -108,10 +138,16 @@ public sealed class MotionJobService : IDisposable
     public KimodoProvider? Kimodo => _providers.OfType<KimodoProvider>().FirstOrDefault();
 
     /// <summary>
-    /// Allows <c>motion.job_status</c> to block for up to waitSeconds. Only for headless hosts, where commands run
-    /// one at a time anyway (CLI/MCP without the app). The app leaves it off so its main thread never waits.
+    /// Allows <c>motion.job_status</c> to block for up to waitSeconds (capped at <see cref="MaxBlockingWait"/>). Only for headless
+    /// hosts, where commands run one at a time anyway (CLI/MCP without the app). The app leaves it off so its main thread never waits.
     /// </summary>
     public bool AllowBlockingWait { get; set; }
+
+    /// <summary>Longest blocking wait of <c>motion.job_status</c> (default <see cref="MaxWaitSeconds"/> s).</summary>
+    public TimeSpan MaxBlockingWait { get; set; } = TimeSpan.FromSeconds(MaxWaitSeconds);
+
+    /// <summary>Clock for job times and pruning (tests replace it).</summary>
+    public TimeProvider Clock { get; set; } = TimeProvider.System;
 
     /// <summary>Raised on worker threads (and on the caller's thread for cancel/apply) whenever a job changes.
     /// UI: marshal to the main thread before touching the session.</summary>
@@ -137,21 +173,51 @@ public sealed class MotionJobService : IDisposable
             $"For an offline demo pass provider=\"procedural\" (keyword cycles: {string.Join(", ", ProceduralMotionProvider.SupportedKeywords)}; not AI).");
     }
 
-    /// <summary>Starts a job. <paramref name="rigSnapshot"/> must be a private copy (it is used on a worker thread).</summary>
-    public MotionJobSnapshot Start(IMotionGenerationProvider provider, MotionRequest request, Rig rigSnapshot, ObjectId characterId, RetargetOptions options)
+    /// <summary>
+    /// Fingerprint of everything the retargeted clip depends on: bone ids, parents and rest transforms, and the humanoid map.
+    /// A job whose rig fingerprint changed is stale.
+    /// </summary>
+    public static string RigFingerprint(Rig rig)
+    {
+        var sb = new System.Text.StringBuilder();
+        static string F(double v) => v.ToString("R", CultureInfo.InvariantCulture);
+        foreach (var b in rig.Bones)
+        {
+            var r = b.Rest;
+            sb.Append(b.Id).Append('|').Append(b.Parent).Append('|')
+              .Append(F(r.Translation.X)).Append(',').Append(F(r.Translation.Y)).Append(',').Append(F(r.Translation.Z)).Append('|')
+              .Append(F(r.Rotation.X)).Append(',').Append(F(r.Rotation.Y)).Append(',').Append(F(r.Rotation.Z)).Append(',').Append(F(r.Rotation.W)).Append('|')
+              .Append(F(r.Scale.X)).Append(',').Append(F(r.Scale.Y)).Append(',').Append(F(r.Scale.Z)).Append('\n');
+        }
+        sb.Append("map\n");
+        foreach (var m in rig.HumanoidMap.OrderBy(m => m.Standard, StringComparer.Ordinal).ThenBy(m => m.Bone.ToString(), StringComparer.Ordinal))
+            sb.Append(m.Standard).Append('=').Append(m.Bone).Append('\n');
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(sb.ToString())));
+    }
+
+    /// <summary>Starts a job without an owner or project (visible to every caller). <paramref name="rigSnapshot"/> must be a private copy.</summary>
+    public MotionJobSnapshot Start(IMotionGenerationProvider provider, MotionRequest request, Rig rigSnapshot, ObjectId characterId, RetargetOptions options) =>
+        Start(provider, request, rigSnapshot, characterId, options, null, null);
+
+    /// <summary>Starts a job owned by <paramref name="owner"/> for <paramref name="projectId"/>. <paramref name="rigSnapshot"/> must be a
+    /// private copy (it is used on a worker thread).</summary>
+    public MotionJobSnapshot Start(IMotionGenerationProvider provider, MotionRequest request, Rig rigSnapshot, ObjectId characterId, RetargetOptions options,
+        CommandOrigin? owner, ObjectId? projectId)
     {
         Job job;
         lock (_lock)
         {
+            ObjectDisposedException.ThrowIf(_disposed.IsCancellationRequested, this);
+            Prune();
             if (_jobs.Count(j => j.State == MotionJobState.Running) >= MaxRunningJobs)
                 throw new CommandException("busy", $"{MaxRunningJobs} generation jobs are already running; wait or cancel one (motion.job_cancel).");
             job = new Job
             {
                 Id = ObjectId.New().ToString(), Provider = provider.Id, Prompt = request.Prompt, Seed = request.Seed,
-                CharacterId = characterId.ToString(), ClipName = options.Name,
+                CharacterId = characterId.ToString(), ClipName = options.Name, RigId = rigSnapshot.Id, RigFingerprint = RigFingerprint(rigSnapshot),
+                Owner = owner, ProjectId = projectId, Created = Clock.GetUtcNow(),
             };
             _jobs.Add(job);
-            Prune();
         }
         _ = Task.Run(() => RunAsync(job, provider, request, rigSnapshot, options));
         return Snapshot(job);
@@ -184,6 +250,8 @@ public sealed class MotionJobService : IDisposable
             lock (_lock)
             {
                 if (job.State != MotionJobState.Running) return;
+                // A cancel that arrived while retargeting wins: the user asked for no result.
+                if (job.CancelRequested || job.Cts.IsCancellationRequested) { Finish(job, MotionJobState.Cancelled, null, "Cancelled."); return; }
                 job.Result = r.Clip;
                 job.Frames = (int)r.Clip.DurationFrames;
                 job.Warnings = r.Warnings.ToList();
@@ -193,100 +261,199 @@ public sealed class MotionJobService : IDisposable
                 job.Message = $"{r.Clip.DurationFrames} frames, {r.MappedBones.Count} bones driven, {r.KeyCount} keys" + (r.PinnedFrames > 0 ? $", feet pinned on {r.PinnedFrames} frames" : "") + ".";
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (job.CancelRequested || job.Cts.IsCancellationRequested)
         {
-            lock (_lock) { job.State = MotionJobState.Cancelled; job.Stage = "cancelled"; job.Message = "Cancelled."; }
+            lock (_lock) Finish(job, MotionJobState.Cancelled, null, "Cancelled.");
         }
         catch (MotionGenerationException e)
         {
-            lock (_lock) { job.State = MotionJobState.Failed; job.Stage = "failed"; job.ErrorCode = e.Code; job.Message = e.Message; }
+            lock (_lock) Finish(job, MotionJobState.Failed, e.Code, e.Message);
         }
-        catch (Exception e) when (e is not OutOfMemoryException)
+        catch (OutOfMemoryException)
         {
-            lock (_lock) { job.State = MotionJobState.Failed; job.Stage = "failed"; job.ErrorCode = "internal_error"; job.Message = e.Message; }
+            lock (_lock) Finish(job, MotionJobState.Failed, "out_of_memory", "Blazma ran out of memory while preparing the motion.");
+        }
+        catch (Exception e)
+        {
+            lock (_lock) Finish(job, MotionJobState.Failed, "internal_error", e.Message);
         }
         finally
         {
-            lock (_lock) job.Finished ??= DateTimeOffset.UtcNow;
+            lock (_lock)
+            {
+                // Whatever happened, a job never stays Running after its worker ended.
+                if (job.State == MotionJobState.Running) Finish(job, MotionJobState.Failed, "internal_error", "The generation ended without a result.");
+                job.Finished ??= Clock.GetUtcNow();
+            }
+            Raise(job); // before waiters are released: whoever waited for the job has also seen its final event
             job.Done.TrySetResult();
-            Raise(job);
         }
     }
 
+    /// <summary>Sets a final state if the job is still running (caller holds the lock).</summary>
+    void Finish(Job job, MotionJobState state, string? code, string message)
+    {
+        if (job.State != MotionJobState.Running) return;
+        job.State = state;
+        job.Stage = state == MotionJobState.Cancelled ? "cancelled" : "failed";
+        job.ErrorCode = code;
+        job.Message = message;
+        job.Finished = Clock.GetUtcNow();
+    }
+
+    static bool IsUser(CommandOrigin? caller) => caller is null || caller.Source == CommandSource.Ui;
+
+    static bool CanAccess(Job j, CommandOrigin? caller) => IsUser(caller) || j.Owner is null || j.Owner == caller;
+
+    /// <summary>Finds a job the caller may use (caller holds the lock).</summary>
+    Job Find(string jobId, CommandOrigin? caller)
+    {
+        var job = _jobs.Find(j => j.Id == jobId) ?? throw new CommandException("not_found", $"No generation job '{jobId}'.");
+        if (!CanAccess(job, caller)) throw new CommandException("not_owner", "This generation job was started by someone else; agents can only use their own jobs.");
+        return job;
+    }
+
+    /// <summary>Any job (the app's own view).</summary>
     public MotionJobSnapshot? Get(string jobId)
     {
         lock (_lock) return _jobs.Find(j => j.Id == jobId) is { } j ? Snapshot(j) : null;
     }
 
-    public IReadOnlyList<MotionJobSnapshot> List()
+    /// <summary>A job <paramref name="caller"/> may see; throws not_found / not_owner.</summary>
+    public MotionJobSnapshot Get(string jobId, CommandOrigin? caller)
     {
-        lock (_lock) return _jobs.Select(Snapshot).ToList();
+        lock (_lock) return Snapshot(Find(jobId, caller));
+    }
+
+    /// <summary>All jobs (the app's own view).</summary>
+    public IReadOnlyList<MotionJobSnapshot> List() => List(null);
+
+    /// <summary>The jobs <paramref name="caller"/> may see (agents: their own).</summary>
+    public IReadOnlyList<MotionJobSnapshot> List(CommandOrigin? caller)
+    {
+        lock (_lock)
+        {
+            Prune();
+            return _jobs.Where(j => CanAccess(j, caller)).Select(Snapshot).ToList();
+        }
     }
 
     /// <summary>Cancels a running job (Kimodo: kills the runner process). False if it had already finished.</summary>
-    public bool Cancel(string jobId)
+    public bool Cancel(string jobId) => Cancel(jobId, null);
+
+    /// <summary>Cancels a running job <paramref name="caller"/> may use; throws not_found / not_owner.</summary>
+    public bool Cancel(string jobId, CommandOrigin? caller)
     {
-        Job? job;
+        Job job;
         lock (_lock)
         {
-            job = _jobs.Find(j => j.Id == jobId) ?? throw new CommandException("not_found", $"No generation job '{jobId}'.");
+            job = Find(jobId, caller);
             if (job.State != MotionJobState.Running) return false;
+            job.CancelRequested = true; // read under the same lock when the job finishes: no Ready after a successful cancel
         }
-        job.Cts.Cancel();
+        try { job.Cts.Cancel(); }
+        catch (AggregateException) { /* a provider's cancel callback failed; the job still ends as cancelled */ }
         return true;
     }
 
     /// <summary>Waits until the job finishes or the timeout passes. Returns the latest snapshot.</summary>
-    public MotionJobSnapshot Wait(string jobId, TimeSpan timeout)
+    public MotionJobSnapshot Wait(string jobId, TimeSpan timeout) => Wait(jobId, timeout, null, CancellationToken.None);
+
+    /// <summary>Waits until the job finishes, the timeout passes, <paramref name="ct"/> is cancelled or the service is disposed.</summary>
+    public MotionJobSnapshot Wait(string jobId, TimeSpan timeout, CommandOrigin? caller, CancellationToken ct)
     {
         Job job;
-        lock (_lock) job = _jobs.Find(j => j.Id == jobId) ?? throw new CommandException("not_found", $"No generation job '{jobId}'.");
-        try { job.Done.Task.Wait(timeout); }
+        lock (_lock) job = Find(jobId, caller);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _disposed.Token);
+        try { job.Done.Task.Wait(timeout, linked.Token); }
+        catch (OperationCanceledException) { }
         catch (AggregateException) { }
-        return Get(jobId)!;
+        lock (_lock) return Snapshot(job);
     }
 
-    /// <summary>A private copy of a Ready (or already applied) job's clip, for <see cref="ApplyMotionJob"/>.</summary>
-    internal Clip TakeResult(string jobId)
+    /// <summary>
+    /// A private copy of a Ready job's clip, for <see cref="ApplyMotionJob"/>, after checking that the caller owns the job and
+    /// that it still fits <paramref name="project"/> (same project, character still there with the same, unchanged rig).
+    /// </summary>
+    internal Clip TakeResult(string jobId, CommandOrigin? caller, Project project)
     {
         lock (_lock)
         {
-            var job = _jobs.Find(j => j.Id == jobId) ?? throw new CommandException("not_found", $"No generation job '{jobId}'.");
-            return job.State switch
+            var job = Find(jobId, caller);
+            switch (job.State)
             {
-                MotionJobState.Ready or MotionJobState.Applied => ClipEdit.CloneClip(job.Result!),
-                MotionJobState.Running => throw new CommandException("job_running", "The job is still running; check motion.job_status and apply when it is ready."),
-                MotionJobState.Cancelled => throw new CommandException("job_cancelled", "The job was cancelled."),
-                _ => throw new CommandException("job_failed", $"The job failed [{job.ErrorCode}]: {job.Message}"),
-            };
+                case MotionJobState.Ready: break;
+                case MotionJobState.Applied:
+                    throw new CommandException("job_applied", $"The job was already applied as clip {job.ClipId}. Undo that to apply it again, or duplicate the clip.");
+                case MotionJobState.Running:
+                    throw new CommandException("job_running", "The job is still running; check motion.job_status and apply when it is ready.");
+                case MotionJobState.Cancelled:
+                    throw new CommandException("job_cancelled", "The job was cancelled.");
+                default:
+                    throw new CommandException("job_failed", $"The job failed [{job.ErrorCode}]: {job.Message}");
+            }
+            if (job.ProjectId is { } pid && project.Id != pid)
+                throw new CommandException("job_stale", "The job was started for another project (the project was closed or replaced); generate again.");
+            var character = project.FindCharacter(ObjectId.Parse(job.CharacterId))
+                ?? throw new CommandException("job_stale", "The character the motion was generated for no longer exists; generate again.");
+            if (character.Rig != job.RigId)
+                throw new CommandException("job_stale", $"'{character.Name}' now uses a different rig than when the motion was generated; generate again.");
+            var rig = project.FindRig(job.RigId)
+                ?? throw new CommandException("job_stale", "The character's rig no longer exists in the project; generate again.");
+            if (RigFingerprint(rig) != job.RigFingerprint)
+                throw new CommandException("job_stale", $"The rig of '{character.Name}' changed (bones, rest pose or humanoid mapping) since the motion was generated; generate again.");
+            return ClipEdit.CloneClip(job.Result!);
         }
     }
 
+    /// <summary>The clip went into the project: the job no longer holds it (the undo history does).</summary>
     internal void MarkApplied(string jobId, ObjectId clipId)
     {
         Job? job;
         lock (_lock)
         {
             job = _jobs.Find(j => j.Id == jobId);
-            if (job is null) return;
+            if (job is null || job.State is not (MotionJobState.Ready or MotionJobState.Applied)) return;
             job.State = MotionJobState.Applied;
             job.Stage = "applied";
             job.ClipId = clipId.ToString();
+            job.Result = null;
+            job.Finished = Clock.GetUtcNow();
         }
         Raise(job);
     }
 
+    /// <summary>The apply was undone: the job is Ready again with the clip, so it can be applied again.</summary>
+    internal void MarkUnapplied(string jobId, ObjectId clipId, Clip clip)
+    {
+        Job? job;
+        lock (_lock)
+        {
+            job = _jobs.Find(j => j.Id == jobId);
+            if (job is null || job.State != MotionJobState.Applied || job.ClipId != clipId.ToString()) return;
+            job.State = MotionJobState.Ready;
+            job.Stage = "ready";
+            job.ClipId = null;
+            job.Result = clip;
+            job.Finished = Clock.GetUtcNow();
+        }
+        Raise(job);
+    }
+
+    /// <summary>Drops finished jobs older than <see cref="FinishedRetention"/> and keeps at most <see cref="MaxFinishedJobs"/> (caller holds the lock).</summary>
     void Prune()
     {
-        while (_jobs.Count > MaxKeptJobs && _jobs.FindIndex(j => j.State != MotionJobState.Running) is var i and >= 0)
-            _jobs.RemoveAt(i);
+        var now = Clock.GetUtcNow();
+        _jobs.RemoveAll(j => j.State != MotionJobState.Running && j.Finished is { } f && now - f > FinishedRetention);
+        var finished = _jobs.Where(j => j.State != MotionJobState.Running).OrderBy(j => j.Finished ?? j.Created).ToList();
+        for (var i = 0; i < finished.Count - MaxFinishedJobs; i++) _jobs.Remove(finished[i]);
     }
 
     MotionJobSnapshot Snapshot(Job j)
     {
         lock (_lock)
             return new MotionJobSnapshot(j.Id, j.Provider, j.Prompt, j.Seed, j.CharacterId, j.ClipName, j.State, j.Stage, j.Progress,
-                j.ErrorCode, j.Message, j.Warnings.ToList(), j.ClipId, j.Frames, j.Created, j.Finished);
+                j.ErrorCode, j.Message, j.Warnings.ToList(), j.ClipId, j.Frames, j.Created, j.Finished) { Owner = j.Owner?.ToString() };
     }
 
     void Raise(Job job)
@@ -299,7 +466,19 @@ public sealed class MotionJobService : IDisposable
 
     public void Dispose()
     {
-        lock (_lock) foreach (var j in _jobs) if (j.State == MotionJobState.Running) j.Cts.Cancel();
+        List<Job> running;
+        lock (_lock)
+        {
+            if (_disposed.IsCancellationRequested) return;
+            _disposed.Cancel(); // releases blocking waits
+            running = _jobs.Where(j => j.State == MotionJobState.Running).ToList();
+            foreach (var j in running) j.CancelRequested = true;
+        }
+        foreach (var j in running)
+        {
+            try { j.Cts.Cancel(); }
+            catch (AggregateException) { }
+        }
         foreach (var p in _providers.OfType<IDisposable>()) p.Dispose();
     }
 
@@ -316,7 +495,7 @@ public static class AICommands
     public static void Register(CommandRegistry r, MotionJobService jobs)
     {
         r.Register(new("motion.providers",
-            "List the motion generation providers and diagnostics: is kimodo-runner configured and found, are the model files there, CPU/RAM/GPU (best effort, offline). Never downloads anything.",
+            "List the motion generation providers and diagnostics: is kimodo-runner configured and found, are the model files there, CPU/RAM/GPU (best effort, offline). Never downloads anything. Agents see file names and found flags, not absolute paths.",
             CommandEffect.ReadOnly,
             S.Of(S.Bool("probe", "Also start kimodo-runner briefly and ask it for its own diagnostics (only in headless mode; can take seconds).", false)),
             a => new ListMotionProviders(jobs, (bool?)a["probe"] ?? false)));
@@ -344,18 +523,19 @@ public static class AICommands
 
         r.Register(new("motion.job_status",
             "State of a generation job (running, ready, failed, cancelled, applied) with progress, warnings and, once applied, its clipId. Without jobId: all jobs. " +
-            "Headless only: waitSeconds blocks until the job finishes (max 600).",
+            $"Agents see only the jobs they started. Headless only: waitSeconds blocks until the job finishes (at most {MotionJobService.MaxWaitSeconds} s per call; call again to keep waiting).",
             CommandEffect.ReadOnly,
             S.Of(S.Str("jobId", "Job id from motion.generate (omit to list all jobs).", false),
-                 S.Num("waitSeconds", "Wait up to this long for the job to finish (headless mode only; ignored in the app).", false)),
+                 S.Num("waitSeconds", $"Wait up to this long for the job to finish (headless mode only, capped at {MotionJobService.MaxWaitSeconds} s; ignored in the app).", false)),
             a => new MotionJobStatus(jobs, (string?)a["jobId"], S.OptNumber(a, "waitSeconds"))));
 
-        r.Register(new("motion.job_cancel", "Cancel a running generation job (stops the Kimodo runner). Does not change the project.", CommandEffect.ReadOnly,
+        r.Register(new("motion.job_cancel", "Cancel a running generation job you started (stops the Kimodo runner). Does not change the project.", CommandEffect.ReadOnly,
             S.Of(S.Str("jobId", "Job id.", true)),
             a => new CancelMotionJob(jobs, S.Text(a, "jobId"))));
 
         r.Register(new("motion.job_apply",
-            "Add a finished generation job's motion to the project as a new DRAFT clip (undoable). Returns clipId. Review it, edit keys, then clip.accept_draft.",
+            "Add a finished generation job's motion to the project as a new DRAFT clip (undoable; undo makes the job ready again). Returns clipId. Review it, edit keys, then clip.accept_draft. " +
+            "Fails with job_stale when the project was replaced, or the character was removed, re-rigged or its rig/humanoid mapping changed since the job started; with job_applied when it was already applied.",
             CommandEffect.Mutating,
             S.Of(S.Str("jobId", "Job id (state ready).", true), S.Str("name", "Clip name (default: the job's name).", false)),
             a => new ApplyMotionJob(jobs, S.Text(a, "jobId"), S.OptName(a, "name"))));
@@ -385,6 +565,27 @@ public static class AICommands
         };
     }
 
+    /// <summary>Path-valued detail keys: reduced to a file (or folder) name for agents.</summary>
+    static readonly string[] PathDetails = { "runnerPath", "modelDirectory", "motionModel", "textModel" };
+
+    /// <summary>
+    /// Diagnostics for an agent: no absolute paths (they reveal the user's account name and folder layout). Path details become file
+    /// names; every known path inside messages and runner details is replaced by its file name.
+    /// </summary>
+    internal static ProviderDiagnostics HidePaths(ProviderDiagnostics d, IReadOnlyList<string> knownPaths)
+    {
+        string? R(string? text)
+        {
+            if (text is null) return null;
+            foreach (var p in knownPaths) text = text.Replace(p, Name(p), StringComparison.Ordinal);
+            return text;
+        }
+        static string Name(string p) => Path.GetFileName(Path.TrimEndingDirectorySeparator(p)) is { Length: > 0 } n ? n : "(set)";
+        var details = d.Details.ToDictionary(kv => kv.Key, kv => PathDetails.Contains(kv.Key) && kv.Value is { Length: > 0 } v ? Name(v) : R(kv.Value));
+        var info = d.Info with { UnavailableReason = R(d.Info.UnavailableReason) };
+        return new ProviderDiagnostics(info, details, d.Hardware, d.Warnings.Select(w => R(w) ?? "").ToList());
+    }
+
     internal static JsonObject DescribeHardware(HardwareReport h) => new()
     {
         ["os"] = h.Os,
@@ -399,22 +600,27 @@ public static class AICommands
     };
 }
 
-public sealed class ListMotionProviders(MotionJobService jobs, bool probe) : ICommand
+public sealed class ListMotionProviders(MotionJobService jobs, bool probe) : IOriginAwareCommand
 {
     public string Id => "motion.providers";
     public CommandEffect Effect => CommandEffect.ReadOnly;
     public string Label => "Motion providers";
+    public CommandOrigin? Origin { get; set; }
 
     public CommandOutcome Execute(Project project)
     {
         var warnings = new List<Diagnostic>();
         var doProbe = probe && jobs.AllowBlockingWait;
         if (probe && !doProbe) warnings.Add(new Diagnostic("probe_skipped", "probe is only done in headless mode (it would block the app); the app shows runner diagnostics in its settings."));
+        var agent = Origin is { Source: not CommandSource.Ui };
         var list = new JsonArray();
         HardwareReport? hw = null;
         foreach (var p in jobs.Providers)
         {
-            var d = p.DiagnoseAsync(doProbe, CancellationToken.None).GetAwaiter().GetResult();
+            // Bounded: the probe never waits behind a generation, and starting + asking the runner has its own timeouts.
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            var d = p.DiagnoseAsync(doProbe, cts.Token).GetAwaiter().GetResult();
+            if (agent && p is KimodoProvider k) d = AICommands.HidePaths(d, k.Settings.KnownPaths());
             hw = d.Hardware;
             list.Add(AICommands.DescribeProvider(d));
         }
@@ -431,11 +637,12 @@ public sealed class ListMotionProviders(MotionJobService jobs, bool probe) : ICo
 }
 
 public sealed class GenerateMotion(MotionJobService jobs, ObjectId characterId, string prompt, double durationSeconds, long? fps, ulong? seed,
-    string? provider, string? name, bool footCleanup, bool reduceKeys, bool loop, bool inPlace) : ICommand
+    string? provider, string? name, bool footCleanup, bool reduceKeys, bool loop, bool inPlace) : IOriginAwareCommand
 {
     public string Id => "motion.generate";
     public CommandEffect Effect => CommandEffect.ReadOnly;
     public string Label => "Generate motion";
+    public CommandOrigin? Origin { get; set; }
 
     public CommandOutcome Execute(Project project)
     {
@@ -469,7 +676,7 @@ public sealed class GenerateMotion(MotionJobService jobs, ObjectId characterId, 
                 ["character"] = character.Name,
             },
         };
-        var job = jobs.Start(p, request, rigCopy, characterId, options);
+        var job = jobs.Start(p, request, rigCopy, characterId, options, Origin ?? CommandOrigin.Ui, project.Id);
         var data = job.ToJson();
         data["next"] = "Poll motion.job_status {jobId}; when state is 'ready' call motion.job_apply {jobId}.";
         var warnings = new List<Diagnostic>();
@@ -487,11 +694,12 @@ public sealed class GenerateMotion(MotionJobService jobs, ObjectId characterId, 
     public IReadOnlyList<Change> Undo(Project project) => Array.Empty<Change>();
 }
 
-public sealed class MotionJobStatus(MotionJobService jobs, string? jobId, double? waitSeconds) : ICommand
+public sealed class MotionJobStatus(MotionJobService jobs, string? jobId, double? waitSeconds) : IOriginAwareCommand
 {
     public string Id => "motion.job_status";
     public CommandEffect Effect => CommandEffect.ReadOnly;
     public string Label => "Generation job status";
+    public CommandOrigin? Origin { get; set; }
 
     public CommandOutcome Execute(Project project)
     {
@@ -499,12 +707,18 @@ public sealed class MotionJobStatus(MotionJobService jobs, string? jobId, double
         if (jobId is null)
             return new CommandOutcome(Array.Empty<Change>(), new JsonObject
             {
-                ["jobs"] = new JsonArray(jobs.List().Select(j => (JsonNode?)j.ToJson()).ToArray()),
+                ["jobs"] = new JsonArray(jobs.List(Origin).Select(j => (JsonNode?)j.ToJson()).ToArray()),
             });
-        var snap = jobs.Get(jobId) ?? throw new CommandException("not_found", $"No generation job '{jobId}'.");
+        var snap = jobs.Get(jobId, Origin);
         if (waitSeconds is > 0 && !snap.IsFinished)
         {
-            if (jobs.AllowBlockingWait) snap = jobs.Wait(jobId, TimeSpan.FromSeconds(Math.Min(waitSeconds.Value, 600)));
+            if (jobs.AllowBlockingWait)
+            {
+                var cap = jobs.MaxBlockingWait.TotalSeconds;
+                if (waitSeconds.Value > cap)
+                    warnings.Add(new Diagnostic("wait_capped", $"waitSeconds is capped at {cap:0.#} s per call; call motion.job_status again to keep waiting."));
+                snap = jobs.Wait(jobId, TimeSpan.FromSeconds(Math.Min(waitSeconds.Value, cap)), Origin, CancellationToken.None);
+            }
             else warnings.Add(new Diagnostic("wait_ignored", "waitSeconds is ignored while the app is open; poll again later."));
         }
         return new CommandOutcome(Array.Empty<Change>(), snap.ToJson(), warnings);
@@ -513,16 +727,17 @@ public sealed class MotionJobStatus(MotionJobService jobs, string? jobId, double
     public IReadOnlyList<Change> Undo(Project project) => Array.Empty<Change>();
 }
 
-public sealed class CancelMotionJob(MotionJobService jobs, string jobId) : ICommand
+public sealed class CancelMotionJob(MotionJobService jobs, string jobId) : IOriginAwareCommand
 {
     public string Id => "motion.job_cancel";
     public CommandEffect Effect => CommandEffect.ReadOnly;
     public string Label => "Cancel generation";
+    public CommandOrigin? Origin { get; set; }
 
     public CommandOutcome Execute(Project project)
     {
-        var cancelled = jobs.Cancel(jobId);
-        var snap = jobs.Get(jobId)!.ToJson();
+        var cancelled = jobs.Cancel(jobId, Origin);
+        var snap = jobs.Get(jobId, Origin).ToJson();
         snap["cancelRequested"] = cancelled;
         return new CommandOutcome(Array.Empty<Change>(), snap);
     }
@@ -530,25 +745,31 @@ public sealed class CancelMotionJob(MotionJobService jobs, string jobId) : IComm
     public IReadOnlyList<Change> Undo(Project project) => Array.Empty<Change>();
 }
 
-/// <summary>Adds a finished job's clip as a draft. The clip id is fixed per command so redo re-adds the same clip;
-/// applying the same job twice gives two clips.</summary>
-public sealed class ApplyMotionJob(MotionJobService jobs, string jobId, string? name) : ICommand
+/// <summary>
+/// Adds a finished job's clip as a draft. The clip id is fixed per command so redo re-adds the same clip. The clip moves from the
+/// job to this command (the undo history): undo removes it from the project and gives it back to the job, which is Ready again
+/// and can be applied again; redo applies it again.
+/// </summary>
+public sealed class ApplyMotionJob(MotionJobService jobs, string jobId, string? name) : IOriginAwareCommand
 {
     readonly ObjectId _clipId = ObjectId.New();
     Clip? _clip;
+    string _jobClipName = "";
+    bool _jobClipDraft;
 
     public string Id => "motion.job_apply";
     public CommandEffect Effect => CommandEffect.Mutating;
     public string Label => "Add generated motion";
+    public CommandOrigin? Origin { get; set; }
 
     public CommandOutcome Execute(Project project)
     {
         var warnings = new List<Diagnostic>();
         if (_clip is null)
         {
-            var clip = jobs.TakeResult(jobId);
-            if (project.FindRig(clip.Skeleton) is null)
-                throw new CommandException("rig_changed", "The character's rig no longer exists in the project; generate again.");
+            var clip = jobs.TakeResult(jobId, Origin, project);
+            _jobClipName = clip.Name; // to give the job its own clip back on undo (without a second copy in the history)
+            _jobClipDraft = clip.IsDraft;
             clip.Id = _clipId;
             if (name is not null) clip.Name = name;
             clip.IsDraft = true;
@@ -572,6 +793,14 @@ public sealed class ApplyMotionJob(MotionJobService jobs, string jobId, string? 
     public IReadOnlyList<Change> Undo(Project project)
     {
         project.Clips.RemoveAll(c => c.Id == _clipId);
+        if (_clip is not null)
+        {
+            var back = ClipEdit.CloneClip(_clip);
+            back.Name = _jobClipName;
+            back.IsDraft = _jobClipDraft;
+            back.Metadata.Remove("jobId");
+            jobs.MarkUnapplied(jobId, _clipId, back);
+        }
         return new[] { new Change(Change.ClipRemoved, _clipId.ToString()) };
     }
 }

@@ -59,6 +59,7 @@ public sealed class ProjectSession
         if (_open is not null && _open.Origin != origin)
             return Log(command, origin, CommandResult.Fail("busy", $"Another edit ({_open.Label}) is in progress."));
 
+        if (command is IOriginAwareCommand aware) aware.Origin = origin;
         CommandOutcome outcome;
         try
         {

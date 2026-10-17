@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json.Nodes;
 using Blazma.AI;
@@ -5,8 +6,33 @@ using Blazma.Core.Mathematics;
 
 // Fake kimodo-runner for protocol tests. Same wire format as ai/kimodo/src/main.cpp:
 // newline-delimited JSON-RPC 2.0 on stdin/stdout, logs on stderr.
-// Behaviour is scripted by words in the prompt: "crash-now", "hang", "oversize", "garbage", "fail".
-// Env FAKE_KIMODO_PROTOCOL overrides the protocol version reported by hello.
+// Behaviour is scripted by words in the prompt: "crash-now", "hang", "oversize", "garbage", "fail", "anon-error", "huge-frames".
+// Env FAKE_KIMODO_PROTOCOL overrides the protocol version reported by hello (only when started directly: Blazma passes the
+// runner a minimal environment). A model folder whose name contains "diagnose-fail" makes diagnose fail after 0.5 s.
+// Like the real runner, stdin is read on its own thread: end of input, or "cancel" during a generation, exits at once.
+//
+// "--host <modelDir>": instead of being a runner, act as a Blazma host: start this program as the runner through
+// KimodoProvider, begin a generation that hangs, print "runner-pid <pid>" and wait forever (the lifetime test kills it).
+
+if (args.Length >= 2 && args[0] == "--host")
+{
+    var settings = new KimodoSettings
+    {
+        RunnerPath = Environment.ProcessPath,
+        RunnerArguments = new[] { Path.Combine(AppContext.BaseDirectory, "fake-kimodo-runner.dll") },
+        ModelDirectory = args[1],
+        StartTimeout = TimeSpan.FromSeconds(60),
+        GenerateTimeout = TimeSpan.FromMinutes(10),
+    };
+    var provider = new KimodoProvider(settings);
+    var started = new TaskCompletionSource();
+    _ = provider.GenerateAsync(new MotionRequest("hang", 1, 30, 1), new HostProgress(started), CancellationToken.None);
+    await started.Task;
+    Console.Out.WriteLine($"runner-pid {provider.RunnerProcessId}");
+    Console.Out.Flush();
+    await Task.Delay(Timeout.Infinite);
+    return 0;
+}
 
 if (!args.Contains("--stdio"))
 {
@@ -31,9 +57,27 @@ void Progress(JsonNode? id, string stage, double fraction) => Send(new JsonObjec
     ["params"] = new JsonObject { ["id"] = id?.DeepClone(), ["stage"] = stage, ["fraction"] = fraction },
 });
 
-while (stdin.ReadLine() is { } line)
+var queue = new BlockingCollection<string>();
+var busy = 0;
+var reader = new Thread(() =>
 {
-    if (line.Length == 0) continue;
+    while (stdin.ReadLine() is { } l)
+    {
+        if (l.Length == 0) continue;
+        if (Volatile.Read(ref busy) == 1 && l.Contains("\"method\":\"cancel\"", StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine("cancel received during a generation: exiting");
+            Environment.Exit(130);
+        }
+        queue.Add(l);
+    }
+    Console.Error.WriteLine("stdin closed: exiting");
+    Environment.Exit(0);
+}) { IsBackground = true };
+reader.Start();
+
+foreach (var line in queue.GetConsumingEnumerable())
+{
     var msg = JsonNode.Parse(line)!.AsObject();
     var id = msg["id"];
     var p = msg["params"] as JsonObject ?? new JsonObject();
@@ -44,15 +88,24 @@ while (stdin.ReadLine() is { } line)
             Result(id, new JsonObject { ["protocol"] = proto, ["runner"] = "fake-kimodo-runner", ["version"] = "0.0-test", ["kimodoAbi"] = 1, ["skeletons"] = new JsonArray("soma30") });
             break;
         case "diagnose":
+            if (((string?)p["motionModel"] ?? "").Contains("diagnose-fail"))
+            {
+                Thread.Sleep(500);
+                Error(id, "diagnose_failed", "simulated diagnose failure");
+                break;
+            }
             Result(id, new JsonObject
             {
                 ["vulkanCompiled"] = false, ["ggml"] = false,
                 ["motionModelExists"] = File.Exists((string?)p["motionModel"] ?? ""),
+                ["inheritedSecret"] = Environment.GetEnvironmentVariable("BLAZMA_TEST_SECRET") is not null,
+                ["parentPid"] = Environment.GetEnvironmentVariable("KIMODO_RUNNER_PARENT_PID"),
                 ["warnings"] = new JsonArray("fake runner: no model is ever loaded"),
             });
             break;
         case "generate":
         {
+            Volatile.Write(ref busy, 1);
             var prompt = (string?)p["prompt"] ?? "";
             var frames = (int?)p["frames"] ?? 30;
             Console.Error.WriteLine($"generate '{prompt}' frames={frames} seed={p["seed"]}");
@@ -70,6 +123,13 @@ while (stdin.ReadLine() is { } line)
             if (prompt.Contains("garbage")) { stdout.WriteLine("this is not json"); break; }
             if (prompt.Contains("oversize")) { stdout.WriteLine("{\"jsonrpc\":\"2.0\",\"pad\":\"" + new string('x', 3 * 1024 * 1024) + "\"}"); break; }
             if (prompt.Contains("fail")) { Error(id, "generation_failed", "simulated model error"); break; }
+            if (prompt.Contains("anon-error"))
+            {
+                // What the real runner sends for a request it could not read (too large / not JSON): no id.
+                Error(null, "invalid_request", "request too large");
+                Thread.Sleep(Timeout.Infinite);
+            }
+            var reportedFrames = prompt.Contains("huge-frames") ? 4294967396L : frames;
             for (var i = 1; i <= 4; i++) { Thread.Sleep(10); Progress(id, "generate", 0.2 + 0.18 * i); }
             Progress(id, "decode", 0.95);
 
@@ -95,7 +155,7 @@ while (stdin.ReadLine() is { } line)
             }
             Result(id, new JsonObject
             {
-                ["fps"] = 30, ["frames"] = frames, ["joints"] = SomaSkeleton.Names.Count,
+                ["fps"] = 30, ["frames"] = reportedFrames, ["joints"] = SomaSkeleton.Names.Count,
                 ["skeleton"] = new JsonObject
                 {
                     ["key"] = "soma30", ["up"] = "+Y", ["forward"] = "+Z",
@@ -119,5 +179,14 @@ while (stdin.ReadLine() is { } line)
             Error(id, "unknown_method", $"Unknown method '{msg["method"]}'.");
             break;
     }
+    Volatile.Write(ref busy, 0);
 }
 return 0;
+
+sealed class HostProgress(TaskCompletionSource started) : IProgress<GenerationProgress>
+{
+    public void Report(GenerationProgress value)
+    {
+        if (value.Stage == "generate") started.TrySetResult();
+    }
+}

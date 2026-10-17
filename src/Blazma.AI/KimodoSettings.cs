@@ -90,17 +90,36 @@ public sealed record KimodoSettings
 
     // ------------------------------------------------------------------ file resolution (no network)
 
+    /// <summary>The runner executable, or null when it is not set, not an absolute path (a relative path would depend on the
+    /// working directory and the PATH search order), or missing.</summary>
     public string? ResolveRunner()
     {
         if (RunnerPath is not { Length: > 0 } p) return null;
         try
         {
+            if (!Path.IsPathFullyQualified(p)) return null;
             var full = Path.GetFullPath(p);
             if (File.Exists(full)) return full;
             if (OperatingSystem.IsWindows() && File.Exists(full + ".exe")) return full + ".exe";
         }
         catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException) { }
         return null;
+    }
+
+    static bool IsAbsolute(string p)
+    {
+        try { return Path.IsPathFullyQualified(p); }
+        catch (ArgumentException) { return false; }
+    }
+
+    /// <summary>Absolute paths these settings point at (configured and resolved), longest first, for hiding them from agents.</summary>
+    public IReadOnlyList<string> KnownPaths()
+    {
+        var list = new List<string?> { RunnerPath, ResolveRunner(), ModelDirectory, ResolveMotionModel(), ResolveTextModel(), TextModel };
+        try { if (ModelDirectory is { Length: > 0 } d) list.Add(Path.GetFullPath(d)); }
+        catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException) { }
+        foreach (var dir in SearchDirs()) list.Add(dir);
+        return list.Where(x => x is { Length: > 1 } && (x.Contains('/') || x.Contains('\\'))).Select(x => x!).Distinct().OrderByDescending(x => x.Length).ToList();
     }
 
     IEnumerable<string> SearchDirs()
@@ -140,6 +159,7 @@ public sealed record KimodoSettings
     {
         if (RunnerPath is null)
             return $"kimodo-runner is not configured. Build or install it (see docs/AI_INTEGRATION.md) and set its path in Settings or {RunnerEnv}.";
+        if (!IsAbsolute(RunnerPath)) return $"The kimodo-runner path must be an absolute path (got '{RunnerPath}').";
         if (ResolveRunner() is null) return $"kimodo-runner was not found at '{RunnerPath}'.";
         if (!MotionModels.ContainsKey(Model))
             return $"Unsupported Kimodo model '{Model}'. Supported: {string.Join(", ", MotionModels.Keys)} (G1 and SMPL-X are not supported).";

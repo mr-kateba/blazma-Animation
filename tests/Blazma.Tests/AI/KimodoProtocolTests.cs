@@ -37,9 +37,9 @@ public static class FakeRunner
     }
 
     /// <summary>A temporary folder with empty stand-ins for the GGUF files (the fake runner never reads them).</summary>
-    public static string ModelDir()
+    public static string ModelDir(string tag = "")
     {
-        var dir = Path.Combine(Path.GetTempPath(), "blazma-kimodo-test-" + Guid.NewGuid().ToString("N"));
+        var dir = Path.Combine(Path.GetTempPath(), "blazma-kimodo-test-" + tag + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(dir, "models"));
         File.WriteAllText(Path.Combine(dir, "models", "kimodo-soma-rp-v1.1-f32.gguf"), "dummy");
         File.WriteAllText(Path.Combine(dir, "Llama-3-Kimodo-Q8_0.gguf"), "dummy");
