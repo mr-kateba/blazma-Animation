@@ -1,8 +1,9 @@
 name: CI
 
+# Manual only: the account's included Actions minutes are used up, and automatic runs on every push would be
+# billed. Tests run locally before each push; trigger this from the Actions tab when a CI run is wanted.
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
