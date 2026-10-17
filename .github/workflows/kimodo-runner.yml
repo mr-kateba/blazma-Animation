@@ -75,13 +75,34 @@ jobs:
           $model = Join-Path $models "dummy.gguf"
           [System.IO.File]::WriteAllBytes($model, [byte[]](0x47, 0x47, 0x55, 0x46)) # "GGUF" and nothing else
           $m = ($model | ConvertTo-Json)
-          $lines = @(
+          # Keep stdin open until every answer has arrived: the runner exits as soon as its input closes.
+          $psi = [System.Diagnostics.ProcessStartInfo]::new((Join-Path $bin "kimodo-runner.exe"), "--stdio")
+          $psi.UseShellExecute = $false
+          $psi.RedirectStandardInput = $true
+          $psi.RedirectStandardOutput = $true
+          $psi.StandardInputEncoding = $utf8
+          $psi.StandardOutputEncoding = $utf8
+          $p = [System.Diagnostics.Process]::Start($psi)
+          $requests = @(
             '{"jsonrpc":"2.0","id":1,"method":"hello","params":{"protocol":1}}',
             ('{"jsonrpc":"2.0","id":2,"method":"diagnose","params":{"motionModel":' + $m + ',"textModel":' + $m + '}}'),
-            ('{"jsonrpc":"2.0","id":3,"method":"generate","params":{"prompt":"walk","frames":30,"device":"cpu","motionModel":' + $m + ',"textModel":' + $m + '}}'),
-            '{"jsonrpc":"2.0","method":"shutdown"}'
+            ('{"jsonrpc":"2.0","id":3,"method":"generate","params":{"prompt":"walk","frames":30,"device":"cpu","motionModel":' + $m + ',"textModel":' + $m + '}}')
           )
-          $out = ($lines -join "`n") | & (Join-Path $bin "kimodo-runner.exe") --stdio
+          $out = @()
+          foreach ($req in $requests) {
+            $p.StandardInput.WriteLine($req)
+            $p.StandardInput.Flush()
+            $id = ($req | ConvertFrom-Json).id
+            do {
+              $line = $p.StandardOutput.ReadLine()
+              if ($null -eq $line) { throw "the runner closed its output before answering request $id" }
+              $out += $line
+              $msg = $line | ConvertFrom-Json
+            } until ($msg.id -eq $id)
+          }
+          $p.StandardInput.WriteLine('{"jsonrpc":"2.0","method":"shutdown"}')
+          $p.StandardInput.Close()
+          if (-not $p.WaitForExit(10000)) { $p.Kill(); throw "the runner did not exit after shutdown" }
           $out | Write-Output
           $text = $out -join "`n"
           if (-not ($text -match '"protocol":1')) { throw "hello failed from a non-ASCII folder" }

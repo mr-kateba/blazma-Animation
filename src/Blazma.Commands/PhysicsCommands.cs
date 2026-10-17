@@ -639,6 +639,11 @@ public sealed class BakeSecondaryMotion(ObjectId clipId, ObjectId? characterId, 
             throw new CommandException("too_large", $"Too much work: {e - s + 1} frames × {simBones.Count} bones × {substeps} sub-steps per frame " +
                 $"(at most {PhysicsCommands.MaxSecondaryWork:N0}); use a shorter range or fewer bones.");
 
+        // Every simulated frame gets a key, so this lower bound refuses big requests before any planning work.
+        var atLeast = (e - s + 1L) * simBones.Count;
+        if (atLeast > PhysicsCommands.MaxKeys)
+            throw new CommandException("too_large", $"This would write at least {atLeast} keys (at most {PhysicsCommands.MaxKeys}); use a shorter range or fewer bones.");
+
         var last = BalanceAnalyzer.LastFrame(clip);
         var edits = new List<TrackEdit>();
         foreach (var b in simBones.OrderBy(i => i))

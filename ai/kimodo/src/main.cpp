@@ -242,6 +242,9 @@ kimodo_model *ensure_model(const json &id, const std::string &motion, const std:
     return m;
 }
 
+std::atomic<bool> g_busy{false}; // a generation is running on the main thread
+std::atomic<bool> g_eof{false};   // stdin reached end of input
+
 json generate(const json &id, const json &p) {
     const auto prompt = get_string(p, "prompt", "");
     if (prompt.empty()) throw rpc_error{"invalid_request", "missing prompt"};
@@ -255,6 +258,8 @@ json generate(const json &id, const json &p) {
     if (device != "auto" && device != "cpu" && device != "vulkan") throw rpc_error{"invalid_request", "device must be auto, cpu or vulkan"};
     const auto motion_path = require_file(p, "motionModel");
     const auto text_path = require_file(p, "textModel");
+    // Blazma is gone: do not start a long generation for nobody (the request was still validated above).
+    if (g_eof.load()) throw rpc_error{"input_closed", "input closed before the generation started"};
 
     auto *model = ensure_model(id, motion_path, text_path, device, threads);
     progress(id, "generate", 0.2, "generating motion");
@@ -305,8 +310,6 @@ struct input_item {
 std::mutex g_queue_mutex;
 std::condition_variable g_queue_cv;
 std::deque<input_item> g_queue;
-std::atomic<bool> g_busy{false}; // a generation is running on the main thread
-std::atomic<bool> g_eof{false};
 
 void push(input_item item) {
     {
@@ -465,7 +468,6 @@ int main(int argc, char **argv) {
             else if (method == "generate") {
                 g_busy.store(true);
                 struct clear_busy { ~clear_busy() { g_busy.store(false); } } guard;
-                if (g_eof.load()) continue; // Blazma is gone: do not start a long generation for nobody
                 result = generate(id, params);
             } else throw rpc_error{"unknown_method", "unknown method '" + method + "'"};
             send({{"jsonrpc", "2.0"}, {"id", id}, {"result", std::move(result)}});
