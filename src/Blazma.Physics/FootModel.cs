@@ -23,6 +23,10 @@ public sealed record Foot(Side Side, int FootBone, int ToeBone, IkChain? Chain, 
 /// lowest foot joint is between 0 and 0.2 m, otherwise at the lowest foot joint.
 /// Foot length L = horizontal ankle→toe-joint distance; heel 0.35·L behind the ankle, tip 0.45·L ahead of the
 /// toe joint, half-width 0.38·L at the ball and 0.23·L at the heel.
+/// Without a mapped toe bone, the ball is the foot's unmapped child bone that lies furthest forward (+Z, the
+/// character's front), which also carries the tip; with no such child, the foot points forward (+Z). Bone axes are
+/// never used (they are arbitrary on imported rigs). When the ball is closer than half the expected ankle→ball
+/// length (0.072·H, H = estimated height) it only gives the direction, and the ball is put at 0.072·H.
 /// </summary>
 public sealed class FootModel
 {
@@ -37,9 +41,11 @@ public sealed class FootModel
     /// <summary>Model-space height of the sole in the rest pose.</summary>
     public double RestSoleHeight { get; }
 
-    public static FootModel For(Rig rig, RigEvaluator ev)
+    public static FootModel For(Rig rig, RigEvaluator ev, double? estimatedHeight = null)
     {
         var rest = ev.RestModel();
+        var height = estimatedHeight ?? MassModel.EstimateHeight(rest);
+        var expectedBall = 0.072 * height;
         var found = new List<(Side, int, int)>();
         foreach (var side in new[] { Side.Left, Side.Right })
         {
@@ -61,13 +67,27 @@ public sealed class FootModel
         {
             var ankle = rest[fi].Translation;
             Vec3 ball;
+            var tipBone = ti;
             if (ti >= 0) ball = rest[ti].Translation;
             else
             {
-                // No toe bone: assume a forward-pointing foot about 3× as long as the ankle is high.
-                var forward = rest[fi].Rotation.Rotate(Vec3.UnitZ);
-                forward = new Vec3(forward.X, 0, forward.Z).LengthSquared() < 1e-9 ? Vec3.UnitZ : new Vec3(forward.X, 0, forward.Z).Normalized();
-                ball = ankle + forward * Math.Max(0.08, 2.2 * (ankle.Y - sole));
+                // No toe bone: the unmapped child furthest forward, if it is in front of the ankle; else straight forward.
+                var child = -1;
+                var best = 0.01;
+                for (var c = fi + 1; c < rig.Bones.Count; c++)
+                {
+                    if (ev.ParentOf(c) != fi || rig.StandardNameOf(rig.Bones[c].Id) is not null) continue;
+                    var ahead = rest[c].Translation.Z - ankle.Z;
+                    if (ahead > best) { best = ahead; child = c; }
+                }
+                var dir = child >= 0 ? new Vec3(rest[child].Translation.X - ankle.X, 0, rest[child].Translation.Z - ankle.Z) : Vec3.UnitZ;
+                var reach = dir.Length();
+                if (child >= 0 && reach >= 0.5 * expectedBall)
+                {
+                    ball = rest[child].Translation;
+                    tipBone = child;
+                }
+                else ball = new Vec3(ankle.X, sole, ankle.Z) + dir.Normalized() * expectedBall;
             }
             var flat = new Vec3(ball.X - ankle.X, 0, ball.Z - ankle.Z);
             var length = flat.Length();
@@ -88,7 +108,7 @@ public sealed class FootModel
                 Point("heel_out", fi, heel + lateral * (outward * halfHeel)),
                 Point("ball_in", fi, ballC - lateral * (outward * halfBall)),
                 Point("ball_out", fi, ballC + lateral * (outward * halfBall)),
-                Point("tip", ti >= 0 ? ti : fi, tip),
+                Point("tip", tipBone >= 0 ? tipBone : fi, tip),
             };
             var chain = rig.IkChains.Find(c => c.End == rig.Bones[fi].Id);
             feet.Add(new Foot(side, fi, ti, chain, pts));

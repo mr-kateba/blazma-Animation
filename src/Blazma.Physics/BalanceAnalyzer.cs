@@ -92,7 +92,7 @@ public sealed record ClipBalanceReport(
     /// <summary>The evaluated frames behind this report (frames StartFrame−1 … EndFrame+1 where they exist).</summary>
     public ClipSamples? Samples { get; init; }
 
-    public PoseBalance? Worst => Frames.Where(f => f.State != BalanceState.Airborne).OrderBy(f => f.Margin).ThenBy(f => f.Frame).FirstOrDefault();
+    public PoseBalance? Worst => Frames.Where(f => f.State != BalanceState.Airborne && double.IsFinite(f.Margin)).OrderBy(f => f.Margin).ThenBy(f => f.Frame).FirstOrDefault();
 }
 
 /// <summary>Per-frame samples of an evaluated clip: poses, model transforms and centre of mass.</summary>
@@ -120,7 +120,7 @@ public sealed class BalanceAnalyzer
         Options = options ?? new BalanceOptions();
         Rig = rig;
         Mass = MassModel.For(rig, Options.FallbackTotalMass);
-        Feet = FootModel.For(rig, Mass.Evaluator);
+        Feet = FootModel.For(rig, Mass.Evaluator, Mass.EstimatedHeight);
         Ground = Options.GroundHeight ?? Feet.RestSoleHeight;
         var pelvis = rig.FindByStandardName(HumanoidStandard.Pelvis);
         PelvisBone = pelvis is null ? -1 : rig.IndexOf(pelvis.Id);
@@ -208,7 +208,7 @@ public sealed class BalanceAnalyzer
             for (var p = 0; p < soles[f].Length; p++)
             {
                 var pos = soles[f][p];
-                if (pos.Y - Ground > Options.ContactHeight) continue;
+                if (!(pos.Y - Ground <= Options.ContactHeight) || !double.IsFinite(pos.X) || !double.IsFinite(pos.Z)) continue; // also drops NaN
                 var stationary = staticPose || (pinned?[f] ?? false) || speeds is null || speeds[f][p] <= Options.ContactSpeed;
                 if (stationary) contacts.Add(new ContactPoint(f, foot.Side, foot.Points[p].Name, pos));
             }
@@ -257,7 +257,7 @@ public sealed class BalanceAnalyzer
             if (f.State == BalanceState.Unbalanced)
             {
                 if (first is null) { first = f; worst = f; }
-                else if (f.Margin < worst!.Margin) worst = f;
+                else if (f.Margin < worst!.Margin || !double.IsFinite(worst.Margin)) worst = f;
             }
             else if (first is not null)
             {

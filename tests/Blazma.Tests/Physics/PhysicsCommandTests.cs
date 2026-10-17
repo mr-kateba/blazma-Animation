@@ -141,10 +141,11 @@ public class PhysicsCommandTests(ITestOutputHelper output)
         var original = ClipEdit.CloneClip(s.Project.GetClip(id));
         var fix = Ok(s, "physics.auto_balance", new { clipId = clip, frames = "20" }).Data!;
         Assert.Equal(1, (int)fix["corrected"]!);
-        Assert.Equal(new long[] { 19, 20, 21 }, fix["keyedFrames"]!.AsArray().Select(n => (long)n!));
-        // The neighbours keep their original pose exactly; frame 20 is balanced.
+        // Every frame between the surrounding original keys (15 and 25) is keyed, so the curve elsewhere keeps its shape.
+        Assert.Equal(Enumerable.Range(16, 9).Select(f => (long)f), fix["keyedFrames"]!.AsArray().Select(n => (long)n!));
+        // Every other frame keeps its original pose exactly; frame 20 is balanced.
         var edited = s.Project.GetClip(id);
-        foreach (var f in new[] { 19, 21, 0, 40 })
+        foreach (var f in new[] { 16, 19, 21, 24, 0, 10, 30, 40 })
         {
             var a = ClipEvaluator.Evaluate(original, rig, Flicks.FromFrame(f, original.Fps));
             var b = ClipEvaluator.Evaluate(edited, rig, Flicks.FromFrame(f, edited.Fps));
@@ -284,7 +285,7 @@ public class PhysicsCommandTests(ITestOutputHelper output)
         Ok(s, "track.set_flags", new { clipId = clip, trackId = headTrack.Id.ToString(), locked = true });
         var r = Ok(s, "physics.secondary_motion", new { clipId = clip, bones = $"{H.Neck},{H.Head}", startFrame = 0, endFrame = 30 });
         Assert.Contains(r.Warnings, w => w.Code == "track_locked");
-        Assert.Equal(31, (int)r.Data!["keys"]!);
+        Assert.Equal(59, (int)r.Data!["keys"]!); // frames 0–30 simulated, 31–58 keyed with their original values up to the key at 59
         var after = s.Project.GetClip(id).Tracks.Single(t => t.Target.Id == head && t.Channel == TrackChannels.Rotation);
         Assert.Equal(headJson, JsonSerializer.Serialize(after.Keys, ProjectArchive.JsonOptions));
 

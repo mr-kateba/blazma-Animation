@@ -144,7 +144,7 @@ public static class KeyCommands
         return track;
     }
 
-    static double[]? RestValue(Rig? rig, TargetKind kind, ObjectId id, string channel)
+    internal static double[]? RestValue(Rig? rig, TargetKind kind, ObjectId id, string channel)
     {
         Transform? rest = kind switch
         {

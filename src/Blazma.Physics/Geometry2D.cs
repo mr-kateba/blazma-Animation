@@ -25,10 +25,11 @@ public static class Geometry2D
     /// <summary>
     /// Convex hull (Andrew's monotone chain), counter-clockwise in (X, Z), without duplicate or
     /// collinear points. 0, 1 or 2 points are returned for degenerate input (none, a point, a segment).
+    /// Non-finite points are ignored.
     /// </summary>
     public static IReadOnlyList<Vec2> ConvexHull(IEnumerable<Vec2> points)
     {
-        var p = points.Distinct().OrderBy(v => v.X).ThenBy(v => v.Z).ToList();
+        var p = points.Where(v => double.IsFinite(v.X) && double.IsFinite(v.Z)).Distinct().OrderBy(v => v.X).ThenBy(v => v.Z).ToList();
         // Merge near-duplicates so float noise does not create slivers.
         var unique = new List<Vec2>();
         foreach (var v in p)

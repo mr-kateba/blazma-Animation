@@ -70,9 +70,9 @@ Use as `blazma-anim exec <file> <id> --arg name=value ...`.
 | `marker.delete` | mutating | `clipId`*:string, `markerId`*:string | Delete a marker. |
 | `marker.update` | mutating | `clipId`*:string, `markerId`*:string, `frame`:number, `name`:string, `phase`:string | Change a marker's frame, name and/or phase (at least one). |
 | `physics.analyze` | readonly | `clipId`*:string, `characterId`:string, `startFrame`:integer, `endFrame`:integer, `summaryOnly`:boolean, `maxFrames`:integer, `metric`:string, `minMargin`:number, `contactHeight`:number | Balance analysis of a clip, frame by frame: centre of mass (COM), foot contacts, support polygon (convex hull of the touching sole points, XZ), signed margin of the tested point to the polygon (inside positive, metres) and balanced/unbalanced/airborne. Returns {summary:{unbalancedRanges…}, frames:[…]}. Does not change anything. |
-| `physics.auto_balance` | mutating | `clipId`*:string, `characterId`:string, `frames`:string, `startFrame`:integer, `endFrame`:integer, `margin`:number, `maxShift`:number | Move the COM inside the support polygon (by 'margin') on unbalanced frames by shifting the hips horizontally; supporting feet stay planted (legs re-solved with IK). Keys the pelvis translation (and leg rotations of unpinned supporting legs) on corrected frames, plus the original values on neighbouring frames. One undo step. Returns before/after margins per frame. |
+| `physics.auto_balance` | mutating | `clipId`*:string, `characterId`:string, `frames`:string, `startFrame`:integer, `endFrame`:integer, `margin`:number, `maxShift`:number, `allowFootSlide`:boolean | Move the COM inside the support polygon (by 'margin') on unbalanced frames by shifting the hips horizontally; supporting feet stay planted (legs re-solved with IK). Keys the pelvis translation (and leg rotations of unpinned supporting legs) on corrected frames; every other frame keeps exactly its original pose (frames between the surrounding original keys are keyed with their original values). Refuses (no_leg_ik / track_locked / track_muted) when a supporting foot could not stay planted, unless allowFootSlide. At most 5000 frames and 200,000 keys (too_large). One undo step. Returns before/after margins per frame. |
 | `physics.com` | readonly | `characterId`*:string, `clipId`:string, `frame`:integer, `segments`:boolean | Centre of mass and static balance of a character: its working pose, or a clip frame when 'clipId' is given (with velocity, ZMP and capture point). Returns {com, totalMass, massSource, contacts, polygon, margin, state}. Does not change anything. |
-| `physics.secondary_motion` | mutating | `clipId`*:string, `characterId`:string, `bones`:string, `preset`:string, `stiffness`:number, `damping`:number, `maxAngle`:number, `startFrame`:integer, `endFrame`:integer | Bake follow-through / overlap: the chosen bones lag behind the clip's motion like damped springs (stiffness k 1/s², damping c 1/s; mass-independent, stable at any fps). Writes rotation keys on every frame of the range (one undo step). Give 'bones' and/or 'preset'. |
+| `physics.secondary_motion` | mutating | `clipId`*:string, `characterId`:string, `bones`:string, `preset`:string, `stiffness`:number, `damping`:number, `maxAngle`:number, `startFrame`:integer, `endFrame`:integer | Bake follow-through / overlap: the chosen bones lag behind the clip's motion like damped springs (stiffness k 1/s², damping c 1/s; mass-independent, stable at any fps). Writes rotation keys on every frame of the range; frames outside it keep exactly their original pose (one undo step). Locked or muted bones are left out (their children follow them as played back). Give 'bones' and/or 'preset'. Work is capped: frames × bones × sub-steps (≤ 1/240 s each) ≤ 2,000,000 and ≤ 200,000 keys (too_large). |
 | `physics.trajectories` | readonly | `clipId`*:string, `characterId`:string, `what`:string, `startFrame`:integer, `endFrame`:integer | Per-frame model-space paths of a clip for drawing: centre of mass, hips (pelvis) and/or feet (ankles). Returns arrays of [x,y,z]. Does not change anything. |
 | `pose.apply` | mutating | `characterId`*:string, `poseJson`*:string | Apply a pose given as JSON (from pose.get's 'pose' field or a copied pose). |
 | `pose.get` | readonly | `characterId`*:string | Current pose of a character: per-bone local rotation (Euler XYZ degrees) and model-space position, and control states. |
@@ -356,7 +356,7 @@ Balance analysis of a clip, frame by frame: centre of mass (COM), foot contacts,
 
 ### `physics.auto_balance`
 
-Move the COM inside the support polygon (by 'margin') on unbalanced frames by shifting the hips horizontally; supporting feet stay planted (legs re-solved with IK). Keys the pelvis translation (and leg rotations of unpinned supporting legs) on corrected frames, plus the original values on neighbouring frames. One undo step. Returns before/after margins per frame. (effect: mutating)
+Move the COM inside the support polygon (by 'margin') on unbalanced frames by shifting the hips horizontally; supporting feet stay planted (legs re-solved with IK). Keys the pelvis translation (and leg rotations of unpinned supporting legs) on corrected frames; every other frame keeps exactly its original pose (frames between the surrounding original keys are keyed with their original values). Refuses (no_leg_ik / track_locked / track_muted) when a supporting foot could not stay planted, unless allowFootSlide. At most 5000 frames and 200,000 keys (too_large). One undo step. Returns before/after margins per frame. (effect: mutating)
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -367,6 +367,7 @@ Move the COM inside the support polygon (by 'margin') on unbalanced frames by sh
 | `endFrame` | integer | no | Last frame, inclusive (default: the clip's last frame). (min 0) |
 | `margin` | number | no | Distance (m) to keep the COM inside the polygon (default 0.02, max 0.5). |
 | `maxShift` | number | no | Largest hip shift (m, default 0.3, max 1). |
+| `allowFootSlide` | boolean | no | Correct anyway when a supporting foot has no leg IK chain or its leg tracks are locked/muted (that foot may slide). |
 
 ### `physics.com`
 
@@ -381,7 +382,7 @@ Centre of mass and static balance of a character: its working pose, or a clip fr
 
 ### `physics.secondary_motion`
 
-Bake follow-through / overlap: the chosen bones lag behind the clip's motion like damped springs (stiffness k 1/s², damping c 1/s; mass-independent, stable at any fps). Writes rotation keys on every frame of the range (one undo step). Give 'bones' and/or 'preset'. (effect: mutating)
+Bake follow-through / overlap: the chosen bones lag behind the clip's motion like damped springs (stiffness k 1/s², damping c 1/s; mass-independent, stable at any fps). Writes rotation keys on every frame of the range; frames outside it keep exactly their original pose (one undo step). Locked or muted bones are left out (their children follow them as played back). Give 'bones' and/or 'preset'. Work is capped: frames × bones × sub-steps (≤ 1/240 s each) ≤ 2,000,000 and ≤ 200,000 keys (too_large). (effect: mutating)
 
 | Argument | Type | Required | Description |
 |---|---|---|---|

@@ -132,10 +132,11 @@ public class MassModelTests
     }
 
     [Fact]
-    public void RigWithoutMasses_DistributesFallbackMassByLength()
+    public void RigWithoutMassesOrHumanoidMap_DistributesFallbackMassByLength()
     {
         var rig = MannequinFactory.Create();
         foreach (var b in rig.Bones) b.Mass = 0;
+        rig.HumanoidMap.Clear(); // a humanoid-mapped rig would use Winter's fractions instead (PhysicsReviewTests)
         var mass = MassModel.For(rig, 80);
         Assert.Equal(MassSource.LengthDistributed, mass.Source);
         Assert.Equal(80, mass.TotalMass, 9);
@@ -145,6 +146,18 @@ public class MassModelTests
         var com = mass.CenterOfMass(new Pose());
         Assert.True(double.IsFinite(com.Y));
         Assert.Equal(0, com.X, 9);
+    }
+
+    [Fact]
+    public void HumanoidRigWithoutMasses_UsesWinterFractions()
+    {
+        var rig = MannequinFactory.Create();
+        foreach (var b in rig.Bones) b.Mass = 0;
+        var mass = MassModel.For(rig, 80);
+        Assert.Equal(MassSource.HumanoidFractions, mass.Source);
+        Assert.Equal(80, mass.TotalMass, 9);
+        var thigh = mass.Segments.Single(s => s.Bone == rig.IndexOf(rig.FindBoneByName(H.Thigh(Side.Left))!.Id));
+        Assert.Equal(80 * 0.100, thigh.Mass, 9);
     }
 }
 
@@ -312,7 +325,7 @@ public class AutoBalanceTests
     }
 
     [Fact]
-    public void BalancedPose_IsLeftAlone_AndUnpinnedFeetArePinnedForTheSolve()
+    public void BalancedPose_IsLeftAlone_AndUnpinnedLegsAreReSolvedForKeying()
     {
         var rig = MannequinFactory.Create();
         var an = new BalanceAnalyzer(rig);
