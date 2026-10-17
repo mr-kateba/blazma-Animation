@@ -23,6 +23,9 @@ public partial class AppController : Node
     public AppSettings Settings { get; } = new();
     public RecoveryStore Recovery { get; private set; } = null!;
 
+    /// <summary>Phase 6: cached balance analysis of the active clip and the working pose (viewport overlay, timeline strip, panel).</summary>
+    public PhysicsAnalysis Physics { get; private set; } = null!;
+
     /// <summary>Raised after every change to the project, history or save state.</summary>
     public event Action<SessionChangedArgs>? SessionChanged;
 
@@ -50,6 +53,7 @@ public partial class AppController : Node
         var log = new JsonlOpLog(Godot.ProjectSettings.GlobalizePath("user://logs/oplog.jsonl"));
         Session = new ProjectSession(NewDefaultProject("Untitled"), null, log);
         Session.Changed += OnSessionChanged;
+        Physics = new PhysicsAnalysis(this);
         _recovery = Recovery.BeginSession(Session.Project, null);
         GetTree().AutoAcceptQuit = false; // MainWindow asks about unsaved changes first
         ApplyLocale();
@@ -351,6 +355,27 @@ public partial class AppController : Node
     public void SetShowOnion(bool show)
     {
         Settings.ShowOnion = show;
+        Settings.Save();
+        SettingsChanged?.Invoke();
+    }
+
+    public void SetShowPhysics(bool show)
+    {
+        Settings.ShowPhysics = show;
+        Settings.Save();
+        SettingsChanged?.Invoke();
+    }
+
+    public void SetShowPhysicsPaths(bool show)
+    {
+        Settings.ShowPhysicsPaths = show;
+        Settings.Save();
+        SettingsChanged?.Invoke();
+    }
+
+    public void SetPhysicsPanel(bool open)
+    {
+        Settings.PhysicsPanel = open;
         Settings.Save();
         SettingsChanged?.Invoke();
     }

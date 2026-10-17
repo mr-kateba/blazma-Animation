@@ -1331,3 +1331,312 @@ msgstr "أضف شخصية أولًا ثم صدّر حركتها."
 
 msgid "Export the clip as a .glb animation (Ctrl+E)."
 msgstr "تصدير المقطع كحركة بصيغة ‎.glb‎ (Ctrl+E)."
+
+msgid "Physics"
+msgstr "الفيزياء"
+
+msgid "Close the Physics panel"
+msgstr "إغلاق لوحة الفيزياء"
+
+msgid "This frame"
+msgstr "هذا الإطار"
+
+msgid "COM height"
+msgstr "ارتفاع مركز الكتلة"
+
+msgid "Margin"
+msgstr "الهامش"
+
+msgid "State"
+msgstr "الحالة"
+
+msgid "Clip balance"
+msgstr "توازن المقطع"
+
+msgid "Balanced"
+msgstr "متوازن"
+
+msgid "Unbalanced"
+msgstr "غير متوازن"
+
+msgid "Airborne"
+msgstr "في الهواء"
+
+msgid "Unbalanced ranges"
+msgstr "نطاقات عدم التوازن"
+
+msgid "No unbalanced frames."
+msgstr "لا توجد إطارات غير متوازنة."
+
+msgid "Fix and polish"
+msgstr "إصلاح وتحسين"
+
+msgid "Margin (cm)"
+msgstr "الهامش (سم)"
+
+msgid "How far inside the support polygon the centre of mass is kept."
+msgstr "المسافة التي يبقى بها مركز الكتلة داخل مضلع الارتكاز."
+
+msgid "Auto-balance unbalanced frames"
+msgstr "موازنة الإطارات غير المتوازنة تلقائيًا"
+
+msgid "Shift the hips so the centre of mass stays over the feet on every unbalanced frame. The feet stay planted. One undo step."
+msgstr "يزيح الحوض ليبقى مركز الكتلة فوق القدمين في كل إطار غير متوازن، وتبقى القدمان ثابتتين على الأرض. خطوة تراجع واحدة."
+
+msgid "Secondary motion…"
+msgstr "حركة ثانوية…"
+
+msgid "Make the spine, head or arms lag behind the motion and settle, like springs. One undo step."
+msgstr "يجعل العمود الفقري أو الرأس أو الذراعين تتأخر عن الحركة ثم تستقر كالنوابض. خطوة تراجع واحدة."
+
+msgid "Before"
+msgstr "قبل"
+
+msgid "After"
+msgstr "بعد"
+
+msgid "Unbalanced frames"
+msgstr "الإطارات غير المتوازنة"
+
+msgid "Worst margin"
+msgstr "أسوأ هامش"
+
+msgid "Show balance in the viewport"
+msgstr "إظهار التوازن في العرض"
+
+msgid "Draw the centre of mass, the support polygon and the contact points in the viewport, and the balance strip under the timeline."
+msgstr "يرسم مركز الكتلة ومضلع الارتكاز ونقاط التلامس في العرض، وشريط التوازن تحت الخط الزمني."
+
+msgid "Show COM, hip and foot paths"
+msgstr "إظهار مسارات مركز الكتلة والحوض والقدمين"
+
+msgid "Draw the paths of the centre of mass, the hips and the feet over the whole clip."
+msgstr "يرسم مسارات مركز الكتلة والحوض والقدمين على امتداد المقطع كله."
+
+msgid "Select a character to see its balance."
+msgstr "اختر شخصية لعرض توازنها."
+
+msgid "This character has no feet mapped to the humanoid skeleton, so its balance cannot be analysed. Map the foot bones first."
+msgstr "لا توجد قدمان مربوطتان بالهيكل البشري لهذه الشخصية، لذلك لا يمكن تحليل توازنها. اربط عظام القدمين أولًا."
+
+msgid "Measured on the clip frame shown."
+msgstr "القياس على إطار المقطع المعروض."
+
+msgid "Measured on the working pose (edited since the last key)."
+msgstr "القياس على وضعية العمل (عُدّلت بعد آخر مفتاح)."
+
+msgid "Key a clip to analyse the whole motion."
+msgstr "أضف مفاتيح إلى مقطع لتحليل الحركة كاملة."
+
+msgid "Frames {0}–{1} · worst {2}"
+msgstr "الإطارات {0}–{1} · الأسوأ {2}"
+
+msgid "Go to frame {0}, the worst frame of this range."
+msgstr "الانتقال إلى الإطار {0}، أسوأ إطار في هذا النطاق."
+
+msgid "and {0} more"
+msgstr "و{0} أخرى"
+
+msgid "Key a clip for this character first."
+msgstr "أضف مفاتيح إلى مقطع لهذه الشخصية أولًا."
+
+msgid "Done. Every frame is balanced now."
+msgstr "تم. كل الإطارات متوازنة الآن."
+
+msgid "Done, but some frames are still unbalanced."
+msgstr "تم، لكن بعض الإطارات ما زالت غير متوازنة."
+
+msgid "Corrected {0} frame(s). The supporting feet moved at most {1} mm."
+msgstr "صُحّح {0} إطارًا. تحركت القدمان الداعمتان {1} مم على الأكثر."
+
+msgid "Some frames could not be fully balanced: the hips can only shift so far, or the legs cannot reach."
+msgstr "تعذّرت موازنة بعض الإطارات كليًا: الإزاحة المسموحة للحوض محدودة، أو لا تصل الساقان."
+
+msgid "The supporting feet had to move a little because the legs could not reach. Try a smaller margin."
+msgstr "اضطرت القدمان الداعمتان للتحرك قليلًا لأن الساقين لا تصلان. جرّب هامشًا أصغر."
+
+msgid "Locked leg tracks were not changed, so the feet may slide on corrected frames."
+msgstr "لم تتغير مسارات الساقين المقفلة، لذا قد تنزلق القدمان في الإطارات المصححة."
+
+msgid "Ctrl+Z undoes it."
+msgstr "للتراجع عن ذلك اضغط Ctrl+Z."
+
+msgid "Nothing was changed."
+msgstr "لم يتغير شيء."
+
+msgid "Every frame is already balanced with this margin. Nothing to correct."
+msgstr "كل الإطارات متوازنة أصلًا بهذا الهامش. لا شيء يحتاج إلى تصحيح."
+
+msgid "The hips' movement track is locked. Unlock it in the dope sheet first."
+msgstr "مسار حركة الحوض مقفل. افتح قفله من جدول المفاتيح أولًا."
+
+msgid "This character has no feet mapped to the humanoid skeleton. Map the foot bones first."
+msgstr "لا توجد قدمان مربوطتان بالهيكل البشري لهذه الشخصية. اربط عظام القدمين أولًا."
+
+msgid "This character has no hips mapped to the humanoid skeleton. Map the hips bone first."
+msgstr "لا يوجد حوض مربوط بالهيكل البشري لهذه الشخصية. اربط عظمة الحوض أولًا."
+
+msgid "This clip animates a different character."
+msgstr "هذا المقطع يحرّك شخصية أخرى."
+
+msgid "Auto-balance failed: {0}"
+msgstr "فشلت الموازنة التلقائية: {0}"
+
+msgid "Balance"
+msgstr "التوازن"
+
+msgid "Frame {0}: {1}"
+msgstr "الإطار {0}: {1}"
+
+msgid "Frame {0}: {1} (margin {2} cm)"
+msgstr "الإطار {0}: {1} (الهامش {2} سم)"
+
+msgid "Secondary Motion"
+msgstr "الحركة الثانوية"
+
+msgid "Make part of the body lag behind the motion and settle, like a spring. The result is written as ordinary rotation keys, so you can still edit them."
+msgstr "اجعل جزءًا من الجسم يتأخر عن الحركة ثم يستقر كالنابض. تُكتب النتيجة كمفاتيح دوران عادية، فيمكنك تعديلها بعد ذلك."
+
+msgid "Spine and head"
+msgstr "العمود الفقري والرأس"
+
+msgid "Head only"
+msgstr "الرأس فقط"
+
+msgid "Which bones follow through: the spine and head, only the head and neck, or both arms."
+msgstr "العظام التي تتأخر: العمود الفقري والرأس، أو الرأس والرقبة فقط، أو الذراعان."
+
+msgid "Stiffness"
+msgstr "الصلابة"
+
+msgid "How strongly the bones are pulled back to the original motion. Higher is snappier."
+msgstr "شدة سحب العظام إلى الحركة الأصلية. القيمة الأعلى تعني استجابة أسرع."
+
+msgid "Damping"
+msgstr "التخميد"
+
+msgid "How quickly the swinging dies out. Higher settles faster."
+msgstr "سرعة تلاشي الاهتزاز. القيمة الأعلى تعني استقرارًا أسرع."
+
+msgid "Max lag (degrees)"
+msgstr "أقصى تأخر (درجات)"
+
+msgid "The most a bone may lag behind, in degrees."
+msgstr "أكبر تأخر مسموح للعظمة، بالدرجات."
+
+msgid "Use every frame of the clip."
+msgstr "استخدام كل إطارات المقطع."
+
+msgid "very bouncy"
+msgstr "شديد الارتداد"
+
+msgid "springy"
+msgstr "نابضي"
+
+msgid "smooth"
+msgstr "ناعم"
+
+msgid "heavy and slow"
+msgstr "ثقيل وبطيء"
+
+msgid "About {0} swings per second, damping ratio {1}: {2}."
+msgstr "نحو {0} ذبذبة في الثانية، ونسبة التخميد {1}: {2}."
+
+msgid "Secondary motion added."
+msgstr "أُضيفت الحركة الثانوية."
+
+msgid "{0} rotation keys on {1} bones. The biggest lag is {2} degrees."
+msgstr "{0} مفتاح دوران على {1} عظمة. أكبر تأخر {2} درجة."
+
+msgid "Some bones of this preset are not mapped in this character and were skipped."
+msgstr "بعض عظام هذا الإعداد غير مربوطة في هذه الشخصية فتم تخطيها."
+
+msgid "Arm and leg bones that an IK control drives are overridden while that control is pinned."
+msgstr "عظام الذراع والساق التي يتحكم بها مؤشر IK تتجاوز مفاتيحها ما دام المؤشر مثبّتًا."
+
+msgid "Locked rotation tracks were skipped."
+msgstr "تم تخطي مسارات الدوران المقفلة."
+
+msgid "Every chosen bone's rotation track is locked. Unlock it in the dope sheet first."
+msgstr "مسار دوران كل العظام المختارة مقفل. افتح قفله من جدول المفاتيح أولًا."
+
+msgid "None of the bones of this preset are mapped in this character."
+msgstr "لا توجد أي من عظام هذا الإعداد مربوطة في هذه الشخصية."
+
+msgid "The range needs at least 2 frames."
+msgstr "يحتاج النطاق إلى إطارين على الأقل."
+
+msgid "Secondary motion failed: {0}"
+msgstr "فشلت الحركة الثانوية: {0}"
+
+msgid "Key a clip for this character first, then add secondary motion."
+msgstr "أضف مفاتيح إلى مقطع لهذه الشخصية أولًا ثم أضف الحركة الثانوية."
+
+msgid "Show Balance in Viewport"
+msgstr "إظهار التوازن في العرض"
+
+msgid "Show COM, Hip and Foot Paths"
+msgstr "إظهار مسارات مركز الكتلة والحوض والقدمين"
+
+msgid "Physics Panel"
+msgstr "لوحة الفيزياء"
+
+msgid "Auto-balance Unbalanced Frames"
+msgstr "موازنة الإطارات غير المتوازنة تلقائيًا"
+
+msgid "Secondary Motion…"
+msgstr "الحركة الثانوية…"
+
+msgid "Show the centre of mass, support polygon and contact points in the viewport, and the balance strip under the timeline."
+msgstr "يعرض مركز الكتلة ومضلع الارتكاز ونقاط التلامس في العرض، وشريط التوازن تحت الخط الزمني."
+
+msgid "Show or hide the Physics panel: balance of this frame, auto-balance and secondary motion."
+msgstr "إظهار لوحة الفيزياء أو إخفاؤها: توازن هذا الإطار، والموازنة التلقائية، والحركة الثانوية."
+
+msgid "Auto-balance"
+msgstr "موازنة تلقائية"
+
+msgid "Secondary motion"
+msgstr "حركة ثانوية"
+
+msgid "Allow foot slide"
+msgstr "السماح بانزلاق القدم"
+
+msgid "Correct even when a supporting foot cannot stay planted (no leg IK, or its leg tracks are locked or muted). That foot may slide."
+msgstr "يصحّح حتى لو تعذّر تثبيت قدم داعمة (لا IK للساق، أو مساراتها مقفلة أو مكتومة). قد تنزلق هذه القدم."
+
+msgid "Some supporting feet could not stay planted (no leg IK, or locked or muted leg tracks), so they may slide."
+msgstr "تعذّر تثبيت بعض القدمين الداعمتين (لا IK للساق، أو مسارات الساق مقفلة أو مكتومة)، لذا قد تنزلقان."
+
+msgid "Some frames stand on a single point or edge (tiptoe or heel), where the centre of mass cannot be kept well inside."
+msgstr "بعض الإطارات تقف على نقطة أو حافة واحدة (أصابع أو كعب)، فلا يمكن إبقاء مركز الكتلة داخلها بهامش جيد."
+
+msgid "Frames that were not corrected moved slightly because of the new keys."
+msgstr "تحركت قليلًا إطارات لم تُصحَّح بسبب المفاتيح الجديدة."
+
+msgid "Some frames had invalid values and were skipped."
+msgstr "تم تخطي إطارات فيها قيم غير صالحة."
+
+msgid "This character has no bone masses, so standard body proportions were used."
+msgstr "لا كتل لعظام هذه الشخصية، فاستُخدمت نسب الجسم القياسية."
+
+msgid "The hips' movement track is muted, so new keys would not play. Unmute it first."
+msgstr "مسار حركة الحوض مكتوم فلن تُشغَّل المفاتيح الجديدة. ألغِ كتمه أولًا."
+
+msgid "A supporting foot has no leg IK, so it would slide when the hips move. Add leg IK, or tick Allow foot slide."
+msgstr "لا IK للساق في قدم داعمة، فستنزلق عند تحريك الحوض. أضف IK للساق أو فعّل «السماح بانزلاق القدم»."
+
+msgid "Some frames contain invalid values, so nothing was changed."
+msgstr "بعض الإطارات فيها قيم غير صالحة، فلم يتغير شيء."
+
+msgid "The clip is too long to correct in one go."
+msgstr "المقطع أطول من أن يُصحَّح دفعة واحدة."
+
+msgid "Muted rotation tracks were skipped."
+msgstr "تم تخطي مسارات الدوران المكتومة."
+
+msgid "Every chosen bone's rotation track is muted. Unmute it first."
+msgstr "مسار دوران كل العظام المختارة مكتوم. ألغِ كتمه أولًا."
+
+msgid "That is too much to compute in one go. Use a shorter range."
+msgstr "هذا أكبر من أن يُحسب دفعة واحدة. استخدم نطاقًا أقصر."

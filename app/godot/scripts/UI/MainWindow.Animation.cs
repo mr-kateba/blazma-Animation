@@ -40,6 +40,7 @@ public partial class MainWindow
             "<circle cx='6' cy='8' r='4'/><circle cx='10.5' cy='8' r='4'/>", on => App.SetShowOnion(on));
         row.AddChild(TrailButton);
         row.AddChild(OnionButton);
+        AddPhysicsToolbar(row);
         _viewTools.AddChild(W.Margin(row, 4, 4, 4, 4));
         _viewTools.AnchorLeft = 0.5f; _viewTools.AnchorRight = 0.5f;
         _viewTools.GrowHorizontal = GrowDirection.Both;
@@ -149,6 +150,7 @@ public partial class MainWindow
         Timeline.Canvas.QueueRedraw(); Timeline.Dope.QueueRedraw(); Timeline.Graph.Canvas.QueueRedraw();
         Timeline.KeyPoses.Rebuild(true);
         Timeline.Graph.Rebuild(true);
+        SyncPhysicsUi();
     }
 
     // ---- hooks into the shell -----------------------------------------------------------------------------------------

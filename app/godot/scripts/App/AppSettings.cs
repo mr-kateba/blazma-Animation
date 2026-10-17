@@ -19,6 +19,12 @@ public sealed class AppSettings
     public bool ShowTrail { get; set; }
     public bool ShowOnion { get; set; }
     public int OnionFrames { get; set; } = 5;
+    /// <summary>Phase 6: balance overlays in the viewport (COM, support polygon, contacts) and the timeline balance strip. Off by default.</summary>
+    public bool ShowPhysics { get; set; }
+    /// <summary>Phase 6: COM / hips / feet paths over the clip.</summary>
+    public bool ShowPhysicsPaths { get; set; }
+    /// <summary>Phase 6: the Physics panel is open.</summary>
+    public bool PhysicsPanel { get; set; }
     public List<string> RecentFiles { get; } = new();
     /// <summary>Folder of the last animation export (Phase 4).</summary>
     public string LastExportDir { get; set; } = "";
@@ -45,6 +51,9 @@ public sealed class AppSettings
         ShowTrail = (bool)cfg.GetValue("ui", "show_trail", ShowTrail);
         ShowOnion = (bool)cfg.GetValue("ui", "show_onion", ShowOnion);
         OnionFrames = Math.Clamp((int)cfg.GetValue("ui", "onion_frames", OnionFrames), 1, 30);
+        ShowPhysics = (bool)cfg.GetValue("ui", "show_physics", ShowPhysics);
+        ShowPhysicsPaths = (bool)cfg.GetValue("ui", "show_physics_paths", ShowPhysicsPaths);
+        PhysicsPanel = (bool)cfg.GetValue("ui", "physics_panel", PhysicsPanel);
         AutosaveMinutes = Math.Clamp((int)cfg.GetValue("files", "autosave_minutes", AutosaveMinutes), 0, 60);
         RecentFiles.Clear();
         RecentFiles.AddRange(((string[])cfg.GetValue("files", "recent", Array.Empty<string>())).Take(MaxRecent));
@@ -69,6 +78,9 @@ public sealed class AppSettings
         cfg.SetValue("ui", "show_trail", ShowTrail);
         cfg.SetValue("ui", "show_onion", ShowOnion);
         cfg.SetValue("ui", "onion_frames", OnionFrames);
+        cfg.SetValue("ui", "show_physics", ShowPhysics);
+        cfg.SetValue("ui", "show_physics_paths", ShowPhysicsPaths);
+        cfg.SetValue("ui", "physics_panel", PhysicsPanel);
         cfg.SetValue("files", "autosave_minutes", AutosaveMinutes);
         cfg.SetValue("files", "recent", RecentFiles.ToArray());
         cfg.SetValue("files", "last_export_dir", LastExportDir);

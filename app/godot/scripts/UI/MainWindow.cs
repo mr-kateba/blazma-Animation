@@ -143,7 +143,7 @@ public partial class MainWindow : Control
     }
 
     /// <summary>Top-level menu popup by index (Project, Edit, Animation, Rigging, Settings); used by screenshot tests.</summary>
-    public PopupMenu MenuPopup(int index) => index switch { 0 => _mProject, 1 => _mEdit, 2 => _mAnim, 3 => _mRigging, _ => _mSettings };
+    public PopupMenu MenuPopup(int index) => index switch { 0 => _mProject, 1 => _mEdit, 2 => _mAnim, 3 => _mRigging, 5 => _mPhysics, _ => _mSettings };
 
     // ---- UI construction ---------------------------------------------------------------------
 
@@ -194,13 +194,21 @@ public partial class MainWindow : Control
         _center.AddChild(_hint);
 
         BuildMotionLayers();
+        BuildPhysicsLayers();
         _center.AddChild(Rail);
         _center.AddChild(Inspector);
 
         _splitInner = new HSplitContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
         _splitInner.AddChild(_center);
+        // Inline-end column: the Physics panel (when open) above the History list (Advanced mode).
         HistoryPanel.SizeFlagsHorizontal = SizeFlags.Fill;
-        _splitInner.AddChild(HistoryPanel);
+        HistoryPanel.SizeFlagsVertical = SizeFlags.ExpandFill;
+        PhysicsPanelNode.SizeFlagsHorizontal = SizeFlags.Fill;
+        _rightDock = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.Fill, SizeFlagsVertical = SizeFlags.ExpandFill };
+        _rightDock.AddThemeConstantOverride("separation", 10);
+        _rightDock.AddChild(PhysicsPanelNode);
+        _rightDock.AddChild(HistoryPanel);
+        _splitInner.AddChild(_rightDock);
 
         _splitOuter = new HSplitContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
         Dock = new LeftDock(this, OutlinePanel) { SizeFlagsHorizontal = SizeFlags.Fill };
@@ -259,6 +267,7 @@ public partial class MainWindow : Control
         row.AddChild(_segMode);
         row.AddChild(_segLang);
         row.AddChild(_segTheme);
+        row.AddChild(BuildPhysicsPanelToggle());
         row.AddChild(BuildAiButton());
 
         _chip = new PanelContainer { ThemeTypeVariation = "Chip", SizeFlagsVertical = SizeFlags.ShrinkCenter };
@@ -334,9 +343,11 @@ public partial class MainWindow : Control
         _mEdit = new PopupMenu { Name = "Edit" };
         _mAnim = new PopupMenu { Name = "Animation" };
         _mRigging = new PopupMenu { Name = "Rigging" };
+        _mPhysics = new PopupMenu { Name = "Physics" };
         _mSettings = new PopupMenu { Name = "Settings" };
-        foreach (var m in new[] { _mProject, _mEdit, _mAnim, _mRigging, _mSettings }) _menuBar.AddChild(m);
+        foreach (var m in new[] { _mProject, _mEdit, _mAnim, _mRigging, _mPhysics, _mSettings }) _menuBar.AddChild(m);
         BuildRiggingMenu();
+        BuildPhysicsMenu();
 
         _mProject.AddItem("New", MNew);
         _mProject.AddItem("Open…", MOpen);
@@ -421,6 +432,7 @@ public partial class MainWindow : Control
             case MAgentFolders: ShowAgentFolders(); break;
             case MClearRecent: App.Settings.RecentFiles.Clear(); App.Settings.Save(); break;
             case >= MAddMannequin and <= MPinSelected: OnRiggingMenu(id); break;
+            case >= MPhysShow and <= MPhysSecondary: OnPhysicsMenu(id); break;
             case MTrail or MOnion or >= MKey and <= MAddPhases: OnAnimationMenu(id); break;
             case >= MRecentBase:
                 var i = id - MRecentBase;
@@ -472,8 +484,10 @@ public partial class MainWindow : Control
         _menuBar.SetMenuTitle(1, Tr("Edit"));
         _menuBar.SetMenuTitle(2, Tr("Animation"));
         _menuBar.SetMenuTitle(3, Tr("Rigging"));
-        _menuBar.SetMenuTitle(4, Tr("Settings"));
+        _menuBar.SetMenuTitle(4, Tr("Physics"));
+        _menuBar.SetMenuTitle(5, Tr("Settings"));
         UpdateRiggingMenu();
+        UpdatePhysicsMenu();
     }
 
     static void SetItemText(PopupMenu m, int id, string text, bool disabled)
@@ -534,6 +548,7 @@ public partial class MainWindow : Control
         BuildAgentDialogs();
         ExportDlg = new ExportDialog(this);
         AddChild(ExportDlg);
+        BuildPhysicsDialogs();
     }
 
     /// <summary>Text is translated here, then the dialog's own auto-translation is off so user content is never "translated".</summary>
@@ -871,6 +886,10 @@ public partial class MainWindow : Control
         }
         Inspector.AnchorTop = 0; Inspector.AnchorBottom = 0;
         Inspector.OffsetTop = gap; Inspector.OffsetBottom = gap;
+
+        // The view toolbar is centred in the space between the tool rail and the inspector, so neither covers it.
+        var shift = (w + gap - 76f - gap) / 2f * (App.IsRtl ? 1 : -1);
+        _viewTools.OffsetLeft = shift; _viewTools.OffsetRight = shift;
     }
 
     /// <summary>Core messages are short English technical text; show a friendly, translatable version for the common cases.</summary>

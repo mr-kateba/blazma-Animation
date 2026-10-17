@@ -332,6 +332,9 @@ public partial class SelfTest : Node
         // Phase 5: the app hosts the agent API; AI Workspace panel.
         await RunPhase5();
 
+        // Phase 6: balance overlays, timeline strip, Physics panel, auto-balance and secondary motion.
+        await RunPhase6();
+
         // Restore the user's settings.
         App.SetLanguage(backup.Language); App.SetTheme(backup.Theme); App.SetAdvancedMode(backup.AdvancedMode);
         App.SetAutosaveMinutes(backup.AutosaveMinutes);

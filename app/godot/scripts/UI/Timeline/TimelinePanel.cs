@@ -18,6 +18,7 @@ public partial class TimelinePanel : PanelContainer
     public ClipStrip Strip { get; }
     public TimelineCanvas Canvas { get; }
     public KeyPoseStrip KeyPoses { get; }
+    public BalanceStrip Balance { get; }
     public DopeSheetView Dope { get; }
     public GraphView Graph { get; }
     public Segmented Tabs { get; }
@@ -133,7 +134,9 @@ public partial class TimelinePanel : PanelContainer
         tl.AddThemeConstantOverride("separation", 8);
         Canvas = new TimelineCanvas(host) { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         KeyPoses = new KeyPoseStrip(host) { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
+        Balance = new BalanceStrip(host, Canvas) { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         tl.AddChild(Canvas);
+        tl.AddChild(Balance);
         tl.AddChild(KeyPoses);
         _timelineTab = tl;
         Dope = new DopeSheetView(host);
