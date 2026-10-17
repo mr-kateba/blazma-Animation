@@ -52,6 +52,39 @@ public static class BakedTracks
         return keyCount;
     }
 
+    /// <summary>
+    /// Translation and rotation tracks (and scale when it is not 1 somewhere) of a prop from its value on every frame, group
+    /// "Props" as key.set writes them. Returns the number of keys written.
+    /// </summary>
+    public static int AddPropTracks(Clip clip, ObjectId prop, Transform[] values, bool reduce, double rotationToleranceDegrees = 0.1, double translationToleranceMetres = 0.0005)
+    {
+        var frames = values.Length;
+        var rotTol = rotationToleranceDegrees * Math.PI / 180;
+        var rot = new Quat[frames];
+        for (var f = 0; f < frames; f++)
+        {
+            var q = values[f].Rotation;
+            if (f > 0 && Quat.Dot(q, rot[f - 1]) < 0) q = new Quat(-q.X, -q.Y, -q.Z, -q.W);
+            rot[f] = q;
+        }
+        var count = 0;
+        void Vector(string channel, Func<Transform, Vec3> get)
+        {
+            var v = values.Select(get).ToArray();
+            var keep = reduce ? Reduce(frames, (i, j, k) => (Vec3.Lerp(v[i], v[j], (double)(k - i) / (j - i)) - v[k]).Length() <= translationToleranceMetres)
+                : Enumerable.Range(0, frames).ToList();
+            clip.Tracks.Add(Track(TargetKind.Prop, prop, "Props", channel, keep.Select(f => (f, new[] { v[f].X, v[f].Y, v[f].Z })), clip.Fps));
+            count += keep.Count;
+        }
+        Vector(TrackChannels.Translation, t => t.Translation);
+        var keepR = reduce ? Reduce(frames, (i, j, k) => Quat.AngleBetween(Quat.Slerp(rot[i], rot[j], (double)(k - i) / (j - i)), rot[k]) <= rotTol)
+            : Enumerable.Range(0, frames).ToList();
+        clip.Tracks.Add(Track(TargetKind.Prop, prop, "Props", TrackChannels.Rotation, keepR.Select(f => (f, new[] { rot[f].X, rot[f].Y, rot[f].Z, rot[f].W })), clip.Fps));
+        count += keepR.Count;
+        if (values.Any(t => !t.Scale.ApproxEquals(Vec3.One, 1e-12))) Vector(TrackChannels.Scale, t => t.Scale);
+        return count;
+    }
+
     /// <summary>True when some frame's value of bone <paramref name="b"/> differs from its rest value.</summary>
     public static bool RotationMoves(Rig rig, Transform[][] locals, int b) =>
         locals.Any(l => Quat.AngleBetween(l[b].Rotation, rig.Bones[b].Rest.Rotation) > 1e-9);

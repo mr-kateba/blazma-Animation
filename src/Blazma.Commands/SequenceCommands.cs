@@ -85,19 +85,20 @@ public static class SequenceCommands
     static long? Long(JsonObject a, string key)
     {
         var v = Args.OptLong(a, key);
-        return v is < 0 or > 10_000_000 ? throw new CommandException("invalid_args", $"'{key}' must be between 0 and 10,000,000.") : v;
+        return v is < 0 or > ClipSequence.MaxFrame ? throw new CommandException("invalid_args", $"'{key}' must be between 0 and {ClipSequence.MaxFrame:N0}.") : v;
     }
 
     static double? Speed(JsonObject a)
     {
         var s = S.OptNumber(a, "speed");
-        return s is null ? null : s is <= 0 or > 10 ? throw new CommandException("invalid_args", "'speed' must be greater than 0 and at most 10.") : s;
+        return s is null ? null : !(s >= ClipSequence.MinSpeed && s <= ClipSequence.MaxSpeed)
+            ? throw new CommandException("invalid_args", $"'speed' must be between {ClipSequence.MinSpeed} and {ClipSequence.MaxSpeed}.") : s;
     }
 
     static int? Loops(JsonObject a)
     {
         var l = Args.OptLong(a, "loops");
-        return l is null ? null : l is < 1 or > 1000 ? throw new CommandException("invalid_args", "'loops' must be between 1 and 1000.") : (int)l;
+        return l is null ? null : l is < 1 or > ClipSequence.MaxLoops ? throw new CommandException("invalid_args", $"'loops' must be between 1 and {ClipSequence.MaxLoops}.") : (int)l;
     }
 
     static BlendCurve? Curve(JsonObject a) => ((string?)a["blendCurve"])?.Trim().ToLowerInvariant() switch
@@ -138,6 +139,21 @@ public static class SequenceCommands
         if (item.InFrame >= length) throw new CommandException("invalid_args", $"'inFrame' {item.InFrame} is outside clip '{clip.Name}' (length {length}).");
         if (item.OutFrame is long o && (o <= item.InFrame || o > length))
             throw new CommandException("invalid_args", $"'outFrame' must be after 'inFrame' and at most the clip length ({length}).");
+        if (!ClipSequence.ItemInLimits(item))
+            throw new CommandException("too_large", $"The item's timing is outside the limits (start/in/out/blend at most {ClipSequence.MaxFrame:N0} frames).");
+    }
+
+    /// <summary>
+    /// After an edit: the sequence must still be evaluable within the limits (no item skipped because more than
+    /// <see cref="SequenceEvaluator.MaxBlending"/> items would blend at once, blends within the preparation budget). Throws
+    /// too_many_blends / too_large; SceneEdit then restores the sequence. Builds only the evaluator's timing (no poses).
+    /// </summary>
+    internal static void CheckPlayable(Project p, ClipSequence s)
+    {
+        var ev = Evaluator(p, s);
+        if (ev.SkippedForBlending.Count > 0)
+            throw new CommandException("too_many_blends",
+                $"More than {SequenceEvaluator.MaxBlending} items would blend at the same time; start the item later or shorten the blends.");
     }
 
     internal static SequenceItem Copy(SequenceItem i) => new()
@@ -156,12 +172,13 @@ public sealed class CreateSequence(ObjectId characterId, string name, long? fps,
     readonly ObjectId _id = ObjectId.New();
     public override string Id => "sequence.create";
     public override string Label => "Create sequence";
+    protected override SceneParts Touches => SceneParts.Sequences;
     protected override IReadOnlyList<Change> Changes => new[] { SequenceCommands.Changed(_id) };
 
     protected override JsonNode? Apply(Project p, List<Diagnostic> warnings)
     {
         PoseCommands.Resolve(p, characterId);
-        if (fps is > 240) throw new CommandException("invalid_args", "'fps' must be between 1 and 240.");
+        if (fps is > ClipSequence.MaxFps) throw new CommandException("invalid_args", $"'fps' must be between 1 and {ClipSequence.MaxFps}.");
         p.Sequences.Add(new ClipSequence
         {
             Id = _id, Name = name, Character = characterId, AlignRoot = alignRoot, AlignYaw = alignYaw,
@@ -177,12 +194,15 @@ public sealed class AddSequenceItem(ObjectId sequenceId, ObjectId clipId, long? 
     readonly ObjectId _itemId = ObjectId.New();
     public override string Id => "sequence.add_clip";
     public override string Label => "Add clip to sequence";
+    protected override SceneParts Touches => SceneParts.Sequences;
     protected override IReadOnlyList<Change> Changes => new[] { SequenceCommands.Changed(sequenceId) };
 
     protected override JsonNode? Apply(Project p, List<Diagnostic> warnings)
     {
         var s = SequenceCommands.Require(p, sequenceId);
         var clip = AnimationEditCommands.RequireClip(p, clipId);
+        if (s.Items.Count >= ClipSequence.MaxItems)
+            throw new CommandException("too_large", $"A sequence holds at most {ClipSequence.MaxItems} items.");
         var fps = s.Fps.FramesPerSecond;
         SequenceEvaluator? current = s.Items.Count > 0 ? SequenceCommands.Evaluator(p, s) : null;
         var blendFrames = blend ?? (current is null ? 0 : (long)Math.Round(0.3 * fps));
@@ -201,7 +221,8 @@ public sealed class AddSequenceItem(ObjectId sequenceId, ObjectId clipId, long? 
                 var outF = item.OutFrame ?? SequenceEvaluator.DefaultOut(clip).ToFrame(clip.Fps);
                 // Search one pass of the clip (or its first second for long clips).
                 var to = Math.Min(outF - 1, item.InFrame + Math.Max(1, (long)Math.Round(clip.Fps.FramesPerSecond * 1.5)));
-                if (current.MatchFootPhase(startFrame, clip, item.InFrame, to, item.Speed * clip.Fps.FramesPerSecond / fps) is long best)
+                // The item's speed only: MatchFootPhase compares rates per second, so differing frame rates need no factor.
+                if (current.MatchFootPhase(startFrame, clip, item.InFrame, to, item.Speed) is long best)
                 {
                     item.InFrame = best;
                     if (item.OutFrame is long o && o <= best) item.OutFrame = null;
@@ -211,6 +232,7 @@ public sealed class AddSequenceItem(ObjectId sequenceId, ObjectId clipId, long? 
         }
         s.Items.Add(item);
         SequenceCommands.Sort(s);
+        SequenceCommands.CheckPlayable(p, s);
         return new JsonObject { ["itemId"] = _itemId.ToString(), ["startFrame"] = item.StartFrame, ["inFrame"] = item.InFrame, ["blendFrames"] = item.BlendInFrames };
     }
 }
@@ -220,6 +242,7 @@ public sealed class UpdateSequenceItem(ObjectId sequenceId, ObjectId itemId, str
 {
     public override string Id => id;
     public override string Label => label;
+    protected override SceneParts Touches => SceneParts.Sequences;
     protected override IReadOnlyList<Change> Changes => new[] { SequenceCommands.Changed(sequenceId) };
 
     protected override JsonNode? Apply(Project p, List<Diagnostic> warnings)
@@ -237,6 +260,7 @@ public sealed class UpdateSequenceItem(ObjectId sequenceId, ObjectId itemId, str
         SequenceCommands.Validate(p, s, copy);
         s.Items[s.Items.IndexOf(item)] = copy;
         SequenceCommands.Sort(s);
+        SequenceCommands.CheckPlayable(p, s);
         return new JsonObject { ["itemId"] = itemId.ToString() };
     }
 
@@ -251,6 +275,7 @@ public sealed class UpdateSequence(ObjectId sequenceId, string? name, bool? alig
 {
     public override string Id => "sequence.update";
     public override string Label => "Edit sequence";
+    protected override SceneParts Touches => SceneParts.Sequences;
     protected override IReadOnlyList<Change> Changes => new[] { SequenceCommands.Changed(sequenceId) };
 
     protected override JsonNode? Apply(Project p, List<Diagnostic> warnings)
@@ -269,6 +294,7 @@ public sealed class RemoveSequence(ObjectId sequenceId, ObjectId? itemId) : Scen
     public override string Id => "sequence.remove";
     public override CommandEffect Effect => CommandEffect.Destructive;
     public override string Label => itemId is null ? "Delete sequence" : "Remove sequence item";
+    protected override SceneParts Touches => SceneParts.Sequences;
     protected override IReadOnlyList<Change> Changes => new[] { SequenceCommands.Changed(sequenceId) };
 
     protected override JsonNode? Apply(Project p, List<Diagnostic> warnings)
@@ -386,8 +412,10 @@ public sealed class BakeSequence(ObjectId sequenceId, string? name, bool reduceK
         warnings.AddRange(ev.Warnings.Select(w => new Diagnostic("sequence", w)));
         var rig = ev.Rig;
         var last = Math.Max(1, ev.LastFrame);
-        if ((last + 1) * Math.Max(1, rig.Bones.Count) > MaxSamples)
+        if ((last + 1.0) * Math.Max(1, rig.Bones.Count) > MaxSamples)
             throw new CommandException("too_large", $"{last + 1} frames × {rig.Bones.Count} bones is more than {MaxSamples:N0} samples.");
+        if (ev.BakeWork > SequenceEvaluator.MaxBakeWork)
+            throw new CommandException("too_large", $"Baking would evaluate {ev.BakeWork:0.#e0} bones (frames × blending items × bones; at most {SequenceEvaluator.MaxBakeWork:0.#e0}).");
         var rev = new RigEvaluator(rig);
         var locals = new Transform[last + 1][];
         for (var f = 0; f <= last; f++) locals[f] = rev.Locals(ev.Evaluate(f).Pose);
@@ -398,24 +426,34 @@ public sealed class BakeSequence(ObjectId sequenceId, string? name, bool reduceK
         };
         var keys = BakedTracks.AddBoneTracks(clip, rig, locals, b => BakedTracks.RotationMoves(rig, locals, b), b => BakedTracks.TranslationMoves(rig, locals, b),
             reduceKeys, 0.05, 0.0002);
+
+        // Props the items' clips animate: their blended values (moved with the items when free), as prop tracks.
+        var propCount = 0;
+        foreach (var prop in p.Props)
+        {
+            if (!s.Items.Any(i => p.FindClip(i.Clip) is { } c && PropEvaluator.Animates(c, prop))) continue;
+            var values = new Transform[last + 1];
+            for (var f = 0; f <= last; f++) values[f] = ev.PropLocal(prop, f) ?? prop.Local;
+            keys += BakedTracks.AddPropTracks(clip, prop.Id, values, reduceKeys, 0.05, 0.0002);
+            propCount++;
+        }
+
         foreach (var item in s.Items)
         {
             if (ev.RangeOf(item.Id) is not { } range || p.FindClip(item.Clip) is not { } c) continue;
             var startFrame = (long)Math.Round(range.Start);
             if (startFrame <= last) clip.Markers.Add(new Marker { Name = c.Name, Time = Flicks.FromFrame(startFrame, s.Fps) });
-            var inT = Flicks.FromFrame(item.InFrame, c.Fps).ToSeconds();
-            var outT = item.OutFrame is long o ? Flicks.FromFrame(o, c.Fps).ToSeconds() : c.Duration.ToSeconds();
-            for (var k = 0; k < item.Loops; k++)
-                foreach (var e in c.Events.Where(e => e.Time.ToSeconds() >= inT && e.Time.ToSeconds() < outT))
+            // Events where the evaluator actually plays them (speed, loops, phase and wrap of looping clips).
+            foreach (var e in c.Events)
+                foreach (var at in ev.FramesPlaying(item.Id, e.Time))
                 {
-                    var seconds = range.Start / s.Fps.FramesPerSecond + (k * (outT - inT) + e.Time.ToSeconds() - inT) / item.Speed;
-                    var frame = (long)Math.Round(seconds * s.Fps.FramesPerSecond);
+                    var frame = (long)Math.Round(at);
                     if (frame <= last) clip.Events.Add(new AnimationEvent { Name = e.Name, Data = new Dictionary<string, string>(e.Data), Time = Flicks.FromFrame(frame, s.Fps) });
                 }
         }
         clip.Markers = clip.Markers.OrderBy(m => m.Time.Value).ToList();
         clip.Events = clip.Events.OrderBy(e => e.Time.Value).ToList();
-        data = new JsonObject { ["sequenceId"] = s.Id.ToString(), ["frames"] = last + 1, ["keyCount"] = keys };
+        data = new JsonObject { ["sequenceId"] = s.Id.ToString(), ["frames"] = last + 1, ["keyCount"] = keys, ["props"] = propCount };
         if (footLock)
         {
             var spans = FootLocker.DetectContacts(clip, rig, new FootLockOptions());

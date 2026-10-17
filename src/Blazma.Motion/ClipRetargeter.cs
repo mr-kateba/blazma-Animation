@@ -36,18 +36,21 @@ public sealed record ClipRetargetResult(Clip Clip, IReadOnlyList<string> Warning
 /// ratio; unmapped target bones stay at rest (warning). When the source rig has no root bone but the target has one, the
 /// smoothed horizontal travel is moved onto it (D30). Animated IK targets and poles of the source are mapped onto the
 /// target's chains with the same end bone (positions relative to the paired rest joint, scaled; rotations like bones;
-/// pinned flags copied as stepped keys), so pinned feet stay pinned. Markers, events and the loop range are copied (scaled in
-/// time). Output: a normal clip with linear keys, reduced within tolerance.
+/// pinned flags copied as stepped keys), so pinned feet stay pinned. Markers, events, the loop range and prop tracks are copied
+/// (scaled in time). Output: a normal clip with linear keys, reduced within tolerance.
 /// </summary>
 public static class ClipRetargeter
 {
     /// <summary>Upper bound of output frames × target bones per call.</summary>
     public const long MaxSamples = 2_000_000;
 
+    /// <summary>Largest <see cref="ClipRetargetOptions.TimeScale"/> (output 100× longer than the source).</summary>
+    public const double MaxTimeScale = 100;
+
     public static ClipRetargetResult Retarget(Clip source, Rig sourceRig, Rig targetRig, ClipRetargetOptions options)
     {
-        if (!(options.TimeScale > 0) || !double.IsFinite(options.TimeScale) || options.TimeScale > 100)
-            throw new ArgumentOutOfRangeException(nameof(options), "TimeScale must be between 0 and 100.");
+        if (!(options.TimeScale > 0) || !double.IsFinite(options.TimeScale) || options.TimeScale > MaxTimeScale)
+            throw new RetargetException("invalid_args", $"The time scale must be greater than 0 and at most {MaxTimeScale} (got {options.TimeScale}).");
         var map = new HumanoidRetargetMap(RetargetSkeleton.FromRig(sourceRig), targetRig);
         var warnings = new List<string>(map.Warnings);
         var srcEv = new RigEvaluator(sourceRig);
@@ -125,6 +128,27 @@ public static class ClipRetargeter
             clip.Markers.Add(new Marker { Name = m.Name, Phase = m.Phase, Time = Scaled(m.Time, clip, timeScale) });
         foreach (var e in source.Events)
             clip.Events.Add(new AnimationEvent { Name = e.Name, Data = new Dictionary<string, string>(e.Data), Time = Scaled(e.Time, clip, timeScale) });
+        // Prop tracks do not depend on the skeleton (a world transform, or an offset from the attachment bone): copied as they
+        // are, re-timed. Keys that land on the same frame after re-timing keep the last one.
+        foreach (var t in source.Tracks.Where(t => t.Target.Kind == TargetKind.Prop))
+        {
+            var copy = new Track
+            {
+                Target = new TrackTarget { Kind = t.Target.Kind, Id = t.Target.Id }, Channel = t.Channel, Group = t.Group, Muted = t.Muted, Locked = t.Locked,
+            };
+            foreach (var k in t.Keys)
+            {
+                var key = new Keyframe
+                {
+                    Time = Scaled(k.Time, clip, timeScale), Value = (double[])k.Value.Clone(), Interp = k.Interp,
+                    // Tangents are per second: a slower clip changes the value more slowly.
+                    InTangent = k.InTangent?.Select(v => v / timeScale).ToArray(), OutTangent = k.OutTangent?.Select(v => v / timeScale).ToArray(),
+                };
+                if (copy.Keys.Count > 0 && copy.Keys[^1].Time >= key.Time) copy.Keys[^1] = key;
+                else copy.Keys.Add(key);
+            }
+            clip.Tracks.Add(copy);
+        }
     }
 
     static int MapControls(Clip source, Rig sourceRig, Rig targetRig, HumanoidRetargetMap map, Pose[] srcPoses, Transform[][] srcModels,

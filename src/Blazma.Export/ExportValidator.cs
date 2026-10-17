@@ -77,7 +77,10 @@ public static class ExportValidator
     public const int MaxWorldFrames = 240;
 
     /// <param name="expected">The bake the file was exported from (post-export validation reuses it instead of baking again).</param>
-    public static ExportValidationReport Validate(string glbPath, Project project, Clip clip, Rig rig, ExportOptions? options = null, BakedClip? expected = null)
+    /// <param name="character">Character the file was exported with when <paramref name="options"/> does not say (default: the
+    /// first character using the rig); only props attached to it are expected under its bones.</param>
+    public static ExportValidationReport Validate(string glbPath, Project project, Clip clip, Rig rig, ExportOptions? options = null, BakedClip? expected = null,
+        Core.Ids.ObjectId? character = null)
     {
         byte[] bytes;
         try { bytes = File.ReadAllBytes(glbPath); }
@@ -87,14 +90,15 @@ public static class ExportValidator
             r.Issues.Add("io_error: " + e.Message);
             return r;
         }
-        return Validate(bytes, project, clip, rig, options, expected);
+        return Validate(bytes, project, clip, rig, options, expected, character);
     }
 
-    /// <inheritdoc cref="Validate(string, Project, Clip, Rig, ExportOptions?, BakedClip?)"/>
-    public static ExportValidationReport Validate(byte[] glbBytes, Project project, Clip clip, Rig rig, ExportOptions? options = null, BakedClip? expected = null)
+    /// <inheritdoc cref="Validate(string, Project, Clip, Rig, ExportOptions?, BakedClip?, Core.Ids.ObjectId?)"/>
+    public static ExportValidationReport Validate(byte[] glbBytes, Project project, Clip clip, Rig rig, ExportOptions? options = null, BakedClip? expected = null,
+        Core.Ids.ObjectId? character = null)
     {
         var report = new ExportValidationReport();
-        try { Check(glbBytes, project, clip, rig, options, expected, report); }
+        try { Check(glbBytes, project, clip, rig, options, expected, report, PropExport.CharacterFor(project, rig, options?.Character ?? character)); }
         catch (ExportException e) { report.Issues.Add($"{e.Code}: {e.Message}"); }
         catch (OutOfMemoryException) { report.Issues.Add("invalid_gltf: the file declares more data than can be read."); }
         catch (Exception e) { report.Issues.Add("invalid_gltf: " + e.Message); } // malformed input of any kind is a finding, not a crash
@@ -103,7 +107,8 @@ public static class ExportValidator
 
     /// <param name="options">The options the file was exported with; null reads them from the animation's
     /// "extras.blazma" (frame range and root motion), as written by <see cref="AnimationExporter"/>.</param>
-    static void Check(byte[] bytes, Project project, Clip clip, Rig rig, ExportOptions? options, BakedClip? expectedBake, ExportValidationReport report)
+    static void Check(byte[] bytes, Project project, Clip clip, Rig rig, ExportOptions? options, BakedClip? expectedBake, ExportValidationReport report,
+        Core.Ids.ObjectId character)
     {
         var glb = GlbContainer.Parse(bytes);
         var issues = report.Issues;
@@ -210,8 +215,8 @@ public static class ExportValidator
         report.MaxRotationErrorDegrees = maxR;
         report.MaxScaleError = maxS;
 
-        var props = PropsToCheck(glb.Json, nodes, anim, project, clip, rig, bindings, options, issues);
-        CheckWorld(nodes, anim, clip, rig, bindings, baked.StartFrame, baked.FrameCount, baked.RootMotion.Mode, report, project, props);
+        var props = PropsToCheck(glb.Json, nodes, anim, project, clip, rig, bindings, options, issues, character);
+        CheckWorld(nodes, anim, clip, rig, bindings, baked.StartFrame, baked.FrameCount, baked.RootMotion.Mode, report, project, props, character);
     }
 
     /// <summary>True for a node tagged as a prop (extras.blazma.kind = "prop") or below one.</summary>
@@ -229,13 +234,13 @@ public static class ExportValidator
     /// extras), each with its node; checks that every one is present once, under the right parent, with all three channels.
     /// </summary>
     static List<(Prop Prop, int Node, int Bone)> PropsToCheck(JsonObject json, IReadOnlyList<GltfNodeInfo> nodes, GltfAnimation anim, Project project, Clip clip, Rig rig,
-        NodeBinding[] bindings, ExportOptions? options, List<string> issues)
+        NodeBinding[] bindings, ExportOptions? options, List<string> issues, Core.Ids.ObjectId character)
     {
         var result = new List<(Prop, int, int)>();
         var include = options?.IncludeProps ?? anim.Extras?["blazma"]?["props"] is not null;
         if (!include) return result;
         var array = json["nodes"] as JsonArray ?? new JsonArray();
-        var expected = PropEvaluator.PropsFor(project, clip, rig);
+        var expected = PropEvaluator.PropsFor(project, clip, rig, character);
         if (GltfAnimationReader.Int(anim.Extras?["blazma"]?["props"]) is int declared && declared != expected.Count)
             issues.Add($"The animation declares {declared} prop(s); the clip shows {expected.Count}.");
         foreach (var prop in expected)
@@ -243,7 +248,7 @@ public static class ExportValidator
             var found = Enumerable.Range(0, array.Count).Where(i => (string?)array[i]?["extras"]?["blazma"]?["propId"] == prop.Id.ToString()).ToList();
             if (found.Count != 1) { issues.Add($"Prop '{prop.Name}' has {found.Count} nodes in the file (expected 1)."); continue; }
             var node = found[0];
-            var bone = PropEvaluator.AttachedBone(project, prop, rig);
+            var bone = PropEvaluator.AttachedBone(project, prop, rig, character);
             int? expectedParent = bone >= 0 ? bindings[bone].Node : null;
             if (nodes[node].Parent != expectedParent)
                 issues.Add($"Prop '{prop.Name}' node {node} has parent {nodes[node].Parent?.ToString() ?? "none"}; expected {(expectedParent?.ToString() ?? "none (scene root)")}.");
@@ -261,7 +266,7 @@ public static class ExportValidator
     /// </summary>
     static void CheckWorld(IReadOnlyList<GltfNodeInfo> nodes, GltfAnimation anim, Clip clip, Rig rig, NodeBinding[] bindings,
         long startFrame, int frameCount, RootMotionMode mode, ExportValidationReport report, Project? project = null,
-        IReadOnlyList<(Prop Prop, int Node, int Bone)>? props = null)
+        IReadOnlyList<(Prop Prop, int Node, int Bone)>? props = null, Core.Ids.ObjectId character = default)
     {
         props ??= Array.Empty<(Prop, int, int)>();
         double maxPropP = 0, maxPropR = 0;
@@ -318,7 +323,7 @@ public static class ExportValidator
             foreach (var (prop, node, bone) in props)
             {
                 var time = clip.Loop.Enabled ? ClipEvaluator.PlaybackTime(clip, elapsed) : elapsed;
-                var expected = PropEvaluator.World(project!, prop, PropEvaluator.Local(prop, clip, time), rig, app);
+                var expected = PropEvaluator.World(project!, prop, PropEvaluator.Local(prop, clip, time), rig, app, character);
                 var expectedT = bone >= 0 && moved[bone] ? expected.Translation + shift : expected.Translation;
                 var w = world[node];
                 var p = (w.Translation - expectedT).Length();
@@ -449,6 +454,47 @@ public static class ExportValidator
                     && (accessors[pos]?["min"] is not JsonArray || accessors[pos]?["max"] is not JsonArray))
                     issues.Add($"meshes[{m}] POSITION accessor {pos} has no min/max.");
 
+        // Images, textures, material texture slots (props copy them from imported models).
+        var images = json["images"] as JsonArray ?? new JsonArray();
+        for (var i = 0; i < images.Count; i++)
+        {
+            var img = images[i] as JsonObject;
+            var hasUri = img?["uri"] is not null;
+            var hasView = img?["bufferView"] is not null;
+            if (hasUri == hasView) issues.Add($"images[{i}] must have exactly one of uri and bufferView.");
+            else if (hasView)
+            {
+                var v = GltfAnimationReader.Int(img!["bufferView"]) ?? -1;
+                if (v < 0 || v >= views.Count) issues.Add($"images[{i}] references missing bufferView {v}.");
+                if (img["mimeType"] is null) issues.Add($"images[{i}] uses a bufferView but has no mimeType.");
+            }
+        }
+        var samplerCount = (json["samplers"] as JsonArray)?.Count ?? 0;
+        var textures = json["textures"] as JsonArray ?? new JsonArray();
+        for (var i = 0; i < textures.Count; i++)
+        {
+            if (textures[i]?["source"] is { } src && (GltfAnimationReader.Int(src) is not int si || si < 0 || si >= images.Count))
+                issues.Add($"textures[{i}] references a missing image.");
+            if (textures[i]?["sampler"] is { } smp && (GltfAnimationReader.Int(smp) is not int sm || sm < 0 || sm >= samplerCount))
+                issues.Add($"textures[{i}] references a missing sampler.");
+        }
+        var materials = json["materials"] as JsonArray ?? new JsonArray();
+        for (var m = 0; m < materials.Count; m++)
+        {
+            var mat = materials[m] as JsonObject;
+            var slots = new[] { mat?["pbrMetallicRoughness"]?["baseColorTexture"], mat?["pbrMetallicRoughness"]?["metallicRoughnessTexture"],
+                mat?["normalTexture"], mat?["occlusionTexture"], mat?["emissiveTexture"] };
+            foreach (var slot in slots.OfType<JsonObject>())
+                if (GltfAnimationReader.Int(slot["index"]) is not int ti || ti < 0 || ti >= textures.Count)
+                    issues.Add($"materials[{m}] references a missing texture.");
+        }
+        // Extensions used anywhere in the top-level objects must be declared in extensionsUsed.
+        var declaredExt = (json["extensionsUsed"] as JsonArray ?? new JsonArray()).Select(x => x is JsonValue v && v.TryGetValue<string>(out var t) ? t : null).ToHashSet();
+        foreach (var key in new[] { "nodes", "meshes", "materials", "textures", "images", "samplers", "accessors", "bufferViews" })
+            foreach (var item in json[key] as JsonArray ?? new JsonArray())
+                foreach (var ext in UsedExtensions(item))
+                    if (!declaredExt.Contains(ext)) { issues.Add($"Extension '{ext}' is used in '{key}' but not listed in extensionsUsed."); declaredExt.Add(ext); }
+
         var nodes = json["nodes"] as JsonArray ?? new JsonArray();
         var parent = new int?[nodes.Count];
         for (var i = 0; i < nodes.Count; i++)
@@ -513,6 +559,26 @@ public static class ExportValidator
                 if ((string?)ch?["target"]?["path"] is not ("translation" or "rotation" or "scale" or "weights" or "pointer"))
                     issues.Add($"animations[{a}] has a channel with an invalid path.");
             }
+        }
+    }
+
+    /// <summary>Names of the extensions an object uses (its "extensions" objects, nested ones included; "extras" excluded).</summary>
+    static IEnumerable<string> UsedExtensions(JsonNode? root)
+    {
+        var stack = new Stack<JsonNode>();
+        if (root is not null) stack.Push(root);
+        while (stack.Count > 0)
+        {
+            var n = stack.Pop();
+            if (n is JsonObject o)
+                foreach (var kv in o)
+                {
+                    if (kv.Key == "extras" || kv.Value is null) continue;
+                    if (kv.Key == "extensions" && kv.Value is JsonObject ext) foreach (var e in ext) yield return e.Key;
+                    stack.Push(kv.Value);
+                }
+            else if (n is JsonArray a)
+                foreach (var x in a) if (x is not null) stack.Push(x);
         }
     }
 }

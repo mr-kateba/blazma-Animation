@@ -143,6 +143,24 @@ public sealed class GltfBuilder
         return Add(Arr("bufferViews"), view);
     }
 
+    /// <summary>Appends raw bytes to the BIN chunk (4-byte aligned start) without creating a buffer view; returns their offset.</summary>
+    public int AppendBytes(ReadOnlySpan<byte> data)
+    {
+        while (_bin.Length % 4 != 0) _bin.WriteByte(0);
+        var offset = (int)_bin.Length;
+        _bin.Write(data);
+        return offset;
+    }
+
+    /// <summary>A buffer view over bytes already in the BIN chunk (see <see cref="AppendBytes"/>).</summary>
+    public int AddBufferViewAt(int offset, int length, int? target = null, int? byteStride = null)
+    {
+        var view = new JsonObject { ["buffer"] = 0, ["byteOffset"] = offset, ["byteLength"] = length };
+        if (byteStride is int s) view["byteStride"] = s;
+        if (target is int t) view["target"] = t;
+        return Add(Arr("bufferViews"), view);
+    }
+
     /// <summary>Float accessor of <paramref name="type"/> ("SCALAR", "VEC3", "VEC4"...). min/max are written when asked.</summary>
     public int AddFloats(float[] data, string type, bool minMax, int? target = null)
     {

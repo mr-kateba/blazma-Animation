@@ -151,7 +151,7 @@ public static class ProjectArchive
                 throw new ProjectFormatException("invalid_json", "project.json has no id.");
             return project;
         }
-        catch (Exception e) when (e is JsonException or FormatException or InvalidOperationException or ArgumentException)
+        catch (Exception e) when (e is JsonException or FormatException or InvalidOperationException or ArgumentException or NullReferenceException or OverflowException)
         {
             throw new ProjectFormatException("invalid_json", $"Project data is invalid: {e.Message}", e);
         }
@@ -169,50 +169,97 @@ public static class ProjectArchive
         }
     }
 
-    /// <summary>Reference checks that JSON alone cannot express.</summary>
+    /// <summary>
+    /// Reference checks that JSON alone cannot express. Every limit here matches what the commands enforce, so a project edited
+    /// only through commands always loads again (ProjectFile.Save re-reads what it wrote); each error names the offending object.
+    /// </summary>
     static void Validate(Project p)
     {
-        foreach (var rig in p.Rigs)
-        {
-            var seen = new HashSet<Ids.ObjectId>();
-            foreach (var bone in rig.Bones)
-            {
-                if (!bone.Parent.IsEmpty && !seen.Contains(bone.Parent))
-                    throw new ProjectFormatException("invalid_json", $"Rig '{rig.Name}': bone '{bone.Name}' appears before its parent.");
-                if (!seen.Add(bone.Id))
-                    throw new ProjectFormatException("invalid_json", $"Rig '{rig.Name}': duplicate bone id {bone.Id}.");
-            }
-        }
+        foreach (var rig in p.Rigs) ValidateRig(rig, $"Rig '{rig.Name}'");
         foreach (var rig in p.Rigs)
             if (!rig.Source.Asset.IsEmpty && p.FindAsset(rig.Source.Asset) is null)
-                throw new ProjectFormatException("invalid_json", $"Rig '{rig.Name}' refers to a missing embedded asset.");
-        foreach (var clip in p.Clips)
-            foreach (var track in clip.Tracks)
-                for (var i = 1; i < track.Keys.Count; i++)
-                    if (track.Keys[i].Time <= track.Keys[i - 1].Time)
-                        throw new ProjectFormatException("invalid_json", $"Clip '{clip.Name}': keys must be in strictly increasing time order.");
+                throw Invalid($"Rig '{rig.Name}' refers to a missing embedded asset.");
+        foreach (var clip in p.Clips) ValidateClip(clip, $"Clip '{clip.Name}'");
         foreach (var c in p.Characters)
             if (p.FindRig(c.Rig) is null)
-                throw new ProjectFormatException("invalid_json", $"Character '{c.Name}' refers to a missing rig.");
+                throw Invalid($"Character '{c.Name}' refers to a missing rig.");
+
+        var propIds = new HashSet<Ids.ObjectId>();
         foreach (var prop in p.Props)
         {
+            if (prop is null) throw Invalid("A prop entry is empty.");
+            if (!propIds.Add(prop.Id)) throw Invalid($"Prop '{prop.Name}': duplicate prop id {prop.Id}.");
             if (prop.Shape == PropShape.Mesh && p.FindAsset(prop.Asset) is null)
-                throw new ProjectFormatException("invalid_json", $"Prop '{prop.Name}' refers to a missing embedded asset.");
-            if (!(prop.Size.X > 0 && prop.Size.Y > 0 && prop.Size.Z > 0) || !double.IsFinite(prop.Size.Length()))
-                throw new ProjectFormatException("invalid_json", $"Prop '{prop.Name}' has an invalid size.");
+                throw Invalid($"Prop '{prop.Name}' ({prop.Id}) refers to a missing embedded asset.");
+            // Per component (no Length(): 1e200² would overflow to infinity even though each value is finite).
+            var size = prop.Size;
+            if (!(size.X > 0 && size.X <= Prop.MaxSize && size.Y > 0 && size.Y <= Prop.MaxSize && size.Z > 0 && size.Z <= Prop.MaxSize))
+                throw Invalid($"Prop '{prop.Name}' ({prop.Id}) has an invalid size ({size.X:G4} × {size.Y:G4} × {size.Z:G4} m; each must be > 0 and ≤ {Prop.MaxSize:N0}).");
         }
+
         // Sequence items and prop attachments may refer to clips/characters deleted later (deleting is allowed);
         // the evaluators skip such references, so they are not load errors.
+        var seqIds = new HashSet<Ids.ObjectId>();
         foreach (var seq in p.Sequences)
+        {
+            if (seq is null) throw Invalid("A sequence entry is empty.");
+            if (!seqIds.Add(seq.Id)) throw Invalid($"Sequence '{seq.Name}': duplicate sequence id {seq.Id}.");
+            if (seq.Items is null) throw Invalid($"Sequence '{seq.Name}' has no item list.");
+            if (seq.Items.Count > ClipSequence.MaxItems) throw Invalid($"Sequence '{seq.Name}' has {seq.Items.Count} items (at most {ClipSequence.MaxItems}).");
+            // 'fps' is limited to 240 when given, but a sequence may take the project rate (project.set_frame_rate: up to 1000).
+            if (seq.Fps.Numerator <= 0 || seq.Fps.Denominator <= 0 || !(seq.Fps.FramesPerSecond <= 1000))
+                throw Invalid($"Sequence '{seq.Name}' has an invalid frame rate.");
+            var itemIds = new HashSet<Ids.ObjectId>();
             foreach (var item in seq.Items)
-                if (!(item.Speed > 0) || !double.IsFinite(item.Speed) || item.Loops < 1 || item.StartFrame < 0 || item.InFrame < 0 || item.BlendInFrames < 0
-                    || (item.OutFrame is long o && o <= item.InFrame))
-                    throw new ProjectFormatException("invalid_json", $"Sequence '{seq.Name}' has an invalid item.");
+            {
+                if (item is null) throw Invalid($"Sequence '{seq.Name}' has an empty item.");
+                if (!itemIds.Add(item.Id)) throw Invalid($"Sequence '{seq.Name}': duplicate item id {item.Id}.");
+                if (!ClipSequence.ItemInLimits(item))
+                    throw Invalid($"Sequence '{seq.Name}': item {item.Id} has invalid timing (speed {ClipSequence.MinSpeed}–{ClipSequence.MaxSpeed}, loops 1–{ClipSequence.MaxLoops}, frames 0–{ClipSequence.MaxFrame:N0}, out after in).");
+            }
+        }
+
+        var templateIds = new HashSet<Ids.ObjectId>();
         foreach (var t in p.Templates)
-            for (var i = 0; i < t.Rig.Bones.Count; i++)
-                if (!t.Rig.Bones[i].Parent.IsEmpty && t.Rig.Bones.FindIndex(b => b.Id == t.Rig.Bones[i].Parent) is var pi && (pi < 0 || pi >= i))
-                    throw new ProjectFormatException("invalid_json", $"Template '{t.Name}': its rig's bones are not parent-before-child.");
+        {
+            if (t is null) throw Invalid("A template entry is empty.");
+            if (!templateIds.Add(t.Id)) throw Invalid($"Template '{t.Name}': duplicate template id {t.Id}.");
+            if (t.Rig is null || t.Clip is null) throw Invalid($"Template '{t.Name}' has no rig or no clip.");
+            ValidateRig(t.Rig, $"Template '{t.Name}' (rig '{t.Rig.Name}')");
+            if (t.Rig.Bones.Count == 0 || t.Clip.Skeleton != t.Rig.Id)
+                throw Invalid($"Template '{t.Name}': its clip must animate its rig snapshot (which must have bones).");
+            ValidateClip(t.Clip, $"Template '{t.Name}' (clip '{t.Clip.Name}')");
+        }
     }
+
+    /// <summary>Bones non-null with unique ids, every parent present and listed before its children (so no cycles); O(n).</summary>
+    static void ValidateRig(Rig rig, string what)
+    {
+        if (rig.Bones is null) throw Invalid($"{what} has no bone list.");
+        var seen = new HashSet<Ids.ObjectId>();
+        foreach (var bone in rig.Bones)
+        {
+            if (bone is null) throw Invalid($"{what} has an empty bone entry.");
+            if (!bone.Parent.IsEmpty && !seen.Contains(bone.Parent))
+                throw Invalid($"{what}: bone '{bone.Name}' appears before its parent (or its parent is missing).");
+            if (!seen.Add(bone.Id))
+                throw Invalid($"{what}: duplicate bone id {bone.Id}.");
+        }
+    }
+
+    static void ValidateClip(Clip clip, string what)
+    {
+        if (clip.Tracks is null) throw Invalid($"{what} has no track list.");
+        foreach (var track in clip.Tracks)
+        {
+            if (track?.Keys is null) throw Invalid($"{what} has an empty track.");
+            for (var i = 1; i < track.Keys.Count; i++)
+                if (track.Keys[i] is null || track.Keys[i - 1] is null || track.Keys[i].Time <= track.Keys[i - 1].Time)
+                    throw Invalid($"{what}: keys must be in strictly increasing time order.");
+        }
+    }
+
+    static ProjectFormatException Invalid(string message) => new("invalid_json", message);
 
     static void AddEntry(ZipArchive zip, string path, byte[] bytes)
     {

@@ -61,6 +61,13 @@ public static class ExportCommands
     /// <summary>The clip, and the character (and its rig) to evaluate it on.</summary>
     internal static (Clip, Rig) Resolve(Project p, ObjectId clipId, ObjectId? characterId)
     {
+        var (clip, _, rig) = ResolveWith(p, clipId, characterId);
+        return (clip, rig);
+    }
+
+    /// <summary>The clip, the character to evaluate it on (given, or the first one using the clip's rig) and its rig.</summary>
+    internal static (Clip, Character, Rig) ResolveWith(Project p, ObjectId clipId, ObjectId? characterId)
+    {
         var clip = p.FindClip(clipId) ?? throw new CommandException("not_found", $"Clip '{clipId}' does not exist.");
         Character? character;
         if (characterId is { } cid)
@@ -71,7 +78,7 @@ public static class ExportCommands
         var rig = p.FindRig(character.Rig) ?? throw new CommandException("not_found", $"Rig of character '{character.Name}' does not exist.");
         if (!clip.Skeleton.IsEmpty && clip.Skeleton != rig.Id)
             throw new CommandException("rig_mismatch", $"Clip '{clip.Name}' animates another rig than character '{character.Name}'.");
-        return (clip, rig);
+        return (clip, character, rig);
     }
 
     internal static CommandException Map(ExportException e) => new(e.Code, e.Message);
@@ -88,7 +95,7 @@ public sealed class ExportAnimation(ObjectId clipId, ObjectId? characterId, stri
 
     public CommandOutcome Execute(Project p)
     {
-        var (clip, rig) = ExportCommands.Resolve(p, clipId, characterId);
+        var (clip, character, rig) = ExportCommands.ResolveWith(p, clipId, characterId);
         var given = Path.GetFullPath(path);
         var name = Path.GetFileName(given);
         if (!FilePaths.IsPortableFileName(name))
@@ -109,7 +116,7 @@ public sealed class ExportAnimation(ObjectId clipId, ObjectId? characterId, stri
                 throw new CommandException("file_exists", $"'{target}' already exists; pass overwrite=true to replace it.");
         }
 
-        var options = new ExportOptions { StartFrame = startFrame, EndFrame = endFrame, RootMotion = rootMotion };
+        var options = new ExportOptions { StartFrame = startFrame, EndFrame = endFrame, RootMotion = rootMotion, Character = character.Id };
         ExportResult result;
         try { result = AnimationExporter.Export(p, clip, rig, options, name); }
         catch (ExportException e) { throw ExportCommands.Map(e); }
@@ -187,13 +194,13 @@ public sealed class ValidateAnimation(string path, ObjectId clipId, ObjectId? ch
 
     public CommandOutcome Execute(Project p)
     {
-        var (clip, rig) = ExportCommands.Resolve(p, clipId, characterId);
+        var (clip, character, rig) = ExportCommands.ResolveWith(p, clipId, characterId);
         var full = Path.GetFullPath(path);
         if (!File.Exists(full)) throw new CommandException("not_found", $"File not found: {full}");
         var info = new FileInfo(full);
         if (info.Length == 0) throw new CommandException("not_a_file", "The file is empty or not a regular file.");
         if (info.Length > RigCommands.MaxImportBytes) throw new CommandException("too_large", "The file is larger than 256 MB.");
-        var report = ExportValidator.Validate(full, p, clip, rig);
+        var report = ExportValidator.Validate(full, p, clip, rig, character: character.Id);
         var data = report.ToJson(50);
         data["path"] = full;
         return new(Array.Empty<Change>(), data);

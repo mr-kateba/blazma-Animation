@@ -15,6 +15,9 @@ public sealed class Prop
     public string Name { get; set; } = "Prop";
     public PropShape Shape { get; set; } = PropShape.Box;
 
+    /// <summary>Largest size component (m) a prop may have; the archive refuses larger or non-finite sizes.</summary>
+    public const double MaxSize = 10_000;
+
     /// <summary>Size in metres: box = full extents; sphere = diameter in X; cylinder = diameter (X) × length (Y).</summary>
     public Vec3 Size { get; set; } = new(0.1, 0.1, 0.1);
 

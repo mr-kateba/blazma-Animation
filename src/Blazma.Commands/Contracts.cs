@@ -75,6 +75,10 @@ public sealed record CommandOutcome(IReadOnlyList<Change> Changes, JsonNode? Dat
 /// <item>Execute must be repeatable after Undo (that is how Redo works), so any generated ids
 /// are fixed when the command is constructed.</item>
 /// <item>ReadOnly commands never mutate and are never put on the undo stack.</item>
+/// <item>Exception safety: when Execute throws ANY exception the project must be exactly as before (validate first, or edit a
+/// copy and swap it in as the last step). <see cref="ProjectSession.Execute"/> reports CommandException as its code and any
+/// other non-fatal exception as "internal_error", and records nothing for undo. The bases SceneEdit, ClipEdit, PoseEdit and
+/// AddClipCommand guarantee this for whatever their Apply/Build throws.</item>
 /// </list>
 /// </summary>
 public interface ICommand

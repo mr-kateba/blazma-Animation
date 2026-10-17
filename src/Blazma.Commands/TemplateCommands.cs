@@ -99,6 +99,9 @@ public sealed class ApplyTemplate(string templateId, ObjectId characterId, doubl
         var template = TemplateCommands.RequireProject(p, templateId);
         var duration = template.Clip.Duration.ToSeconds();
         var timeScale = seconds is { } want && duration > 0 ? want / duration : 1;
+        if (!(timeScale > 0 && timeScale <= ClipRetargeter.MaxTimeScale))
+            throw new CommandException("invalid_args",
+                $"'durationSeconds' {seconds} is more than {ClipRetargeter.MaxTimeScale}× the template's length ({duration:0.###} s); at most {duration * ClipRetargeter.MaxTimeScale:0.###} s.");
         ClipRetargetResult r;
         try
         {
@@ -110,6 +113,7 @@ public sealed class ApplyTemplate(string templateId, ObjectId characterId, doubl
         catch (RetargetException e) { throw RetargetCommands.Map(e); }
         warnings.AddRange(r.Warnings.Select(w => new Diagnostic("template", w)));
         var clip = r.Clip;
+        RetargetClip.PropTrackWarnings(p, clip, characterId, warnings);
         clip.Metadata["template"] = template.Id.ToString();
         clip.Metadata["character"] = character.Name;
         if (timeScale != 1) clip.Metadata["durationSeconds"] = (duration * timeScale).ToString(CultureInfo.InvariantCulture);
@@ -126,6 +130,7 @@ public sealed class SaveClipTemplate(ObjectId clipId, string name, string descri
     readonly ObjectId _id = ObjectId.New();
     public override string Id => "template.save_clip";
     public override string Label => "Save clip as template";
+    protected override SceneParts Touches => SceneParts.Templates;
     protected override IReadOnlyList<Change> Changes => new[] { TemplateCommands.Changed(_id.ToString()) };
 
     protected override JsonNode? Apply(Project p, List<Diagnostic> warnings)
@@ -157,6 +162,7 @@ public sealed class DeleteTemplate(string templateId) : SceneEdit
     public override string Id => "template.delete";
     public override CommandEffect Effect => CommandEffect.Destructive;
     public override string Label => "Delete template";
+    protected override SceneParts Touches => SceneParts.Templates;
     protected override IReadOnlyList<Change> Changes => new[] { TemplateCommands.Changed(templateId) };
 
     protected override JsonNode? Apply(Project p, List<Diagnostic> warnings)

@@ -97,15 +97,23 @@ public static class RetargetCommands
 /// </summary>
 internal static class FootLockWriter
 {
-    public static JsonObject Apply(Clip clip, Rig rig, IReadOnlyList<FootContactSpan> spans, FootLockOptions options, List<Diagnostic> warnings)
+    /// <param name="rangeStart">First frame contacts were searched in (default 0): nothing before it is written, and a contact
+    /// starting there may have started earlier (partial: no ease at that edge).</param>
+    /// <param name="rangeEnd">Last frame contacts were searched in (default: the clip's last analysed frame): nothing after it is
+    /// written (except the end key when it is the clip's last analysed frame), and a contact reaching it is partial.</param>
+    public static JsonObject Apply(Clip clip, Rig rig, IReadOnlyList<FootContactSpan> spans, FootLockOptions options, List<Diagnostic> warnings,
+        long? rangeStart = null, long? rangeEnd = null)
     {
         var original = ClipEdit.CloneClip(clip);
-        var lastFrame = Math.Max(1, clip.DurationFrames);
+        var clipLast = Math.Max(1, clip.DurationFrames);
         var analyzedLast = BalanceAnalyzer.LastFrame(clip);
+        var first = Math.Max(0, rangeStart ?? 0);
+        var cutEnd = rangeEnd is long re && re < analyzedLast;
+        var lastFrame = cutEnd ? rangeEnd!.Value : clipLast;
         // Contact detection stops one frame before the clip end; a contact that reaches it continues to the end key.
-        spans = spans.Select(s => s.End >= analyzedLast ? s with { End = lastFrame } : s).ToList();
+        if (!cutEnd) spans = spans.Select(s => s.End >= analyzedLast ? s with { End = clipLast } : s).ToList();
         var notes = new List<string>();
-        var plan = FootLocker.Plan(original, rig, spans, options, lastFrame, notes);
+        var plan = FootLocker.Plan(original, rig, spans, options, lastFrame, notes, first, cutStart: first > 0, cutEnd: cutEnd);
         warnings.AddRange(notes.Select(n => new Diagnostic("no_leg_ik", n)));
         if (plan.Count == 0) throw new CommandException("no_leg_ik", "No contact can be locked: the feet have no leg IK chains (rig IK setup).");
 
@@ -142,7 +150,7 @@ internal static class FootLockWriter
         foreach (var e in edits)
         {
             foreach (var bad in e.Values.Where(kv => !TrackEdit.Finite(kv.Value)).Select(kv => kv.Key).ToList()) e.Values.Remove(bad);
-            e.Plan(clip, lastFrame);
+            e.Plan(clip, clipLast);
         }
         var total = edits.Sum(e => KeyBake.Count(e.Regions));
         if (total > PhysicsCommands.MaxKeys)
@@ -154,7 +162,7 @@ internal static class FootLockWriter
         var planned = plan.Select(x => x.Frame).ToHashSet();
         var regionFrames = edits.SelectMany(e => e.Regions).ToList();
         var from = Math.Max(0, regionFrames.Min(r => r.From) - 1);
-        var to = Math.Min(lastFrame, regionFrames.Max(r => r.To) + 1);
+        var to = Math.Min(clipLast, regionFrames.Max(r => r.To) + 1);
         double maxAnchor = 0, maxUntouched = 0;
         var anchors = plan.Where(x => x.InContact).GroupBy(x => x.Frame).ToDictionary(g => g.Key, g => g.ToList());
         for (var f = from; f <= to; f++)
@@ -213,6 +221,7 @@ public sealed class RetargetClip(ObjectId clipId, ObjectId fromCharacterId, Obje
         catch (RetargetException e) { throw RetargetCommands.Map(e); }
         var clip = result.Clip;
         warnings.AddRange(result.Warnings.Select(w => new Diagnostic("retarget", w)));
+        PropTrackWarnings(p, clip, to.Id, warnings);
         data = new JsonObject
         {
             ["sourceClipId"] = source.Id.ToString(),
@@ -225,6 +234,21 @@ public sealed class RetargetClip(ObjectId clipId, ObjectId fromCharacterId, Obje
         if (footLock)
             data["footLock"] = LockSourceContacts(source, fromRig, clip, toRig, 1, warnings);
         return clip;
+    }
+
+    /// <summary>
+    /// Prop tracks are copied unchanged (props do not depend on the skeleton). A prop attached to another character than
+    /// <paramref name="target"/> keeps its attachment: its keys stay offsets from that character's bone, so on the target it shows at
+    /// its free transform until it is attached there (prop.attach) — say so.
+    /// </summary>
+    internal static void PropTrackWarnings(Project p, Clip clip, ObjectId target, List<Diagnostic> warnings)
+    {
+        var props = clip.Tracks.Where(t => t.Target.Kind == TargetKind.Prop).Select(t => t.Target.Id).Distinct().ToList();
+        if (props.Count > 0) warnings.Add(new Diagnostic("prop_tracks", $"{props.Count} prop(s) keep their keys in the new clip."));
+        foreach (var id in props)
+            if (p.FindProp(id) is { Attachment: { } a } prop && a.Character != target)
+                warnings.Add(new Diagnostic("prop_attached_elsewhere",
+                    $"Prop '{prop.Name}' is attached to another character; its keys are offsets from that character's bone. Attach it to this character (prop.attach) to carry it."));
     }
 
     /// <summary>Contacts of the source clip (on its rig), locked on the new clip (frames scaled by <paramref name="timeScale"/>).</summary>
@@ -297,7 +321,7 @@ public sealed class FootLockClip(ObjectId clipId, ObjectId? characterId, FootLoc
         PhysicsCommands.RequireFeet(an);
         var spans = FootLocker.DetectContacts(clip, rig, options, s, e);
         if (spans.Count == 0) throw new CommandException("no_contacts", "No foot contact found in that range (try a larger 'threshold' or 'maxSpeed').");
-        var data = FootLockWriter.Apply(clip, rig, spans, options, warnings);
+        var data = FootLockWriter.Apply(clip, rig, spans, options, warnings, s, e);
         data["clipId"] = ClipId.ToString();
         return data;
     }

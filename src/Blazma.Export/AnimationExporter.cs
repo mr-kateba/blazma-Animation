@@ -50,7 +50,7 @@ public static class AnimationExporter
             (builder, bindings) = BuildMannequin(rig);
 
         var name = UniqueAnimationName(builder.Json, string.IsNullOrWhiteSpace(options.AnimationName) ? clip.Name : options.AnimationName.Trim());
-        var props = options.IncludeProps ? PropExport.Add(builder, project, baked, rig, bindings, warnings) : new List<ExportedProp>();
+        var props = options.IncludeProps ? PropExport.Add(builder, project, baked, rig, bindings, warnings, options.Character) : new List<ExportedProp>();
         var index = AddAnimation(builder, baked, bindings, name, options.CompactConstantChannels, options.IncludeProps ? props : null);
         var glb = builder.ToGlb();
         var sidecar = Sidecar.Build(project, baked, rig, bindings, name, glbFileName);

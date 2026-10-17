@@ -77,7 +77,7 @@ public static class PropCommands
         double C(string k)
         {
             var v = S.OptNumber(a, k) ?? 0.1;
-            return v is <= 0 or > 100 ? throw new CommandException("invalid_args", $"'{k}' must be between 0 and 100 m.") : v;
+            return !(v > 0 && v <= 100) ? throw new CommandException("invalid_args", $"'{k}' must be between 0 and 100 m.") : v;
         }
         return new Vec3(C("sizeX"), C("sizeY"), C("sizeZ"));
     }
@@ -178,6 +178,7 @@ public sealed class AddProp(string name, PropShape shape, Vec3 size, ObjectId? c
     readonly ObjectId _id = ObjectId.New();
     public override string Id => "prop.add";
     public override string Label => "Add prop";
+    protected override SceneParts Touches => SceneParts.Props;
     protected override IReadOnlyList<Change> Changes => new[] { PropCommands.Changed(_id) };
 
     protected override JsonNode? Apply(Project p, List<Diagnostic> warnings)
@@ -199,6 +200,7 @@ public sealed class ImportProp(string path, string? name, ObjectId? characterId,
     public override string Id => "prop.import";
     public override CommandEffect Effect => CommandEffect.External;
     public override string Label => "Import prop";
+    protected override SceneParts Touches => SceneParts.Props | SceneParts.Assets;
     protected override IReadOnlyList<Change> Changes => new[] { PropCommands.Changed(_id) };
 
     protected override JsonNode? Apply(Project p, List<Diagnostic> warnings)
@@ -237,12 +239,16 @@ public sealed class ImportProp(string path, string? name, ObjectId? characterId,
             warnings.AddRange(notes.Select(n => new Diagnostic("import", n)));
             _size = Bounds(scratch.Json);
         }
-        catch (ExportException e) { throw new CommandException("import_" + e.Code, e.Message); }
+        catch (ExportException e) { throw new CommandException(e.Code, e.Message); }
         return new ProjectAsset { FileName = System.IO.Path.GetFileName(full), MediaType = "model/gltf-binary", Data = bytes };
     }
 
-    /// <summary>Extent of the POSITION bounds of all meshes (ignores node transforms); 0.1 m when unknown.</summary>
-    static Vec3 Bounds(JsonObject json)
+    /// <summary>
+    /// Extent of the POSITION bounds of all meshes (ignores node transforms); 0.1 m when unknown. Bounds must be finite numbers within
+    /// ±<see cref="Prop.MaxSize"/> m (and the extent at most that), else the import is refused (invalid_gltf), so a prop can never get
+    /// a size the archive refuses.
+    /// </summary>
+    internal static Vec3 Bounds(JsonObject json)
     {
         var acc = json["accessors"] as JsonArray ?? new JsonArray();
         Vec3? min = null, max = null;
@@ -251,14 +257,20 @@ public sealed class ImportProp(string path, string? name, ObjectId? characterId,
                 if (Export.GltfAnimationReader.Int(prim?["attributes"]?["POSITION"]) is int i && i >= 0 && i < acc.Count
                     && acc[i]?["min"] is JsonArray mn && acc[i]?["max"] is JsonArray mx && mn.Count == 3 && mx.Count == 3)
                 {
-                    var a = new Vec3((double)mn[0]!, (double)mn[1]!, (double)mn[2]!);
-                    var b = new Vec3((double)mx[0]!, (double)mx[1]!, (double)mx[2]!);
+                    var a = new Vec3(Coord(mn[0]), Coord(mn[1]), Coord(mn[2]));
+                    var b = new Vec3(Coord(mx[0]), Coord(mx[1]), Coord(mx[2]));
                     min = min is { } m0 ? new Vec3(Math.Min(m0.X, a.X), Math.Min(m0.Y, a.Y), Math.Min(m0.Z, a.Z)) : a;
                     max = max is { } m1 ? new Vec3(Math.Max(m1.X, b.X), Math.Max(m1.Y, b.Y), Math.Max(m1.Z, b.Z)) : b;
                 }
         if (min is not { } lo || max is not { } hi) return new Vec3(0.1, 0.1, 0.1);
         var d = hi - lo;
+        if (!(d.X <= Prop.MaxSize && d.Y <= Prop.MaxSize && d.Z <= Prop.MaxSize))
+            throw new CommandException("invalid_gltf", $"The model is larger than {Prop.MaxSize:N0} m (or its bounds are inverted); check its units.");
         return new Vec3(Math.Max(1e-3, d.X), Math.Max(1e-3, d.Y), Math.Max(1e-3, d.Z));
+
+        static double Coord(JsonNode? n) =>
+            n is JsonValue v && v.TryGetValue<double>(out var x) && double.IsFinite(x) && Math.Abs(x) <= Prop.MaxSize ? x
+                : throw new CommandException("invalid_gltf", $"The model's POSITION bounds (accessor min/max) must be finite numbers within ±{Prop.MaxSize:N0} m.");
     }
 }
 
@@ -267,6 +279,7 @@ public sealed class RemoveProp(ObjectId propId) : SceneEdit
     public override string Id => "prop.remove";
     public override CommandEffect Effect => CommandEffect.Destructive;
     public override string Label => "Remove prop";
+    protected override SceneParts Touches => SceneParts.Props | SceneParts.Assets;
     protected override IReadOnlyList<Change> Changes => new[] { PropCommands.Changed(propId) };
 
     protected override JsonNode? Apply(Project p, List<Diagnostic> warnings)
@@ -286,6 +299,7 @@ public sealed class AttachProp(ObjectId propId, ObjectId characterId, string bon
 {
     public override string Id => "prop.attach";
     public override string Label => "Attach prop";
+    protected override SceneParts Touches => SceneParts.Props;
     protected override IReadOnlyList<Change> Changes => new[] { PropCommands.Changed(propId) };
 
     protected override JsonNode? Apply(Project p, List<Diagnostic> warnings)
@@ -305,6 +319,7 @@ public sealed class DetachProp(ObjectId propId, bool keepWorld) : SceneEdit
 {
     public override string Id => "prop.detach";
     public override string Label => "Detach prop";
+    protected override SceneParts Touches => SceneParts.Props;
     protected override IReadOnlyList<Change> Changes => new[] { PropCommands.Changed(propId) };
 
     protected override JsonNode? Apply(Project p, List<Diagnostic> warnings)
@@ -324,6 +339,7 @@ public sealed class SetPropTransform(ObjectId propId, JsonObject args) : SceneEd
 {
     public override string Id => "prop.set_transform";
     public override string Label => "Move prop";
+    protected override SceneParts Touches => SceneParts.Props;
     protected override IReadOnlyList<Change> Changes => new[] { PropCommands.Changed(propId) };
 
     protected override JsonNode? Apply(Project p, List<Diagnostic> warnings)
@@ -353,12 +369,14 @@ public sealed class EvaluateProp(ObjectId propId, ObjectId? clipId, double frame
         if (frame is < 0 or > 10_000_000) throw new CommandException("invalid_args", "'frame' must be between 0 and 10,000,000.");
         var clip = AnimationEditCommands.RequireClip(p, clipId.Value);
         Rig? rig = null;
-        if ((characterId ?? prop.Attachment?.Character) is { } cid && p.FindCharacter(cid) is { } ch) rig = p.FindRig(ch.Rig);
+        var who = characterId ?? prop.Attachment?.Character ?? default;
+        if (characterId is { } given && p.FindCharacter(given) is null) throw new CommandException("not_found", $"Character '{given}' does not exist.");
+        if (p.FindCharacter(who) is { } ch) rig = p.FindRig(ch.Rig);
         var time = Flicks.FromSeconds(frame / clip.Fps.FramesPerSecond);
         var data = PropCommands.Describe(p, prop);
         data["frame"] = frame;
         data["local"] = PropCommands.TransformJson(PropEvaluator.Local(prop, clip, time));
-        data["world"] = PropCommands.TransformJson(PropEvaluator.WorldAt(p, prop, clip, rig, time));
+        data["world"] = PropCommands.TransformJson(PropEvaluator.WorldAt(p, prop, clip, rig, time, who));
         return new CommandOutcome(Array.Empty<Change>(), data);
     }
 

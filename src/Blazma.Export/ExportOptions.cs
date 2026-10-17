@@ -35,6 +35,10 @@ public sealed record ExportOptions
 
     /// <summary>Write props attached to the character or animated by the clip as extra nodes with channels (default true).</summary>
     public bool IncludeProps { get; init; } = true;
+
+    /// <summary>The character the clip is exported with: only props attached to it (not to another character sharing its rig)
+    /// follow its bones. Null = the first character using the rig.</summary>
+    public Blazma.Core.Ids.ObjectId? Character { get; init; }
 }
 
 /// <summary>An export failure with a stable code (e.g. unsupported_source, missing_asset).</summary>

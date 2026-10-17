@@ -53,14 +53,28 @@ public abstract class AddClipCommand : ICommand
     protected abstract Clip Build(Project project, List<Diagnostic> warnings, out JsonObject data);
 }
 
+/// <summary>The scene collections a <see cref="SceneEdit"/> changes (only those are snapshotted for undo).</summary>
+[Flags]
+public enum SceneParts
+{
+    None = 0,
+    Sequences = 1,
+    Props = 2,
+    Templates = 4,
+    Assets = 8,
+    All = Sequences | Props | Templates | Assets,
+}
+
 /// <summary>
 /// Base for edits of the scene collections added in schema v4: sequences, props, templates (and embedded assets for imported
-/// props). Execute works on the live lists; on a CommandException everything is restored. Undo/redo swap deep snapshots of the
-/// three lists (assets are immutable and shared), so redo is exact even if the inputs changed since.
+/// props). Execute works on the live lists; on ANY exception everything is restored. Undo/redo swap snapshots of only the
+/// collections the edit declares in <see cref="Touches"/>: sequences and props are deep copies (serialized); templates and
+/// assets are immutable once created (no command edits one in place), so their lists are shallow copies sharing the objects —
+/// a snapshot never copies the template library's clips and rigs. Redo is exact even if the inputs changed since.
 /// </summary>
 public abstract class SceneEdit : ICommand
 {
-    sealed record State(byte[] Sequences, byte[] Props, byte[] Templates, List<ProjectAsset> Assets);
+    sealed record State(byte[]? Sequences, byte[]? Props, List<ClipTemplate>? Templates, List<ProjectAsset>? Assets);
 
     State? _before;
     State? _after;
@@ -99,7 +113,8 @@ public abstract class SceneEdit : ICommand
         return Changes;
     }
 
-    /// <summary>Change the project's sequences/props/templates/assets. Validate first; throw CommandException to abort.</summary>
+    /// <summary>Change the project's sequences/props/templates/assets (only those in <see cref="Touches"/>). Validate first;
+    /// throw CommandException to abort.</summary>
     protected abstract JsonNode? Apply(Project project, List<Diagnostic> warnings);
 
     public virtual bool TryMerge(ICommand next) => false;
@@ -113,18 +128,25 @@ public abstract class SceneEdit : ICommand
         return true;
     }
 
-    static State Capture(Project p) => new(
-        JsonSerializer.SerializeToUtf8Bytes(p.Sequences, ProjectArchive.JsonOptions),
-        JsonSerializer.SerializeToUtf8Bytes(p.Props, ProjectArchive.JsonOptions),
-        JsonSerializer.SerializeToUtf8Bytes(p.Templates, ProjectArchive.JsonOptions),
-        new List<ProjectAsset>(p.Assets));
+    /// <summary>The collections this edit changes (default: all). Only these are captured and restored.</summary>
+    protected virtual SceneParts Touches => SceneParts.All;
+
+    State Capture(Project p)
+    {
+        var t = Touches;
+        return new(
+            t.HasFlag(SceneParts.Sequences) ? JsonSerializer.SerializeToUtf8Bytes(p.Sequences, ProjectArchive.JsonOptions) : null,
+            t.HasFlag(SceneParts.Props) ? JsonSerializer.SerializeToUtf8Bytes(p.Props, ProjectArchive.JsonOptions) : null,
+            t.HasFlag(SceneParts.Templates) ? new List<ClipTemplate>(p.Templates) : null,
+            t.HasFlag(SceneParts.Assets) ? new List<ProjectAsset>(p.Assets) : null);
+    }
 
     static void Restore(Project p, State s)
     {
-        p.Sequences = JsonSerializer.Deserialize<List<ClipSequence>>(s.Sequences, ProjectArchive.JsonOptions)!;
-        p.Props = JsonSerializer.Deserialize<List<Prop>>(s.Props, ProjectArchive.JsonOptions)!;
-        p.Templates = JsonSerializer.Deserialize<List<ClipTemplate>>(s.Templates, ProjectArchive.JsonOptions)!;
-        p.Assets = new List<ProjectAsset>(s.Assets);
+        if (s.Sequences is not null) p.Sequences = JsonSerializer.Deserialize<List<ClipSequence>>(s.Sequences, ProjectArchive.JsonOptions)!;
+        if (s.Props is not null) p.Props = JsonSerializer.Deserialize<List<Prop>>(s.Props, ProjectArchive.JsonOptions)!;
+        if (s.Templates is not null) p.Templates = new List<ClipTemplate>(s.Templates);
+        if (s.Assets is not null) p.Assets = new List<ProjectAsset>(s.Assets);
     }
 
     internal static T Clone<T>(T value) =>

@@ -84,12 +84,17 @@ public static class FootLocker
 
     /// <summary>
     /// Per frame and foot, the IK target/pole to key for locking <paramref name="spans"/> on <paramref name="clip"/> evaluated
-    /// on <paramref name="rig"/>. Frames are limited to [0, lastFrame]. Feet without a leg IK chain are skipped (warning).
-    /// When the blend of one span overlaps another span of the same foot, the larger weight wins.
+    /// on <paramref name="rig"/>. Frames are limited to [<paramref name="firstFrame"/>, <paramref name="lastFrame"/>]: the ease
+    /// onto/off an anchor is fitted inside that range (shortened when the span is close to its edge). A span that touches a
+    /// range edge flagged as cut (<paramref name="cutStart"/>/<paramref name="cutEnd"/>: the contact may continue outside the
+    /// range) is partial: its anchor is the mean of its visible part and it has no ease at that edge (the foot is already
+    /// planted there). Feet without a leg IK chain are skipped (warning). When the blend of one span overlaps another span of
+    /// the same foot, the larger weight wins.
     /// </summary>
     public static IReadOnlyList<FootLockFrame> Plan(Clip clip, Rig rig, IReadOnlyList<FootContactSpan> spans, FootLockOptions options, long lastFrame,
-        List<string> warnings)
+        List<string> warnings, long firstFrame = 0, bool cutStart = false, bool cutEnd = false)
     {
+        firstFrame = Math.Max(0, firstFrame);
         var ev = new RigEvaluator(rig);
         var feet = FootModel.For(rig, ev);
         var result = new Dictionary<(int, long), FootLockFrame>();
@@ -115,15 +120,18 @@ public static class FootLocker
                 continue;
             }
             int iu = ev.IndexOf(chain.Upper), il = ev.IndexOf(chain.Lower), ie = ev.IndexOf(chain.End);
-            var s0 = Math.Max(0, span.Start);
+            var s0 = Math.Max(firstFrame, span.Start);
             var s1 = Math.Min(lastFrame, span.End);
             if (s1 < s0) continue;
             var anchor = Vec3.Zero;
             for (var f = s0; f <= s1; f++) anchor += At(f).Item2[ie].Translation;
             anchor /= s1 - s0 + 1;
-            for (var f = Math.Max(0, s0 - b); f <= Math.Min(lastFrame, s1 + b); f++)
+            // Ease lengths fitted inside the range; none at a cut edge.
+            var bIn = cutStart && s0 == firstFrame ? 0 : (int)Math.Min(b, s0 - firstFrame);
+            var bOut = cutEnd && s1 == lastFrame ? 0 : (int)Math.Min(b, lastFrame - s1);
+            for (var f = s0 - bIn; f <= s1 + bOut; f++)
             {
-                double w = f < s0 ? Smooth((double)(f - (s0 - b - 1)) / (b + 1)) : f > s1 ? Smooth((double)(s1 + b + 1 - f) / (b + 1)) : 1;
+                double w = f < s0 ? Smooth((double)(f - (s0 - bIn - 1)) / (bIn + 1)) : f > s1 ? Smooth((double)(s1 + bOut + 1 - f) / (bOut + 1)) : 1;
                 if (w <= 0) continue;
                 var (_, m) = At(f);
                 var pos = Vec3.Lerp(m[ie].Translation, anchor, w);

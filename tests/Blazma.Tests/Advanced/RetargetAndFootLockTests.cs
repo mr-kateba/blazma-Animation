@@ -216,14 +216,20 @@ public class RetargetAndFootLockTests
         Assert.Equal(2, d["spans"]!.AsArray().Count); // one contact per foot over the whole range
         Assert.InRange((double)d["maxAnchorError"]!, 0, 0.002);
         Assert.Equal(0, (double)d["maxUntouchedChange"]!);
-        Assert.Equal(26, (long)d["changedStartFrame"]!);
-        Assert.Equal(64, (long)d["changedEndFrame"]!);
+        // Writes stay inside the range (review 8 #16): the contacts are cut at both edges, so they are partial (no ease there).
+        Assert.Equal(30, (long)d["changedStartFrame"]!);
+        Assert.Equal(60, (long)d["changedEndFrame"]!);
+        foreach (var span in d["spans"]!.AsArray())
+        {
+            Assert.Equal(30, (long)span!["startFrame"]!); // partial contacts: locked right up to the cut edges, no ease
+            Assert.Equal(60, (long)span["endFrame"]!);
+        }
         var locked = P8.Clip(s, id);
         foreach (var side in P8.Sides) Assert.InRange(Slide(rig, locked, side, 30, 60), 0, 0.01);
-        // Every frame outside contact ± blend gives exactly the original pose.
+        // Every frame outside the range gives exactly the original pose.
         for (var f = 0; f <= clip.DurationFrames; f++)
         {
-            if (f is >= 26 and <= 64) continue;
+            if (f is >= 30 and <= 60) continue;
             var m = P8.Model(rig, locked, f);
             for (var b = 0; b < m.Length; b++)
                 Assert.True((m[b].Translation - originalModels[f][b].Translation).Length() <= 1e-9 && Quat.AngleBetween(m[b].Rotation, originalModels[f][b].Rotation) <= 1e-9, $"frame {f} bone {b}");

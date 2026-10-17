@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Blazma.Core.Ids;
 using Blazma.Core.Mathematics;
 using Blazma.Core.Model;
 using Blazma.Core.Timing;
@@ -19,9 +20,11 @@ public sealed record ExportedProp(Prop Prop, int Node, int Bone, Transform[] Loc
 /// </summary>
 public static class PropExport
 {
-    public static List<ExportedProp> Add(GltfBuilder b, Project project, BakedClip baked, Rig rig, NodeBinding[] bindings, List<string> warnings)
+    public static List<ExportedProp> Add(GltfBuilder b, Project project, BakedClip baked, Rig rig, NodeBinding[] bindings, List<string> warnings,
+        ObjectId? character = null)
     {
-        var props = PropEvaluator.PropsFor(project, baked.Clip, rig);
+        var who = CharacterFor(project, rig, character);
+        var props = PropEvaluator.PropsFor(project, baked.Clip, rig, who);
         var result = new List<ExportedProp>();
         if (props.Count == 0) return result;
         var nodes = b.Arr("nodes");
@@ -30,14 +33,14 @@ public static class PropExport
         int? material = null;
         foreach (var prop in props)
         {
-            var bone = PropEvaluator.AttachedBone(project, prop, rig);
+            var bone = PropEvaluator.AttachedBone(project, prop, rig, who);
             var locals = new Transform[baked.FrameCount];
             for (var i = 0; i < locals.Length; i++)
             {
                 var elapsed = Flicks.FromFrame(baked.StartFrame + i, clip.Fps);
                 var time = clip.Loop.Enabled ? ClipEvaluator.PlaybackTime(clip, elapsed) : elapsed;
                 var local = PropEvaluator.Local(prop, clip, time);
-                locals[i] = bone >= 0 ? local : PropEvaluator.World(project, prop, local, rig, null);
+                locals[i] = bone >= 0 ? local : PropEvaluator.World(project, prop, local, rig, null, who);
             }
             if (bone < 0 && prop.Attachment is not null)
                 warnings.Add($"Prop '{prop.Name}' is attached to another character; it is exported at its free transform.");
@@ -101,6 +104,10 @@ public static class PropExport
         }
         return result;
     }
+
+    /// <summary>The character a clip is exported with: the given one, else the first character using <paramref name="rig"/>.</summary>
+    public static ObjectId CharacterFor(Project project, Rig rig, ObjectId? character) =>
+        character ?? project.Characters.Find(c => c.Rig == rig.Id)?.Id ?? default;
 
     static JsonArray SceneRoots(GltfBuilder b)
     {
@@ -214,30 +221,61 @@ public static class PropExport
 
     // ---- copying an embedded .glb ---------------------------------------------------------------
 
+    /// <summary>Most nodes a prop model may have (the whole file, not only the default scene).</summary>
+    public const int MaxNodes = 10_000;
+
+    /// <summary>Deepest node nesting a prop model may have (roots are depth 1).</summary>
+    public const int MaxDepth = 256;
+
     /// <summary>
     /// Appends the default scene of <paramref name="src"/> (nodes, meshes, accessors, buffer views, materials, textures, images,
-    /// samplers) to <paramref name="b"/>. Skins, cameras, morph weights and animations are dropped. Returns the new root nodes.
-    /// Files that require extensions are refused (unsupported_source).
+    /// samplers) to <paramref name="b"/>. Skins, cameras, morph weights and animations are dropped; every glTF extension object is
+    /// stripped (so the output never uses an extension it does not declare); images that are external files are dropped together
+    /// with the textures and material slots that use them (warning). Returns the new root nodes.
+    /// <para>Hostile input is bounded: each source buffer's used range is copied once (overlapping buffer views share it, so the
+    /// copied bytes never exceed the source buffers), at most <see cref="MaxNodes"/> nodes and <see cref="MaxDepth"/> levels are
+    /// accepted, the hierarchy is walked without recursion and a node reached twice (cycle or shared child) is refused. Every
+    /// malformed input throws <see cref="ExportException"/> (invalid_gltf / unsupported_source), never another exception.</para>
     /// </summary>
     public static List<int> AppendGlbScene(GltfBuilder b, GlbContainer src, List<string> warnings, string name)
     {
         var json = src.Json;
         if (json["extensionsRequired"] is JsonArray { Count: > 0 } req)
-            throw new ExportException("unsupported_source", $"The model needs glTF extensions ({string.Join(", ", req.Select(x => (string?)x))}).");
-        var views = json["bufferViews"] as JsonArray ?? new JsonArray();
-        var viewMap = new int[views.Count];
+            throw new ExportException("unsupported_source", $"The model needs glTF extensions ({string.Join(", ", req.Select(x => x is JsonValue v && v.TryGetValue<string>(out var t) ? t : "?"))}).");
+        var srcNodes = ArrayOf(json, "nodes");
+        if (srcNodes.Count > MaxNodes) throw Bad($"The model has {srcNodes.Count} nodes (at most {MaxNodes:N0}).");
+        var stripped = new SortedSet<string>(StringComparer.Ordinal);
+
+        // Buffer views: the used range of every source buffer is copied once; views are rebased into it.
+        var views = ArrayOf(json, "bufferViews");
+        var parsed = new (int Buffer, long Offset, long Length, int? Target, int? Stride)[views.Count];
         var buffers = new Dictionary<int, byte[]>();
+        var used = new Dictionary<int, (long From, long To)>();
         for (var i = 0; i < views.Count; i++)
         {
-            var v = (JsonObject)views[i]!;
-            var buffer = GltfAnimationReader.Int(v["buffer"]) ?? 0;
+            var v = Obj(views, i, "bufferViews");
+            var buffer = GltfAnimationReader.Int(v["buffer"]) ?? throw Bad($"bufferViews[{i}] has no valid buffer.");
             if (!buffers.TryGetValue(buffer, out var data)) buffers[buffer] = data = GltfAnimationReader.BufferData(src, buffer);
-            var off = GltfAnimationReader.Int(v["byteOffset"]) ?? 0;
-            var len = GltfAnimationReader.Int(v["byteLength"]) ?? 0;
-            if (off < 0 || len < 0 || off + len > data.Length) throw new ExportException("invalid_gltf", $"bufferViews[{i}] is outside its buffer.");
-            viewMap[i] = b.AddBufferView(data.AsSpan(off, len), GltfAnimationReader.Int(v["target"]), GltfAnimationReader.Int(v["byteStride"]));
+            var off = v["byteOffset"] is null ? 0 : GltfAnimationReader.Long(v["byteOffset"]) ?? -1;
+            var len = GltfAnimationReader.Long(v["byteLength"]) ?? -1;
+            if (off < 0 || len < 0 || off > data.Length || len > data.Length - off) throw Bad($"bufferViews[{i}] is outside its buffer.");
+            parsed[i] = (buffer, off, len, GltfAnimationReader.Int(v["target"]), GltfAnimationReader.Int(v["byteStride"]));
+            used[buffer] = used.TryGetValue(buffer, out var r) ? (Math.Min(r.From, off), Math.Max(r.To, off + len)) : (off, off + len);
         }
-        int MapView(JsonNode? n) => GltfAnimationReader.Int(n) is int i && i >= 0 && i < viewMap.Length ? viewMap[i] : throw new ExportException("invalid_gltf", "A bufferView reference is out of range.");
+        var bases = new Dictionary<int, (long Base, long From)>();
+        foreach (var (buffer, (from, to)) in used.OrderBy(kv => kv.Key))
+        {
+            var aligned = from - from % 4; // keeps every view's offset modulo 4, so accessor alignment is preserved
+            bases[buffer] = (b.AppendBytes(buffers[buffer].AsSpan((int)aligned, (int)(to - aligned))), aligned);
+        }
+        var viewMap = new int[views.Count];
+        for (var i = 0; i < views.Count; i++)
+        {
+            var (buffer, off, len, target, stride) = parsed[i];
+            var (bas, from) = bases[buffer];
+            viewMap[i] = b.AddBufferViewAt(checked((int)(bas + off - from)), (int)len, target, stride);
+        }
+        int MapView(JsonNode? n) => GltfAnimationReader.Int(n) is int i && i >= 0 && i < viewMap.Length ? viewMap[i] : throw Bad("A bufferView reference is out of range.");
 
         var accMap = Copy("accessors", a =>
         {
@@ -247,35 +285,48 @@ public static class PropExport
                 if (sp["indices"] is JsonObject si) si["bufferView"] = MapView(si["bufferView"]);
                 if (sp["values"] is JsonObject sv) sv["bufferView"] = MapView(sv["bufferView"]);
             }
+            return true;
         });
-        var samplerMap = Copy("samplers", _ => { });
+        var samplerMap = Copy("samplers", _ => true);
         var imageMap = Copy("images", img =>
         {
-            if (img["bufferView"] is not null) img["bufferView"] = MapView(img["bufferView"]);
-            else if ((string?)img["uri"] is { } uri && !uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+            if (img["bufferView"] is not null)
             {
-                warnings.Add($"Prop '{name}': image '{uri}' is an external file and was not copied.");
+                img["bufferView"] = MapView(img["bufferView"]);
                 img.Remove("uri");
+                return true;
             }
+            if (img["uri"] is JsonValue u && u.TryGetValue<string>(out var uri) && uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) return true;
+            var what = img["uri"] is JsonValue u2 && u2.TryGetValue<string>(out var ext) ? $"image '{ext}' is an external file" : "an image has no data";
+            warnings.Add($"Prop '{name}': {what}; it was not copied (textures using it are dropped).");
+            return false;
         });
         var textureMap = Copy("textures", t =>
         {
-            t.Remove("extensions");
             if (GltfAnimationReader.Int(t["sampler"]) is int s) t["sampler"] = Remap(samplerMap, s);
-            if (GltfAnimationReader.Int(t["source"]) is int im) t["source"] = Remap(imageMap, im);
+            else t.Remove("sampler");
+            // A texture whose only image was dropped (or that names its image through an extension) has nothing to show.
+            if (GltfAnimationReader.Int(t["source"]) is not int im || Remap(imageMap, im) is var mapped && mapped < 0) return false;
+            t["source"] = mapped;
+            return true;
         });
         var materialMap = Copy("materials", m =>
         {
-            m.Remove("extensions");
-            foreach (var info in TextureInfos(m)) info["index"] = Remap(textureMap, GltfAnimationReader.Int(info["index"]) ?? -1);
+            foreach (var (owner, key) in TextureSlots(m))
+            {
+                var index = Remap(textureMap, GltfAnimationReader.Int(owner[key]?["index"]) ?? -1);
+                if (index < 0) owner.Remove(key);
+                else owner[key]!["index"] = index;
+            }
+            return true;
         });
         var meshMap = Copy("meshes", mesh =>
         {
             mesh.Remove("weights");
-            foreach (var prim in mesh["primitives"] as JsonArray ?? new JsonArray())
+            if (mesh["primitives"] is not JsonArray prims) throw Bad("A mesh has no primitives.");
+            foreach (var prim in prims)
             {
-                if (prim is not JsonObject p) continue;
-                p.Remove("extensions");
+                if (prim is not JsonObject p) throw Bad("A mesh primitive is not an object.");
                 if (p["attributes"] is JsonObject attrs)
                     foreach (var key in attrs.Select(kv => kv.Key).ToList())
                     {
@@ -288,57 +339,114 @@ public static class PropExport
                     foreach (var tg in targets.OfType<JsonObject>())
                         foreach (var key in tg.Select(kv => kv.Key).ToList()) tg[key] = Remap(accMap, GltfAnimationReader.Int(tg[key]) ?? -1);
             }
+            return true;
         });
 
-        // Nodes of the default scene, depth first.
-        var srcNodes = json["nodes"] as JsonArray ?? new JsonArray();
+        // Roots of the default scene (or every parentless node when there is no scene).
         var sceneIndex = GltfAnimationReader.Int(json["scene"]) ?? 0;
         var scenes = json["scenes"] as JsonArray;
-        var roots = scenes is { Count: > 0 } && sceneIndex >= 0 && sceneIndex < scenes.Count
-            ? (scenes[sceneIndex]?["nodes"] as JsonArray ?? new JsonArray()).Select(n => GltfAnimationReader.Int(n) ?? -1).ToList()
-            : Enumerable.Range(0, srcNodes.Count).Where(i => !srcNodes.Any(n => (n?["children"] as JsonArray)?.Any(c => GltfAnimationReader.Int(c) == i) == true)).ToList();
+        List<int> roots;
+        if (scenes is { Count: > 0 } && sceneIndex >= 0 && sceneIndex < scenes.Count)
+            roots = ((scenes[sceneIndex] as JsonObject)?["nodes"] as JsonArray ?? new JsonArray()).Select(n => GltfAnimationReader.Int(n) ?? -1).ToList();
+        else
+        {
+            var children = new HashSet<int>();
+            for (var i = 0; i < srcNodes.Count; i++)
+                foreach (var c in (srcNodes[i] as JsonObject)?["children"] as JsonArray ?? new JsonArray())
+                    if (GltfAnimationReader.Int(c) is int ci) children.Add(ci);
+            roots = Enumerable.Range(0, srcNodes.Count).Where(i => !children.Contains(i)).ToList();
+        }
+
+        // Nodes, depth first in document order, with an explicit stack (no recursion on file data).
         var dest = b.Arr("nodes");
         var visited = new HashSet<int>();
         var skipped = false;
-        int CopyNode(int i)
+        var result = new List<int>();
+        var stack = new Stack<(int Src, JsonArray? Parent, int Depth)>();
+        for (var r = roots.Count - 1; r >= 0; r--) stack.Push((roots[r], null, 1));
+        while (stack.Count > 0)
         {
-            if (i < 0 || i >= srcNodes.Count || !visited.Add(i)) throw new ExportException("invalid_gltf", "The model's node hierarchy is invalid.");
-            var n = (JsonObject)srcNodes[i]!.DeepClone();
+            var (i, parentKids, depth) = stack.Pop();
+            if (i < 0 || i >= srcNodes.Count || !visited.Add(i)) throw Bad("The model's node hierarchy is invalid (a missing node, a cycle or a node with two parents).");
+            if (depth > MaxDepth) throw Bad($"The model's node hierarchy is deeper than {MaxDepth} levels.");
+            var n = (JsonObject)Obj(srcNodes, i, "nodes").DeepClone();
             if (n.Remove("skin") | n.Remove("camera") | n.Remove("weights")) skipped = true;
-            n.Remove("extensions");
+            Strip(n, stripped);
             if (GltfAnimationReader.Int(n["mesh"]) is int mesh) n["mesh"] = Remap(meshMap, mesh);
+            else n.Remove("mesh");
             var kids = (n["children"] as JsonArray ?? new JsonArray()).Select(c => GltfAnimationReader.Int(c) ?? -1).ToList();
             n.Remove("children");
             var index = GltfBuilder.Add(dest, n);
-            if (kids.Count > 0) n["children"] = new JsonArray(kids.Select(k => (JsonNode?)CopyNode(k)).ToArray());
-            return index;
+            if (parentKids is null) result.Add(index); else parentKids.Add(index);
+            if (kids.Count == 0) continue;
+            var own = new JsonArray();
+            n["children"] = own;
+            for (var k = kids.Count - 1; k >= 0; k--) stack.Push((kids[k], own, depth + 1));
         }
-        var result = roots.Select(CopyNode).ToList();
         if (skipped) warnings.Add($"Prop '{name}': skins, cameras and morph weights of its model are not exported (static mesh only).");
+        if (stripped.Count > 0) warnings.Add($"Prop '{name}': glTF extensions of its model are not exported ({string.Join(", ", stripped)}).");
         return result;
 
-        int[] Copy(string array, Action<JsonObject> fix)
+        // Copies the array's items (fix returns false to drop one: its map entry is −1).
+        int[] Copy(string array, Func<JsonObject, bool> fix)
         {
-            var source = json[array] as JsonArray ?? new JsonArray();
+            var source = ArrayOf(json, array);
             var map = new int[source.Count];
             for (var i = 0; i < source.Count; i++)
             {
-                var item = (JsonObject)source[i]!.DeepClone();
-                fix(item);
-                map[i] = GltfBuilder.Add(b.Arr(array), item);
+                var item = (JsonObject)Obj(source, i, array).DeepClone();
+                Strip(item, stripped);
+                map[i] = fix(item) ? GltfBuilder.Add(b.Arr(array), item) : -1;
             }
             return map;
         }
-
-        static int Remap(int[] map, int i) => i >= 0 && i < map.Length ? map[i] : throw new ExportException("invalid_gltf", "A reference in the model is out of range.");
     }
 
-    static IEnumerable<JsonObject> TextureInfos(JsonObject material)
+    static ExportException Bad(string message) => new("invalid_gltf", message);
+
+    static JsonArray ArrayOf(JsonObject json, string key) => json[key] switch
     {
+        null => new JsonArray(),
+        JsonArray a => a,
+        _ => throw Bad($"'{key}' is not an array."),
+    };
+
+    static JsonObject Obj(JsonArray array, int i, string name) => array[i] as JsonObject ?? throw Bad($"{name}[{i}] is not an object.");
+
+    /// <summary>Index in the copy, or −1 when the item was dropped; invalid_gltf when out of range.</summary>
+    static int Remap(int[] map, int i) => i >= 0 && i < map.Length ? map[i] : throw Bad("A reference in the model is out of range.");
+
+    /// <summary>Removes every "extensions" object (outside "extras") and records the extension names.</summary>
+    static void Strip(JsonObject o, SortedSet<string> names)
+    {
+        var stack = new Stack<JsonNode>();
+        stack.Push(o);
+        while (stack.Count > 0)
+        {
+            switch (stack.Pop())
+            {
+                case JsonObject obj:
+                    if (obj["extensions"] is JsonObject ext) foreach (var kv in ext) names.Add(kv.Key);
+                    if (obj.ContainsKey("extensions")) obj.Remove("extensions");
+                    foreach (var kv in obj)
+                        if (kv.Key != "extras" && kv.Value is not null) stack.Push(kv.Value);
+                    break;
+                case JsonArray arr:
+                    foreach (var x in arr) if (x is not null) stack.Push(x);
+                    break;
+            }
+        }
+    }
+
+    /// <summary>The texture slots (owner object, key) a material uses.</summary>
+    static List<(JsonObject Owner, string Key)> TextureSlots(JsonObject material)
+    {
+        var list = new List<(JsonObject, string)>();
         if (material["pbrMetallicRoughness"] is JsonObject pbr)
             foreach (var k in new[] { "baseColorTexture", "metallicRoughnessTexture" })
-                if (pbr[k] is JsonObject t) yield return t;
+                if (pbr[k] is JsonObject) list.Add((pbr, k));
         foreach (var k in new[] { "normalTexture", "occlusionTexture", "emissiveTexture" })
-            if (material[k] is JsonObject t) yield return t;
+            if (material[k] is JsonObject) list.Add((material, k));
+        return list;
     }
 }

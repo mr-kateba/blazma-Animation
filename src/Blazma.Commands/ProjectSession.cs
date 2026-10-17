@@ -73,6 +73,14 @@ public sealed class ProjectSession
         {
             return Log(command, origin, CommandResult.Fail("not_found", e.Message));
         }
+        catch (Exception e) when (IsRecoverable(e))
+        {
+            // Safety net: a bug or unforeseen input in a command must not crash the app (the UI calls this on its main thread).
+            // Commands are exception-safe by contract (ICommand): they validate before mutating or work on copies and swap them in
+            // last, and the shared bases (SceneEdit, ClipEdit, PoseEdit, AddClipCommand) restore or never touch the project when
+            // Apply/Build throws anything. So nothing is half-applied, and the failed command is not recorded for undo.
+            return Log(command, origin, CommandResult.Fail("internal_error", $"{command.Id} failed unexpectedly ({e.GetType().Name}): {e.Message}"));
+        }
 
         string? txId = null;
         if (command.Effect != CommandEffect.ReadOnly)
@@ -98,6 +106,12 @@ public sealed class ProjectSession
             outcome.Warnings ?? Array.Empty<Diagnostic>(), null, txId);
         return Log(command, origin, result);
     }
+
+    /// <summary>Exceptions the safety net in <see cref="Execute"/> turns into an "internal_error" result: everything except
+    /// conditions the process cannot continue after (out of memory, stack overflow, invalid program, access violations).</summary>
+    static bool IsRecoverable(Exception e) =>
+        e is not (OutOfMemoryException or InsufficientExecutionStackException or StackOverflowException or InvalidProgramException
+            or AccessViolationException or BadImageFormatException);
 
     /// <summary>
     /// Groups several commands into one undo step (gizmo drags, multi-step agent tasks).

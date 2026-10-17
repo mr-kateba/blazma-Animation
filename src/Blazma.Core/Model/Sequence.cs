@@ -11,6 +11,28 @@ namespace Blazma.Core.Model;
 /// </summary>
 public sealed class ClipSequence
 {
+    /// <summary>Most items in one sequence.</summary>
+    public const int MaxItems = 256;
+
+    /// <summary>Largest start/in/out/blend frame of an item (sequence or clip frames).</summary>
+    public const long MaxFrame = 10_000_000;
+
+    /// <summary>Most repeats of an item.</summary>
+    public const int MaxLoops = 1000;
+
+    /// <summary>Playback speed range of an item.</summary>
+    public const double MinSpeed = 0.01, MaxSpeed = 10;
+
+    /// <summary>Highest sequence frame rate.</summary>
+    public const int MaxFps = 240;
+
+    /// <summary>True when every timing value of <paramref name="item"/> is within the limits the commands enforce (the archive
+    /// refuses anything else).</summary>
+    public static bool ItemInLimits(SequenceItem item) =>
+        item.Speed >= MinSpeed && item.Speed <= MaxSpeed && item.Loops is >= 1 and <= MaxLoops
+        && item.StartFrame is >= 0 and <= MaxFrame && item.InFrame is >= 0 and <= MaxFrame && item.BlendInFrames is >= 0 and <= MaxFrame
+        && (item.OutFrame is not long o || (o > item.InFrame && o <= MaxFrame));
+
     public ObjectId Id { get; set; } = ObjectId.New();
     public string Name { get; set; } = "Sequence";
 
