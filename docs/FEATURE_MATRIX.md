@@ -47,7 +47,14 @@
 | ✅ كشف التلامس / Foot locking | 8 | Physics/Motion | Simple | ✓ | clip_contacts / clip_foot_lock |
 | ✅ أنيميشن الأجسام (Props، ربط بعظمة، تصدير GLB) | 8 | Core/Motion/Export | Simple | ✓ | prop_add / prop_import / prop_remove / prop_attach / prop_detach / prop_set_transform / prop_evaluate / key_set {props} |
 | ✅ قوالب المقاطع (مدمجة + مكتبة المشروع) | 8 | AI/Motion | Simple | ✓ | template_list / template_apply / template_save_clip / template_delete |
-| أحداث القتال + Hitbox/Hurtbox | 9 | Combat | Adv | ✓ | combat_* |
+| ✅ أحداث مكتوبة (hit/footstep/sound/vfx/custom) بحمولة محدودة | 9 | Core/Commands | Adv | ✓ | event_add / event_update / event_remove / event_list |
+| ✅ مراحل الهجوم + Hitboxes (كرة/كبسولة/صندوق على عظمة أو جسم، إطارات نشطة، ضرر/دفع/توقف) | 9 | Combat | Adv | ✓ | combat_set_phases / hitbox_add / hitbox_update / hitbox_remove / hitbox_list |
+| ✅ Hurtboxes تلقائية قابلة للتعديل + أشكال للرسم | 9 | Combat | Adv | ✓ | hurtbox_generate / hurtbox_update / hurtbox_remove / hurtbox_list / combat_shapes |
+| ✅ اختبار الإصابة بالمسح (بلا نفق) | 9 | Combat | Adv | ✓ | combat_hit_test |
+| ✅ ردود الفعل (إجرائية + قواعد اتجاه/ارتفاع/قوة) | 9 | Combat | Adv | ✓ | reaction_generate / reaction_set_rule / reaction_remove_rule |
+| ✅ Combos بنوافذ إلغاء + خبز (مقطع/تسلسل) | 9 | Combat/Motion | Adv | ✓ | combo_create / combo_add_attack / combo_set_cancel_window / combo_remove / combo_inspect / combo_bake |
+| ✅ بيانات القتال في الـsidecar + تحقق | 9 | Export | Adv | ✓ | animation_export / animation_validate |
+| واجهة محرر القتال (رسم الأشكال، خط المراحل، محرر Combo) | 9+ | UI | Adv | — | — |
 | تصدير Unity / Unreal / FBX | 10+ | Export | Adv | ✓ | animation_export |
 | حزم Windows/Linux + Installer | 10 | Packaging | — | — | — |
 

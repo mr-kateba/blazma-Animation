@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Combat tools: hitbox/hurtbox shapes, swept hit detection, hurtbox generation, procedural hit reactions, combo planning. Godot-independent. -->
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>Blazma.Combat</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Blazma.Core/Blazma.Core.csproj" />
+    <ProjectReference Include="../Blazma.Rigging/Blazma.Rigging.csproj" />
+    <ProjectReference Include="../Blazma.Motion/Blazma.Motion.csproj" />
+  </ItemGroup>
+</Project>

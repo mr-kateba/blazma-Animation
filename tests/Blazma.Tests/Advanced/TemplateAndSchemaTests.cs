@@ -157,7 +157,7 @@ public class TemplateAndSchemaTests
         ProjectFile.Save(p, path);
         using (var zip = ZipFile.OpenRead(path))
         using (var r = new StreamReader(zip.GetEntry("project.json")!.Open()))
-            Assert.Equal(4, (int)JsonNode.Parse(r.ReadToEnd())!["schemaVersion"]!);
+            Assert.Equal(Project.CurrentSchemaVersion, (int)JsonNode.Parse(r.ReadToEnd())!["schemaVersion"]!); // 4 when written; 5 since Phase 9
         var again = ProjectFile.Load(path);
         Assert.Equal(P8.Json(p.Clips), P8.Json(again.Clips));
         Assert.Equal(P8.Json(p.Sequences), P8.Json(again.Sequences));
@@ -234,7 +234,7 @@ public class TemplateAndSchemaTests
         var (s, man, _) = P8.Scene(cesium: false);
         P8.Ok(s, "prop.add", new { name = "Box" });
         var data = P8.Ok(s, "project.inspect", new { }).Data!;
-        Assert.Equal(4, (int)data["schemaVersion"]!);
+        Assert.Equal(Project.CurrentSchemaVersion, (int)data["schemaVersion"]!); // 4 when written; schema 5 since Phase 9
         Assert.Single(data["props"]!.AsArray());
         Assert.Empty(data["sequences"]!.AsArray());
         Assert.Empty(data["templates"]!.AsArray());

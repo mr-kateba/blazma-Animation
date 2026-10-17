@@ -24,6 +24,9 @@ public sealed class Clip
     /// <summary>Authoring markers on the timeline, including the key-pose phases (Anticipation, Contact, …).</summary>
     public List<Marker> Markers { get; set; } = new();
 
+    /// <summary>Combat phases and hitboxes (schema v5); null when the clip has none.</summary>
+    public ClipCombat? Combat { get; set; }
+
     /// <summary>True for AI or tool drafts that have not been approved yet.</summary>
     public bool IsDraft { get; set; }
 
@@ -117,6 +120,11 @@ public sealed class AnimationEvent
     public ObjectId Id { get; set; } = ObjectId.New();
     public Flicks Time { get; set; }
     public string Name { get; set; } = "";
+
+    /// <summary>Typed meaning for games (schema v5); older events are Custom.</summary>
+    public EventKind Kind { get; set; } = EventKind.Custom;
+
+    /// <summary>Payload (limits: <see cref="CombatLimits"/>).</summary>
     public Dictionary<string, string> Data { get; set; } = new();
 }
 

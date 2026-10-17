@@ -10,6 +10,9 @@ public sealed class Character
     public string Name { get; set; } = "Character";
     public ObjectId Rig { get; set; }
     public Pose Pose { get; set; } = new();
+
+    /// <summary>Hurtboxes and hit-reaction rules (schema v5); null when the character has none.</summary>
+    public CharacterCombat? Combat { get; set; }
 }
 
 /// <summary>

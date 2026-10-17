@@ -1,6 +1,6 @@
 # صيغة البيانات — `.blazanim`
 
-> رقم المخطط الحالي: `schemaVersion: 4` (المرحلة 8). الملفات بالإصدارات 1 و2 و3 تُفتح وتُرقّى تلقائيًا، وهذا مُختبَر بملفات حقيقية في `tests/fixtures/schema-v1/` و`schema-v2/` و`schema-v3/`.
+> رقم المخطط الحالي: `schemaVersion: 5` (المرحلة 9). الملفات بالإصدارات 1 إلى 4 تُفتح وتُرقّى تلقائيًا، وهذا مُختبَر بملفات حقيقية في `tests/fixtures/schema-v1/` حتى `schema-v4/`.
 
 ## 1. الحاوية
 
@@ -15,6 +15,7 @@ clips/<id>.json       مقاطع الأنيميشن
 sequences/<id>.json   تسلسلات المقاطع (Blending/انتقالات) — المخطط 4، §8
 props/<id>.json       الأجسام القابلة للتحريك (Props) — المخطط 4، §9
 templates/<id>.json   مكتبة قوالب المقاطع في المشروع — المخطط 4، §10
+combos/<id>.json      سلاسل الضربات (Combos) — المخطط 5، §11
 assets/<id>/<file>    ملفات مستوردة مضمّنة داخل المشروع (GLB)، فيبقى المشروع كاملًا حتى لو حُذف الملف الأصلي
 metadata/ai/<id>.json   Prompt وSeed وإعدادات التوليد لكل مسودة AI
 (سجل العمليات oplog.jsonl يبقى في مجلد الجلسة ولا يُضمَّن إلا باختيار المستخدم)
@@ -53,6 +54,9 @@ previews/             صور مصغّرة
 | 1 → 2 | الهياكل، مكتبة الوضعيات، المشهد (الشخصيات) | فهارس `rigs` و`poses` فارغة |
 | 2 → 3 | علامات المقاطع (Markers) ومسارات `pinned` لأهداف IK | لا تغيير في JSON (الرفع يمنع النسخ الأقدم من حذف العلامات عند الحفظ) |
 | 3 → 4 | التسلسلات، الأجسام (Props) ومساراتها (`target.kind = "Prop"`)، مكتبة القوالب | فهارس `sequences` و`props` و`templates` فارغة في `project.json` |
+| 4 → 5 | بيانات القتال: أنواع الأحداث، مراحل المقطع وHitboxes، Hurtboxes وقواعد رد الفعل للشخصية، Combos (§11) | فهرس `combos` فارغ؛ كل حدث بلا `kind` (في المقاطع ومقاطع القوالب) يصبح `"Custom"`. دالة نقية تمشي القوائم بحلقات (بلا عَوْد) |
+
+ملف المخطط 4 الحقيقي `tests/fixtures/schema-v4/project-v4.blazanim` (مقطع هجوم من قالب بعلامة وحدثين بلا `kind`، سيف مربوط، تسلسل) يُفتح ويُرقّى ويُحفظ بالمخطط 5 دون فقدان (`CombatTests.Acceptance_Phase9_V4FixtureOpensAndUpgradesToV5_WithoutLosingData`).
 
 ملف المخطط 3 الحقيقي `tests/fixtures/schema-v3/project-v3.blazanim` (شخصية، مقطع بعلامة وتكرار ومسارات `pinned`، ووضعية في المكتبة) يُفتح ويُرقّى ويُحفظ بالمخطط 4 دون فقدان (`TemplateAndSchemaTests.Acceptance_Phase8_V3FixtureOpensAndUpgradesToV4_WithoutLosingData`).
 
@@ -79,7 +83,8 @@ previews/             صور مصغّرة
       "locked": false, "group": "Legs"
     }
   ],
-  "events": [ { "t": 352800000, "name": "foot_contact_l", "data": {} } ],
+  "events": [ { "id": "01J...", "time": 352800000, "name": "foot_contact_l", "kind": "Footstep", "data": { "surface": "stone" } } ],
+  "combat": { "phases": {...}, "hitboxes": [...] },
   "constraints": [],
   "metadata": { "source": "manual" }
 }
@@ -93,6 +98,7 @@ previews/             صور مصغّرة
   - `cubic` = **Hermite متوافق مع glTF CUBICSPLINE**: `inTan`/`outTan` مشتقات بوحدة "قيمة لكل ثانية"، لكل مكوّن على حدة، والدوران يُطبَّع بعد الحساب. بهذا يكون التصدير إلى glTF دون فقدان.
   - أدوات محرر المنحنيات الإضافية (مثل Bezier الموزون) تبقى داخل المحرر، وعند التصدير تُعاد عيّنتها (resample) بحد خطأ محدد.
 - قنوات `custom:<name>` تُصدَّر في JSON sidecar، أو عبر امتداد `KHR_animation_pointer` عندما يدعمه الهدف.
+- **الأحداث (المخطط 5):** `kind` = `Custom` (افتراضي، وكل حدث أقدم) | `Hit` | `Footstep` | `Sound` | `Vfx`؛ `data` كائن مسطّح نصي (أوامر `event.*` تقبل أرقامًا ومنطقيات وتخزنها نصًا). الحدود: ≤ 1024 حدثًا للمقطع، الاسم 1–200 محرف، ≤ 16 مدخلًا للحمولة، المفتاح 1–64 والقيمة ≤ 256 محرفًا، والزمن بين 0 و100,000 ث. `combat` اختياري (§11).
 - `t` بوحدة flick (انظر ARCHITECTURE.md §5). الواجهة تعرضه كإطار: `frame = t * fps / 705600000`.
 - لا تخزين لمفاتيح مخبوزة (baked) إلا عند الطلب. المقاطع المولّدة بالـAI تُحوَّل إلى مفاتيح مُختزلة قابلة للتحرير، مع حفظ الأصل الخام في `metadata/ai/`.
 
@@ -165,7 +171,7 @@ previews/             صور مصغّرة
   "startFrame": 0, "endFrame": 25, "frameCount": 26, "durationSeconds": 0.8333,
   "loop": { "enabled": true, "startFrame": 0, "endFrame": 24, "clampedToExport": false },
   "markers": [ { "frame": 12, "name": "Pass", "kind": "contact" } ],
-  "events": [ { "frame": 6, "time": 0.2, "name": "foot_contact_r", "payload": { "surface": "stone" } } ],
+  "events": [ { "frame": 6, "time": 0.2, "name": "foot_contact_r", "kind": "footstep", "id": "01J...", "payload": { "surface": "stone" } } ],
   "rootMotion": { "mode": "in_place", "removed": true, "bone": "root", "axes": "xz",
                   "totalDisplacement": [0, 0, 0.6], "cycleDisplacement": [0, 0, 0.6],
                   "perFrameDelta": [[0,0,0], [0,0,0.004], "..."] },
@@ -178,6 +184,34 @@ previews/             صور مصغّرة
 - `markers[].kind`: ‏`marker` للعلامة العادية، أو اسم المرحلة (`initial`، `anticipation`، `main_action`، `contact`، `follow_through`، `recovery`، `final`).
 - `bones[].standard`: الاسم القياسي من `humanoidMap` (أو `null`)، و`node` رقم العقدة في الـGLB.
 - الحركة نفسها في الـGLB تحمل `extras.blazma` = ‏`{clipId, fps, startFrame, endFrame, rootMotion}`، ويستخدمه `animation.validate` لمعرفة خيارات التصدير.
+
+### 7.5.1 بيانات القتال في الـSidecar — المرحلة 9
+تُضاف إلى الـsidecar (إضافة متوافقة؛ `schemaVersion` يبقى 1 والمستهلك يتجاهل الحقول غير المعروفة) عندما يكون للمقطع أو للشخصية المُصدَّرة بيانات قتال أو يدخل المقطع في Combo:
+
+```json
+"combat": {
+  "phases": { "startup": { "startFrame": 0, "endFrame": 10 }, "active": { "startFrame": 10, "endFrame": 18 },
+              "recovery": { "startFrame": 18, "endFrame": 36 } },
+  "hitboxes": [ { "id": "01J...", "name": "Blade",
+                  "shape": { "kind": "capsule", "radius": 0.05, "length": 0.8, "size": null },
+                  "attachment": { "kind": "prop", "name": "Sword", "node": 31,
+                                  "offset": { "translation": [0,0,0], "rotation": [0,0,0,1] } },
+                  "active": [ { "startFrame": 10, "endFrame": 18 } ],
+                  "damage": 20, "knockback": 0.4, "hitstopFrames": 4, "tags": ["slash"] } ],
+  "hurtboxes": [ { "id": "01J...", "name": "head", "bone": "head", "node": 6, "zone": "high", "enabled": true,
+                   "shape": { "kind": "capsule", "radius": 0.098, "length": 0.196 }, "offset": { "translation": [...], "rotation": [...] } } ],
+  "reactions": [ { "id": "01J...", "name": "Front flinch", "direction": "front", "height": "any", "minStrength": 0, "maxStrength": 1,
+                   "clip": null, "clipId": null, "durationSeconds": 0.6 } ],
+  "combos": [ { "id": "01J...", "name": "Triple", "attacks": [ { "clipId": "01J...", "clip": "Attack", "isThisClip": true, "input": "X",
+                "cancelWindow": { "startFrame": 20, "endFrame": 28 }, "linkFrame": null, "blendFrames": 3 } ] } ]
+}
+```
+
+- كل الإطارات نسبية لأول إطار مُصدَّر و`endFrame` حصري، ما عدا `combos[].attacks[]` فهي بإطارات مقطع الضربة نفسه. نطاقات المراحل والـHitboxes تُقص إلى الإطارات المُصدَّرة، والـHitbox الذي لا يكون نشطًا في أي إطار مُصدَّر لا يُكتب.
+- `shape.kind`: `sphere` (نصف القطر) | `capsule` (مركزا الكرتين على بعد `length` على المحور Y المحلي، متمركزة على الأصل) | `box` (`size` الأبعاد الكاملة). `offset` في إطار العظمة (أو الجسم، دون مقياسه).
+- `attachment.node` = رقم عقدة العظمة في الـGLB (كما في `bones[].node`) أو عقدة الجسم (كما في `props[].node`)؛ `null` لجسم لم يُصدَّر.
+- `hurtboxes` و`reactions` للشخصية المُصدَّرة (`characterId`، افتراضيًا أول شخصية بالـRig).
+- **التحقق (`SidecarValidator`)** يعمل بعد التصدير وفي `animation.validate` (إن وُجد الملف بجانب الـGLB، ≤ 64 MB): الإطارات داخل المدى والأحداث مرتبة وأنواعها معروفة، عقدة كل Hitbox/Hurtbox هي عقدة عظمته (أو جسمه) في الـsidecar نفسه، النطاقات مرتبة وغير فارغة، وHitboxes الـsidecar هي بالضبط Hitboxes المقطع النشطة في المدى، وعدد الـHurtboxes مطابق للشخصية. يُقرأ كإدخال غير موثوق (تنقّل بفحص الأنواع، حلقات محدودة ≤ 100,000 عنصر، بلا عَوْد) وكل خلل يصبح Issue.
 
 ### 7.6 التحقق (`animation.validate`)
 يعيد قراءة الملف ويفحص: رأس GLB (magic/version/length) ومحاذاة الـchunks على 4 بايت، حدود الـbufferViews والـaccessors، وجود min/max لـ`POSITION` ولأزمنة الحركة ومطابقتها، صحة الهرمية (أب واحد، بلا دورات)، مدة الحركة (± نصف إطار)، ثم:
@@ -237,3 +271,56 @@ previews/             صور مصغّرة
 
 - القالب يحمل نسخة من المقطع ونسخة من الـRig الذي صُنع له، فيُطبَّق (Retarget) على أي شخصية بشرية مربوطة حتى لو حُذفت الشخصية أو المقطع الأصلي. نسخة الـRig تخضع لفحوص الـRig الرئيسي نفسها (عظام غير فارغة، معرّفات فريدة، الأب موجود وقبل الابن فلا دورات؛ O(n))، ومقطعها لفحص ترتيب المفاتيح نفسه، ويجب أن يحرّك المقطع نسخة الـRig (`skeleton = rig.id`) وأن يكون لها عظام؛ معرّفات القوالب فريدة. القوالب لا تتغير بعد إنشائها (لا أمر يعدّلها في مكانها).
 - القوالب المدمجة (`builtin.*`) لا تُخزَّن؛ تُولَّد عند الطلب (ARCHITECTURE.md §8.5).
+
+## 11. بيانات القتال — المخطط 5 (المرحلة 9)
+
+**في المقطع** (`clips/<id>.json`، الحقل `combat`، يُحذف عندما لا توجد مراحل ولا Hitboxes):
+
+```json
+"combat": {
+  "phases": { "startupStart": 0, "activeStart": 235200000, "recoveryStart": 423360000, "end": 846720000 },
+  "hitboxes": [ { "id": "01J...", "name": "Blade",
+                  "shape": { "kind": "Capsule", "radius": 0.05, "length": 0.8, "size": [0.2,0.2,0.2] },
+                  "attachment": { "kind": "Prop", "target": "01J...", "offset": { "translation": [0,0,0], "rotation": [0,0,0,1], "scale": [1,1,1] } },
+                  "active": [ { "start": 235200000, "end": 423360000 } ],
+                  "damage": 20, "knockback": 0.4, "hitstopFrames": 4, "tags": ["slash"] } ]
+}
+```
+
+- الأزمنة بالـflick (D4) والنهايات حصرية؛ المراحل: startup `[startupStart, activeStart)`، active `[activeStart, recoveryStart)`، recovery `[recoveryStart, end)` مع `0 ≤ startupStart ≤ activeStart < recoveryStart ≤ end`.
+- `attachment.kind`: `Bone` (عظمة من Rig المقطع) أو `Prop` (§9؛ تحويله العالمي بلا مقياس). المرجع المكسور (عظمة/جسم محذوف) ليس خطأ تحميل؛ يتخطاه اختبار الإصابة بتحذير.
+
+**في الشخصية** (`scenes/main.json`، الحقل `combat` لكل شخصية، يُحذف إن كان فارغًا):
+
+```json
+"combat": {
+  "hurtboxes": [ { "id": "01J...", "name": "spine_03", "bone": "01J...", "shape": { "kind": "Capsule", "radius": 0.153, "length": 0.17 },
+                   "offset": { "translation": [0,0.085,0], "rotation": [0,0,0,1] }, "zone": "Mid", "enabled": true } ],
+  "reactions": [ { "id": "01J...", "name": "Front flinch", "direction": "Front", "height": "Any", "minStrength": 0, "maxStrength": 1,
+                   "clip": "", "durationSeconds": 0.6 } ]
+}
+```
+
+- `zone`: `High` | `Mid` | `Low`. `direction` (الجهة التي تأتي منها الضربة): `Any` | `Front` | `Back` | `Left` | `Right`؛ `height`: `Any` | `High` | `Mid` | `Low`. `clip` فارغ = رد فعل إجرائي بطول `durationSeconds`.
+
+**Combo** (`combos/<id>.json` بفهرس `combos` في `project.json`):
+
+```json
+{ "id": "01J...", "name": "Triple", "character": "01J...",
+  "attacks": [ { "id": "01J...", "clip": "01J...", "input": "X", "cancelStart": 470400000, "cancelEnd": 658560000, "link": null, "blendFrames": 3 } ] }
+```
+
+- نافذة الإلغاء `[cancelStart, cancelEnd)` بزمن مقطع الضربة: متى يمكن أن تبدأ الضربة **التالية**؛ `link` (داخل النافذة) أين تبدأ عند الخبز، وافتراضيًا بداية النافذة، وبلا نافذة نهاية المقطع ناقص دمج التالية. `blendFrames` دمج دخول هذه الضربة فوق السابقة.
+
+**الحدود** (هي نفسها في الأوامر وعند التحميل، والخطأ يسمّي المقطع/الشخصية/الـCombo والعنصر، `invalid_json`):
+
+| العنصر | الحد |
+|---|---|
+| الأحداث | ≤ 1024 للمقطع؛ الحمولة ≤ 16 مدخلًا، المفتاح ≤ 64 والقيمة ≤ 256 محرفًا؛ الزمن 0–100,000 ث |
+| Hitboxes | ≤ 32 للمقطع؛ 1–16 نطاقًا نشطًا مرتبة غير متداخلة؛ damage 0–1,000,000؛ knockback 0–100 م؛ hitstop 0–600 إطار؛ ≤ 8 وسوم ≤ 32 محرفًا |
+| الأشكال | نصف القطر وأبعاد الصندوق > 0 و≤ 10 م، طول الكبسولة 0–10 م؛ الإزاحة منتهية ضمن ±100 م والدوران غير صفري |
+| Hurtboxes / قواعد رد الفعل | ≤ 64 / ≤ 64 للشخصية؛ القوة `0 ≤ min ≤ max ≤ 1`؛ المدة 0.05–10 ث |
+| Combos | ≤ 256 في المشروع، ≤ 32 ضربة، الإدخال ≤ 32 محرفًا، الدمج 0–600 إطار، النافذة كاملة (بداية ونهاية) و`link` داخلها |
+| المعرّفات | فريدة داخل كل قائمة (والشخصيات فريدة في المشهد) |
+
+القيم غير المنتهية لا تُكتب أصلًا (JSON لا يقبل NaN)، والأعداد الفائضة (`1e999`) أو الأنواع غير المعروفة (`"Pyramid"`) ترفض الملف. الأوامر في ARCHITECTURE.md §9.

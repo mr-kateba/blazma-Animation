@@ -141,6 +141,11 @@ public sealed class ExportAnimation(ObjectId clipId, ObjectId? characterId, stri
         // The written file is re-read and checked against the bake it was made from (no second bake),
         // plus an independent FK check against the app's evaluation.
         var report = validate ? ExportValidator.Validate(full, p, clip, rig, options, result.Baked) : null;
+        if (report is not null && sidecar)
+        {
+            report.Issues.AddRange(SidecarValidator.Check(result.Sidecar, p, clip, rig, character.Id));
+            report.SidecarChecked = true;
+        }
         var warnings = result.Warnings.Select(w => new Diagnostic("export", w)).ToList();
         if (report is { Ok: false })
             warnings.Add(new Diagnostic("validation_failed", $"The exported file differs from the clip: {report.Issues[0]}"));
@@ -201,6 +206,12 @@ public sealed class ValidateAnimation(string path, ObjectId clipId, ObjectId? ch
         if (info.Length == 0) throw new CommandException("not_a_file", "The file is empty or not a regular file.");
         if (info.Length > RigCommands.MaxImportBytes) throw new CommandException("too_large", "The file is larger than 256 MB.");
         var report = ExportValidator.Validate(full, p, clip, rig, character: character.Id);
+        var sidecarPath = AnimationExporter.SidecarPathFor(full);
+        if (File.Exists(sidecarPath))
+        {
+            report.Issues.AddRange(SidecarValidator.CheckFile(sidecarPath, p, clip, rig, character.Id));
+            report.SidecarChecked = true;
+        }
         var data = report.ToJson(50);
         data["path"] = full;
         return new(Array.Empty<Change>(), data);

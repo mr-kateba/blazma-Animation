@@ -110,6 +110,32 @@ key_set {clipId, frame:0, props:"Sword"}                                      # 
 
 Other Phase 8 tools: `clip_retarget {clipId, fromCharacterId, toCharacterId}` copies a clip onto another (differently proportioned or imported) character as a new clip; `clip_contacts` / `clip_foot_lock {clipId, characterId}` find and pin foot contacts; `template_save_clip {clipId, name}` adds a clip to the project's template library; `prop_import {path}` embeds a `.glb` mesh as a prop; `animation_export` writes attached props under their bone's node.
 
+## 7. Combat: an attack, a hit test, a reaction and a combo (Phase 9)
+
+Script `recipes/combat_combo.jsonl`:
+
+```
+template_apply {templateId:"builtin.attack_swing", characterId, name:"Attack"}            -> clipId
+combat_set_phases {clipId, startupStart:0, activeStart:10, activeEnd:18}                 # or {fromMarkers:true}
+prop_add {name:"Katana", sizeX:0.04, sizeY:0.9, sizeZ:0.04, characterId, bone:"hand_r", x:-0.08, y:0.35}
+hitbox_add {clipId, name:"Blade", shape:"capsule", radius:0.05, length:0.8, propId:"Katana", damage:20, knockback:0.4, hitstopFrames:4}
+                                                                                          # active frames default to the active phase
+event_add {clipId, frame:12, name:"swing", kind:"sound", payload:"{\"sound\":\"whoosh_01\"}"}
+event_add {clipId, frame:14, name:"impact", kind:"hit"}
+scene_add_mannequin {name:"Defender"}                                                     -> characterId (defender)
+hurtbox_generate {characterId:<defender>}
+combat_hit_test {attackerCharacterId, attackClipId, defenderCharacterId, defenderZ:0.75}  -> firstHit {frame, bone, from, ...}, reactionArgs
+reaction_generate {characterId:<defender>, direction:"front", height:"high", strength:0.4, knockback:0.4}   (or pass reactionArgs)
+combo_create {characterId, name:"Triple"}                                                 -> comboId
+combo_add_attack {comboId, clipId:<attack>, input:"X", cancelStartFrame:20, cancelEndFrame:28}
+combo_add_attack {comboId, clipId:<attack 2>, input:"X", cancelStartFrame:18, cancelEndFrame:24, blendFrames:4}
+combo_add_attack {comboId, clipId:<attack>, input:"Y", blendFrames:4}
+combo_inspect {comboId}                                                                   # start frame of every attack on the combined timeline
+combo_bake {comboId, name:"Triple combo"}                                                 -> clipId (target:"sequence" for an editable sequence)
+```
+
+Frame ranges (`activeFrames:"12-17,20-23"`, phases, cancel windows) have an exclusive end, like durations. The attacker stands at the origin facing +Z; `defenderFacing` (default 180) turns the defender. `combat_shapes {characterId, clipId, frame}` gives every hitbox/hurtbox in world space (for checking or drawing). `animation_export` writes all of it into the sidecar (`combat` object).
+
 ## Undo and review
 
 - `edit_undo {transactionId}` takes back your newest change (use the `transactionId` of the call that made it). Older changes: undo the newer ones first.

@@ -62,7 +62,10 @@ public enum SceneParts
     Props = 2,
     Templates = 4,
     Assets = 8,
-    All = Sequences | Props | Templates | Assets,
+
+    /// <summary>Attack combos (schema v5), deep copies.</summary>
+    Combos = 16,
+    All = Sequences | Props | Templates | Assets | Combos,
 }
 
 /// <summary>
@@ -74,7 +77,7 @@ public enum SceneParts
 /// </summary>
 public abstract class SceneEdit : ICommand
 {
-    sealed record State(byte[]? Sequences, byte[]? Props, List<ClipTemplate>? Templates, List<ProjectAsset>? Assets);
+    sealed record State(byte[]? Sequences, byte[]? Props, List<ClipTemplate>? Templates, List<ProjectAsset>? Assets, byte[]? Combos);
 
     State? _before;
     State? _after;
@@ -138,7 +141,8 @@ public abstract class SceneEdit : ICommand
             t.HasFlag(SceneParts.Sequences) ? JsonSerializer.SerializeToUtf8Bytes(p.Sequences, ProjectArchive.JsonOptions) : null,
             t.HasFlag(SceneParts.Props) ? JsonSerializer.SerializeToUtf8Bytes(p.Props, ProjectArchive.JsonOptions) : null,
             t.HasFlag(SceneParts.Templates) ? new List<ClipTemplate>(p.Templates) : null,
-            t.HasFlag(SceneParts.Assets) ? new List<ProjectAsset>(p.Assets) : null);
+            t.HasFlag(SceneParts.Assets) ? new List<ProjectAsset>(p.Assets) : null,
+            t.HasFlag(SceneParts.Combos) ? JsonSerializer.SerializeToUtf8Bytes(p.Combos, ProjectArchive.JsonOptions) : null);
     }
 
     static void Restore(Project p, State s)
@@ -147,6 +151,7 @@ public abstract class SceneEdit : ICommand
         if (s.Props is not null) p.Props = JsonSerializer.Deserialize<List<Prop>>(s.Props, ProjectArchive.JsonOptions)!;
         if (s.Templates is not null) p.Templates = new List<ClipTemplate>(s.Templates);
         if (s.Assets is not null) p.Assets = new List<ProjectAsset>(s.Assets);
+        if (s.Combos is not null) p.Combos = JsonSerializer.Deserialize<List<Combo>>(s.Combos, ProjectArchive.JsonOptions)!;
     }
 
     internal static T Clone<T>(T value) =>

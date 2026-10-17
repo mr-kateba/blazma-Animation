@@ -46,6 +46,8 @@ public static class ProjectArchive
             entries[$"props/{prop.Id}.json"] = JsonSerializer.SerializeToUtf8Bytes(prop, JsonOptions);
         foreach (var template in project.Templates)
             entries[$"templates/{template.Id}.json"] = JsonSerializer.SerializeToUtf8Bytes(template, JsonOptions);
+        foreach (var combo in project.Combos)
+            entries[$"combos/{combo.Id}.json"] = JsonSerializer.SerializeToUtf8Bytes(combo, JsonOptions);
         foreach (var asset in project.Assets)
             entries[asset.ArchivePath] = asset.Data;
         entries[SceneEntry] = JsonSerializer.SerializeToUtf8Bytes(new JsonObject
@@ -72,6 +74,7 @@ public static class ProjectArchive
             ["sequences"] = new JsonArray(project.Sequences.Select(x => (JsonNode?)x.Id.ToString()).ToArray()),
             ["props"] = new JsonArray(project.Props.Select(x => (JsonNode?)x.Id.ToString()).ToArray()),
             ["templates"] = new JsonArray(project.Templates.Select(x => (JsonNode?)x.Id.ToString()).ToArray()),
+            ["combos"] = new JsonArray(project.Combos.Select(x => (JsonNode?)x.Id.ToString()).ToArray()),
             ["scene"] = SceneEntry,
             ["assets"] = JsonSerializer.SerializeToNode(project.Assets, JsonOptions),
             ["metadata"] = JsonSerializer.SerializeToNode(project.Metadata, JsonOptions),
@@ -133,6 +136,7 @@ public static class ProjectArchive
             project.Sequences.AddRange(ReadIndexed<ClipSequence>(doc, "sequences"));
             project.Props.AddRange(ReadIndexed<Prop>(doc, "props"));
             project.Templates.AddRange(ReadIndexed<ClipTemplate>(doc, "templates"));
+            project.Combos.AddRange(ReadIndexed<Combo>(doc, "combos"));
             if ((string?)r["scene"] is { } scenePath)
             {
                 if (!doc.Entries.TryGetValue(scenePath, out var sceneNode))
@@ -180,9 +184,25 @@ public static class ProjectArchive
             if (!rig.Source.Asset.IsEmpty && p.FindAsset(rig.Source.Asset) is null)
                 throw Invalid($"Rig '{rig.Name}' refers to a missing embedded asset.");
         foreach (var clip in p.Clips) ValidateClip(clip, $"Clip '{clip.Name}'");
+        var characterIds = new HashSet<Ids.ObjectId>();
         foreach (var c in p.Characters)
+        {
+            if (c is null) throw Invalid("A character entry is empty.");
             if (p.FindRig(c.Rig) is null)
                 throw Invalid($"Character '{c.Name}' refers to a missing rig.");
+            if (!characterIds.Add(c.Id)) throw Invalid($"Character '{c.Name}': duplicate character id {c.Id}.");
+            if (c.Combat is { } cc && CombatLimits.CheckCharacterCombat(cc) is { } e)
+                throw Invalid($"Character '{c.Name}' ({c.Id}): {e}.");
+        }
+
+        // Combos may refer to clips deleted later (deleting is allowed; combo.inspect/bake report them), not a load error.
+        if (p.Combos.Count > CombatLimits.MaxCombos) throw Invalid($"The project has {p.Combos.Count} combos (at most {CombatLimits.MaxCombos}).");
+        var comboIds = new HashSet<Ids.ObjectId>();
+        foreach (var combo in p.Combos)
+        {
+            if (CombatLimits.CheckCombo(combo) is { } e) throw Invalid($"Combo {(combo is null ? "" : $"'{combo.Name}' ({combo.Id})")}: {e}.");
+            if (!comboIds.Add(combo!.Id)) throw Invalid($"Combo '{combo.Name}': duplicate combo id {combo.Id}.");
+        }
 
         var propIds = new HashSet<Ids.ObjectId>();
         foreach (var prop in p.Props)
@@ -249,7 +269,14 @@ public static class ProjectArchive
 
     static void ValidateClip(Clip clip, string what)
     {
+        if (clip is null) throw Invalid("A clip entry is empty.");
         if (clip.Tracks is null) throw Invalid($"{what} has no track list.");
+        // Combat data (schema v5): bounded counts, finite values; the error names the clip and the entry.
+        if (clip.Events is null) throw Invalid($"{what} has no event list.");
+        if (clip.Events.Count > CombatLimits.MaxEventsPerClip) throw Invalid($"{what} has {clip.Events.Count} events (at most {CombatLimits.MaxEventsPerClip}).");
+        foreach (var e in clip.Events)
+            if (CombatLimits.CheckEvent(e) is { } err) throw Invalid($"{what}: {err}.");
+        if (clip.Combat is { } combat && CombatLimits.CheckClipCombat(combat) is { } ce) throw Invalid($"{what}: {ce}.");
         foreach (var track in clip.Tracks)
         {
             if (track?.Keys is null) throw Invalid($"{what} has an empty track.");

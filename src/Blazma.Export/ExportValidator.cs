@@ -30,6 +30,9 @@ public sealed class ExportValidationReport
     public double MaxPropPositionError { get; set; }
     public double MaxPropRotationErrorDegrees { get; set; }
 
+    /// <summary>True when the sidecar was checked too (<see cref="SidecarValidator"/>).</summary>
+    public bool SidecarChecked { get; set; }
+
     public JsonObject ToJson(int maxIssues = 20) => new()
     {
         ["ok"] = Ok,
@@ -46,6 +49,7 @@ public sealed class ExportValidationReport
         ["propsChecked"] = PropsChecked,
         ["maxPropPositionError"] = MaxPropPositionError,
         ["maxPropRotationErrorDegrees"] = MaxPropRotationErrorDegrees,
+        ["sidecarChecked"] = SidecarChecked,
         ["issueCount"] = Issues.Count,
         ["issues"] = new JsonArray(Issues.Take(maxIssues).Select(i => (JsonNode?)i).ToArray()),
     };

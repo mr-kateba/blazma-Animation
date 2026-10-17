@@ -15,7 +15,24 @@ public static class SchemaMigrations
         V1ToV2,
         V2ToV3,
         V3ToV4,
+        V4ToV5,
     };
+
+    /// <summary>v5 adds combat data: typed events (<c>kind</c>), clip phases and hitboxes, character hurtboxes and reaction rules,
+    /// and combos (combos/&lt;id&gt;.json). v4 events become "Custom"; the combos index starts empty. Iterative (no recursion) and
+    /// tolerant of odd shapes: anything that is not an event object is left for validation to refuse.</summary>
+    static void V4ToV5(ArchiveDocument doc)
+    {
+        doc.Root["combos"] ??= new System.Text.Json.Nodes.JsonArray();
+        foreach (var (path, entry) in doc.Entries)
+        {
+            if (!path.StartsWith("clips/", StringComparison.Ordinal) && !path.StartsWith("templates/", StringComparison.Ordinal)) continue;
+            var clip = path.StartsWith("templates/", StringComparison.Ordinal) ? entry["clip"] as System.Text.Json.Nodes.JsonObject : entry;
+            if (clip?["events"] is not System.Text.Json.Nodes.JsonArray events) continue;
+            foreach (var e in events)
+                if (e is System.Text.Json.Nodes.JsonObject o && o["kind"] is null) o["kind"] = nameof(EventKind.Custom);
+        }
+    }
 
     /// <summary>v4 adds clip sequences, props (and prop tracks, target kind "Prop") and the clip template library.
     /// v3 files have none of them: the three indexes start empty.</summary>

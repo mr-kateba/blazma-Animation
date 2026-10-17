@@ -93,6 +93,7 @@ public static class ClipRetargeter
         clip.Metadata["retarget.scale"] = map.Scale.ToString("0.#####", CultureInfo.InvariantCulture);
         if (options.TimeScale != 1) clip.Metadata["retarget.timeScale"] = options.TimeScale.ToString(CultureInfo.InvariantCulture);
         CopyTiming(source, clip, options.TimeScale);
+        CopyCombat(source, sourceRig, targetRig, clip, options.TimeScale, map.Scale, warnings);
 
         var keyCount = BakedTracks.AddBoneTracks(clip, targetRig, locals,
             b => map.PairOf[b] >= 0 || BakedTracks.RotationMoves(targetRig, locals, b),
@@ -127,7 +128,7 @@ public static class ClipRetargeter
         foreach (var m in source.Markers)
             clip.Markers.Add(new Marker { Name = m.Name, Phase = m.Phase, Time = Scaled(m.Time, clip, timeScale) });
         foreach (var e in source.Events)
-            clip.Events.Add(new AnimationEvent { Name = e.Name, Data = new Dictionary<string, string>(e.Data), Time = Scaled(e.Time, clip, timeScale) });
+            clip.Events.Add(new AnimationEvent { Name = e.Name, Kind = e.Kind, Data = new Dictionary<string, string>(e.Data), Time = Scaled(e.Time, clip, timeScale) });
         // Prop tracks do not depend on the skeleton (a world transform, or an offset from the attachment bone): copied as they
         // are, re-timed. Keys that land on the same frame after re-timing keep the last one.
         foreach (var t in source.Tracks.Where(t => t.Target.Kind == TargetKind.Prop))
@@ -149,6 +150,58 @@ public static class ClipRetargeter
             }
             clip.Tracks.Add(copy);
         }
+    }
+
+    /// <summary>
+    /// Combat data (schema v5): phases re-timed; hitboxes on bones move to the target bone with the same humanoid name, their
+    /// offset carried through the rest pose (model-space placement relative to the joint, scaled by the leg-length ratio) and their
+    /// size scaled; hitboxes on props are copied as they are. A hitbox whose bone has no humanoid counterpart is dropped (warning).
+    /// </summary>
+    static void CopyCombat(Clip source, Rig sourceRig, Rig targetRig, Clip clip, double timeScale, double scale, List<string> warnings)
+    {
+        if (source.Combat is not { } c) return;
+        var srcRest = new RigEvaluator(sourceRig).RestModel();
+        var dstRest = new RigEvaluator(targetRig).RestModel();
+        var s = double.IsFinite(scale) && scale > 0 ? scale : 1;
+        var combat = new ClipCombat();
+        if (c.Phases is { } p)
+            combat.Phases = new CombatPhases
+            {
+                StartupStart = Scaled(p.StartupStart, clip, timeScale), ActiveStart = Scaled(p.ActiveStart, clip, timeScale),
+                RecoveryStart = Scaled(p.RecoveryStart, clip, timeScale), End = Scaled(p.End, clip, timeScale),
+            };
+        if (combat.Phases is { } q && q.RecoveryStart <= q.ActiveStart) combat.Phases = null;
+        foreach (var h in c.Hitboxes)
+        {
+            var copy = new Hitbox
+            {
+                Id = h.Id, Name = h.Name, Shape = h.Shape.Clone(), Damage = h.Damage, Knockback = h.Knockback, HitstopFrames = h.HitstopFrames,
+                Tags = new List<string>(h.Tags),
+                Attachment = new HitboxAttachment { Kind = h.Attachment.Kind, Target = h.Attachment.Target, Offset = h.Attachment.Offset },
+                Active = h.Active.Select(r => new ClipRange { Start = Scaled(r.Start, clip, timeScale), End = Scaled(r.End, clip, timeScale) })
+                    .Where(r => r.End > r.Start).ToList(),
+            };
+            if (copy.Active.Count == 0) { warnings.Add($"Hitbox '{h.Name}': its active frames vanish after re-timing; dropped."); continue; }
+            if (h.Attachment.Kind == HitboxAttachKind.Bone)
+            {
+                var si = sourceRig.IndexOf(h.Attachment.Target);
+                var std = si < 0 ? null : sourceRig.StandardNameOf(h.Attachment.Target);
+                var target = std is null ? null : targetRig.FindByStandardName(std);
+                if (target is null) { warnings.Add($"Hitbox '{h.Name}': its bone has no humanoid counterpart on '{targetRig.Name}'; dropped."); continue; }
+                var ti = targetRig.IndexOf(target.Id);
+                var m = srcRest[si] * h.Attachment.Offset;
+                var placed = new Transform(dstRest[ti].Translation + (m.Translation - srcRest[si].Translation) * s, m.Rotation, Vec3.One);
+                copy.Attachment.Target = target.Id;
+                copy.Attachment.Offset = RigEvaluator.LocalFromModel(dstRest[ti], placed) with { Scale = Vec3.One };
+                copy.Shape.Radius = Math.Min(CombatLimits.MaxShapeSize, copy.Shape.Radius * s);
+                copy.Shape.Length = Math.Min(CombatLimits.MaxShapeSize, copy.Shape.Length * s);
+                copy.Shape.Size = new Vec3(Math.Min(CombatLimits.MaxShapeSize, copy.Shape.Size.X * s), Math.Min(CombatLimits.MaxShapeSize, copy.Shape.Size.Y * s),
+                    Math.Min(CombatLimits.MaxShapeSize, copy.Shape.Size.Z * s));
+                if (CombatLimits.CheckOffset(copy.Attachment.Offset) is not null) { warnings.Add($"Hitbox '{h.Name}': its offset is out of range on the target; dropped."); continue; }
+            }
+            combat.Hitboxes.Add(copy);
+        }
+        if (combat.Phases is not null || combat.Hitboxes.Count > 0) clip.Combat = combat;
     }
 
     static int MapControls(Clip source, Rig sourceRig, Rig targetRig, HumanoidRetargetMap map, Pose[] srcPoses, Transform[][] srcModels,

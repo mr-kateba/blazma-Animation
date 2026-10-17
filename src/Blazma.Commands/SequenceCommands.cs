@@ -408,7 +408,12 @@ public sealed class BakeSequence(ObjectId sequenceId, string? name, bool reduceK
     protected override Clip Build(Project p, List<Diagnostic> warnings, out JsonObject data)
     {
         var s = SequenceCommands.Require(p, sequenceId);
-        var ev = SequenceCommands.Evaluator(p, s);
+        return Bake(p, s, SequenceCommands.Evaluator(p, s), name ?? s.Name, reduceKeys, footLock, warnings, out data);
+    }
+
+    /// <summary>The bake itself, for any sequence (also one that is not in the project, e.g. a combo's).</summary>
+    internal static Clip Bake(Project p, ClipSequence s, SequenceEvaluator ev, string clipName, bool reduceKeys, bool footLock, List<Diagnostic> warnings, out JsonObject data)
+    {
         warnings.AddRange(ev.Warnings.Select(w => new Diagnostic("sequence", w)));
         var rig = ev.Rig;
         var last = Math.Max(1, ev.LastFrame);
@@ -421,7 +426,7 @@ public sealed class BakeSequence(ObjectId sequenceId, string? name, bool reduceK
         for (var f = 0; f <= last; f++) locals[f] = rev.Locals(ev.Evaluate(f).Pose);
         var clip = new Clip
         {
-            Name = name ?? s.Name, Fps = s.Fps, Duration = Flicks.FromFrame(last, s.Fps), Skeleton = rig.Id,
+            Name = clipName, Fps = s.Fps, Duration = Flicks.FromFrame(last, s.Fps), Skeleton = rig.Id,
             Metadata = new Dictionary<string, string> { ["source"] = "sequence", ["sequenceId"] = s.Id.ToString() },
         };
         var keys = BakedTracks.AddBoneTracks(clip, rig, locals, b => BakedTracks.RotationMoves(rig, locals, b), b => BakedTracks.TranslationMoves(rig, locals, b),
@@ -448,11 +453,16 @@ public sealed class BakeSequence(ObjectId sequenceId, string? name, bool reduceK
                 foreach (var at in ev.FramesPlaying(item.Id, e.Time))
                 {
                     var frame = (long)Math.Round(at);
-                    if (frame <= last) clip.Events.Add(new AnimationEvent { Name = e.Name, Data = new Dictionary<string, string>(e.Data), Time = Flicks.FromFrame(frame, s.Fps) });
+                    if (frame <= last) clip.Events.Add(new AnimationEvent { Name = e.Name, Kind = e.Kind, Data = new Dictionary<string, string>(e.Data), Time = Flicks.FromFrame(frame, s.Fps) });
                 }
         }
         clip.Markers = clip.Markers.OrderBy(m => m.Time.Value).ToList();
         clip.Events = clip.Events.OrderBy(e => e.Time.Value).ToList();
+        if (clip.Events.Count > CombatLimits.MaxEventsPerClip)
+        {
+            warnings.Add(new Diagnostic("too_many_events", $"{clip.Events.Count} events; only the first {CombatLimits.MaxEventsPerClip} were kept."));
+            clip.Events.RemoveRange(CombatLimits.MaxEventsPerClip, clip.Events.Count - CombatLimits.MaxEventsPerClip);
+        }
         data = new JsonObject { ["sequenceId"] = s.Id.ToString(), ["frames"] = last + 1, ["keyCount"] = keys, ["props"] = propCount };
         if (footLock)
         {

@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Blazma.Physics", "..\..\src
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Blazma.AI", "..\..\src\Blazma.AI\Blazma.AI.csproj", "{5E3A7C21-6B4D-4F8A-9C2E-7D1B0A4F3E62}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Blazma.Combat", "..\..\src\Blazma.Combat\Blazma.Combat.csproj", "{D2B28174-0B52-4E72-8106-062AB8300C51}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -139,6 +141,18 @@ Global
 		{5E3A7C21-6B4D-4F8A-9C2E-7D1B0A4F3E62}.Release|x64.Build.0 = Release|Any CPU
 		{5E3A7C21-6B4D-4F8A-9C2E-7D1B0A4F3E62}.Release|x86.ActiveCfg = Release|Any CPU
 		{5E3A7C21-6B4D-4F8A-9C2E-7D1B0A4F3E62}.Release|x86.Build.0 = Release|Any CPU
+		{D2B28174-0B52-4E72-8106-062AB8300C51}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D2B28174-0B52-4E72-8106-062AB8300C51}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D2B28174-0B52-4E72-8106-062AB8300C51}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D2B28174-0B52-4E72-8106-062AB8300C51}.Debug|x64.Build.0 = Debug|Any CPU
+		{D2B28174-0B52-4E72-8106-062AB8300C51}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D2B28174-0B52-4E72-8106-062AB8300C51}.Debug|x86.Build.0 = Debug|Any CPU
+		{D2B28174-0B52-4E72-8106-062AB8300C51}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D2B28174-0B52-4E72-8106-062AB8300C51}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D2B28174-0B52-4E72-8106-062AB8300C51}.Release|x64.ActiveCfg = Release|Any CPU
+		{D2B28174-0B52-4E72-8106-062AB8300C51}.Release|x64.Build.0 = Release|Any CPU
+		{D2B28174-0B52-4E72-8106-062AB8300C51}.Release|x86.ActiveCfg = Release|Any CPU
+		{D2B28174-0B52-4E72-8106-062AB8300C51}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

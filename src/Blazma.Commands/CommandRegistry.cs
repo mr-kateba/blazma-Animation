@@ -75,6 +75,7 @@ public sealed class CommandRegistry
         SequenceCommands.Register(r);
         PropCommands.Register(r);
         TemplateCommands.Register(r);
+        CombatCommands.Register(r);
         return r;
     }
 }

@@ -11,7 +11,7 @@ namespace Blazma.Core.Model;
 public sealed class Project
 {
     /// <summary>Schema version written by this build. See docs/DATA_FORMAT.md §4.</summary>
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 5;
 
     public ObjectId Id { get; set; } = ObjectId.New();
     public string Name { get; set; } = "Untitled";
@@ -31,6 +31,9 @@ public sealed class Project
     /// <summary>The project's clip template library (user templates). Schema v4.</summary>
     public List<ClipTemplate> Templates { get; set; } = new();
 
+    /// <summary>Attack combos (schema v5).</summary>
+    public List<Combo> Combos { get; set; } = new();
+
     /// <summary>Binary files embedded in the project (imported models), so a project is self-contained.</summary>
     public List<ProjectAsset> Assets { get; set; } = new();
     public Dictionary<string, string> Metadata { get; set; } = new();
@@ -46,6 +49,7 @@ public sealed class Project
     public ClipSequence? FindSequence(ObjectId id) => Sequences.Find(s => s.Id == id);
     public Prop? FindProp(ObjectId id) => Props.Find(p => p.Id == id);
     public ClipTemplate? FindTemplate(ObjectId id) => Templates.Find(t => t.Id == id);
+    public Combo? FindCombo(ObjectId id) => Combos.Find(c => c.Id == id);
 
     public Clip GetClip(ObjectId id) =>
         FindClip(id) ?? throw new KeyNotFoundException($"Clip '{id}' does not exist.");

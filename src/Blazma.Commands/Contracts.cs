@@ -43,6 +43,8 @@ public sealed record Change(string Kind, string? TargetId = null)
     public const string SequenceChanged = "sequence.changed";
     public const string PropChanged = "prop.changed";
     public const string TemplateChanged = "template.changed";
+    public const string CombatChanged = "combat.changed";
+    public const string ComboChanged = "combo.changed";
 }
 
 public sealed record Diagnostic(string Code, string Message);

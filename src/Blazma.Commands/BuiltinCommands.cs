@@ -109,6 +109,8 @@ public sealed class InspectProject : ICommand
                 ["isDraft"] = c.IsDraft,
                 ["trackCount"] = c.Tracks.Count,
                 ["skeleton"] = c.Skeleton.IsEmpty ? null : c.Skeleton.ToString(),
+                ["eventCount"] = c.Events.Count,
+                ["hitboxCount"] = c.Combat?.Hitboxes.Count ?? 0,
                 ["keyFrames"] = new JsonArray(Blazma.Motion.ClipEvaluator.KeyFrames(c).Select(f => (JsonNode?)f).ToArray()),
                 ["markers"] = new JsonArray(c.Markers.Select(m => (JsonNode?)new JsonObject
                 {
@@ -131,6 +133,8 @@ public sealed class InspectProject : ICommand
                 ["name"] = c.Name,
                 ["rigId"] = c.Rig.ToString(),
                 ["rig"] = p.FindRig(c.Rig)?.Name,
+                ["hurtboxes"] = c.Combat?.Hurtboxes.Count ?? 0,
+                ["reactionRules"] = c.Combat?.Reactions.Count ?? 0,
             }).ToArray()),
             ["poseLibrary"] = new JsonArray(p.PoseLibrary.Select(x => (JsonNode?)new JsonObject
             {
@@ -151,6 +155,13 @@ public sealed class InspectProject : ICommand
                 ["templateId"] = x.Id.ToString(),
                 ["name"] = x.Name,
                 ["rig"] = x.Rig.Name,
+            }).ToArray()),
+            ["combos"] = new JsonArray(p.Combos.Select(x => (JsonNode?)new JsonObject
+            {
+                ["comboId"] = x.Id.ToString(),
+                ["name"] = x.Name,
+                ["characterId"] = x.Character.ToString(),
+                ["attackCount"] = x.Attacks.Count,
             }).ToArray()),
         });
     }

@@ -1,0 +1,19 @@
+# Recipe (Phase 9): an attack with phases, a sword hitbox, hurtboxes on a second mannequin, a hit test, a procedural
+# hit reaction from the hit, and a 3-attack combo with cancel windows baked into one clip.
+{"command": "template.apply", "args": {"templateId": "builtin.attack_swing", "characterId": "${character}", "name": "Attack"}, "save": {"atk": "clipId"}}
+{"command": "combat.set_phases", "args": {"clipId": "${atk}", "startupStart": 0, "activeStart": 10, "activeEnd": 18}}
+{"command": "prop.add", "args": {"name": "Katana", "sizeX": 0.04, "sizeY": 0.9, "sizeZ": 0.04, "characterId": "${character}", "bone": "hand_r", "x": -0.08, "y": 0.35}}
+{"command": "hitbox.add", "args": {"clipId": "${atk}", "name": "Blade", "shape": "capsule", "radius": 0.05, "length": 0.8, "propId": "Katana", "damage": 20, "knockback": 0.4, "hitstopFrames": 4, "tags": "slash"}}
+{"command": "event.add", "args": {"clipId": "${atk}", "frame": 12, "name": "swing", "kind": "sound", "payload": "{\"sound\": \"whoosh_01\", \"volume\": 0.8}"}}
+{"command": "event.add", "args": {"clipId": "${atk}", "frame": 14, "name": "impact", "kind": "hit"}}
+{"command": "scene.add_mannequin", "args": {"name": "Defender"}, "save": {"def": "characterId"}}
+{"command": "hurtbox.generate", "args": {"characterId": "${def}"}}
+{"command": "combat.hit_test", "args": {"attackerCharacterId": "${character}", "attackClipId": "${atk}", "defenderCharacterId": "${def}", "defenderZ": 0.75}}
+{"command": "reaction.generate", "args": {"characterId": "${def}", "direction": "front", "height": "high", "strength": 0.4, "knockback": 0.4, "name": "Hit reaction"}}
+{"command": "template.apply", "args": {"templateId": "builtin.attack_swing", "characterId": "${character}", "name": "Attack 2", "durationSeconds": 1.0}, "save": {"atk2": "clipId"}}
+{"command": "combo.create", "args": {"characterId": "${character}", "name": "Triple"}, "save": {"combo": "comboId"}}
+{"command": "combo.add_attack", "args": {"comboId": "${combo}", "clipId": "${atk}", "input": "X", "cancelStartFrame": 20, "cancelEndFrame": 28}}
+{"command": "combo.add_attack", "args": {"comboId": "${combo}", "clipId": "${atk2}", "input": "X", "cancelStartFrame": 18, "cancelEndFrame": 24, "blendFrames": 4}}
+{"command": "combo.add_attack", "args": {"comboId": "${combo}", "clipId": "${atk}", "input": "Y", "blendFrames": 4}}
+{"command": "combo.inspect", "args": {"comboId": "${combo}"}}
+{"command": "combo.bake", "args": {"comboId": "${combo}", "name": "Triple combo"}}

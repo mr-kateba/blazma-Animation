@@ -92,6 +92,27 @@ No arguments.
 | [`clip_retarget`](#clip_retarget) | mutating | Retarget a clip from one character to another (rig → rig through the humanoid maps; differently proportioned or imported characters). Creates a NEW normal clip (undoable): mapped bones point the same way in the world, hip/root travel is scaled by the leg-length ratio, animated IK targets/poles are mapped, unmapped bones stay at rest (warning). With footLock (default true) the source's foot contacts are kept planted on the target. Returns clipId and a report. |
 | [`clip_set_duration`](#clip_set_duration) | mutating | Set a clip's length in frames. |
 | [`clip_set_loop`](#clip_set_loop) | mutating | Enable/disable looping and optionally set the loop range (startFrame < endFrame ≤ clip length). |
+| [`combat_hit_test`](#combat_hit_test) | readonly | Test an attack clip's hitboxes against a defender's hurtboxes frame by frame, with adaptive swept sub-steps (no tunnelling at fast swings). The attacker stands at the origin facing +Z; the defender at defenderX/Y/Z facing defenderFacing degrees (default 1 m in front, facing the attacker), playing defenderClipId or its working pose. Reports each hitbox's first contact {frame, time, hitbox, hurtbox, bone, point, normal, direction, from, zone} and 'reactionArgs' for reaction.generate. Does not change anything. |
+| [`combat_set_phases`](#combat_set_phases) | mutating | Set a clip's attack phases: startup [startupStart, activeStart), active [activeStart, activeEnd), recovery [activeEnd, recoveryEnd) (frames, ends exclusive). fromMarkers=true reads them from the key-pose markers (anticipation/initial → startup, main_action or contact → active, follow_through → recovery, final → end). clear=true removes them. |
+| [`combat_shapes`](#combat_shapes) | readonly | World-space shapes for drawing: the hurtboxes of a character and (with clipId) the clip's hitboxes, at a (fractional) frame of the clip or in the working pose, each with 'active'. Optional placement (x/z/facingDegrees). Does not change anything. |
+| [`combo_add_attack`](#combo_add_attack) | mutating | Append (or insert at 'index') an attack clip to a combo, with its input and cancel window: [cancelStartFrame, cancelEndFrame) of this clip is when the NEXT attack may start; linkFrame (default: window start) is where it starts when baked; blendFrames is this attack's fade-in. Returns attackId. |
+| [`combo_bake`](#combo_bake) | mutating | Bake a combo with the sequence machinery: target 'clip' (default) creates a NEW normal clip (blended, root-aligned, with the attacks' events and hitboxes cut at each cancel); target 'sequence' creates a clip sequence you can edit further. Undoable. Returns clipId or sequenceId. |
+| [`combo_create`](#combo_create) | mutating | Create an empty attack combo for a character. Returns comboId. |
+| [`combo_inspect`](#combo_inspect) | readonly | A combo's attacks on the combined timeline: start frame, cancel window, link, blend, input, hitbox count, total length. Does not change anything. |
+| [`combo_remove`](#combo_remove) | destructive | Remove an attack from a combo, or the whole combo when attackId is omitted (clips are not deleted). |
+| [`combo_set_cancel_window`](#combo_set_cancel_window) | mutating | Change an attack's cancel window, link frame, blend and/or input. clear=true removes the cancel window and link. |
+| [`event_add`](#event_add) | mutating | Add a typed event (hit, footstep, sound, vfx, custom) at a frame of a clip, with an optional flat JSON payload. Exported in the sidecar. Returns eventId. |
+| [`event_list`](#event_list) | readonly | Events of a clip (frame, name, kind, payload), optionally of one kind. Does not change anything. |
+| [`event_remove`](#event_remove) | mutating | Remove an event from a clip. |
+| [`event_update`](#event_update) | mutating | Change an event's frame, name, kind and/or payload (at least one). |
+| [`hitbox_add`](#hitbox_add) | mutating | Add a hitbox to an attack clip: a sphere/capsule/box attached to a bone of the clip's rig or to a prop, active only on the given frames (default: the clip's active phase). Returns hitboxId. |
+| [`hitbox_list`](#hitbox_list) | readonly | A clip's phases and hitboxes (shape, attachment, offset, active frames, damage…). Does not change anything. |
+| [`hitbox_remove`](#hitbox_remove) | mutating | Remove a hitbox from a clip. |
+| [`hitbox_update`](#hitbox_update) | mutating | Change a hitbox (only the given fields): shape and size, attachment (bone or propId), offset, active frames, damage, knockback, hit-stop, tags, name. |
+| [`hurtbox_generate`](#hurtbox_generate) | mutating | Generate hurtboxes for a character from its rig: one capsule per body segment, radius from humanoid proportions (unmapped bones: 20% of the segment). Replaces the existing hurtboxes unless replace=false. Returns the hurtboxes. |
+| [`hurtbox_list`](#hurtbox_list) | readonly | A character's hurtboxes (bone, shape, offset, zone) and reaction rules. Does not change anything. |
+| [`hurtbox_remove`](#hurtbox_remove) | mutating | Remove one hurtbox, or all of a character's hurtboxes when hurtboxId is omitted. |
+| [`hurtbox_update`](#hurtbox_update) | mutating | Change a hurtbox (only the given fields): shape and size, bone, offset, zone (high\|mid\|low), enabled, name. |
 | [`key_auto_tangents`](#key_auto_tangents) | mutating | Reset keys' tangents to automatic. Filter by track and/or frames; omit both for every key. |
 | [`key_copy`](#key_copy) | readonly | Copy keys (optionally only some frames/bones) as JSON in 'keysJson', frames relative to the earliest copied frame. Does not change anything. |
 | [`key_delete`](#key_delete) | mutating | Delete keys at the given frames (optionally only for some bones/controls). |
@@ -135,6 +156,9 @@ No arguments.
 | [`prop_import`](#prop_import) | external | Import a prop mesh from a .glb file (embedded in the project; static meshes, materials and textures are kept, skins/animations are not). Optionally attach it to a character's bone. Returns propId. |
 | [`prop_remove`](#prop_remove) | destructive | Remove a prop (undoable). Its keys in clips are kept but ignored. |
 | [`prop_set_transform`](#prop_set_transform) | mutating | Set a prop's working transform (only the given components change). Position x/y/z (metres) and rotation rx/ry/rz (intrinsic Euler XYZ, degrees): the offset from the bone when attached, else world. sx/sy/sz scale. Successive calls in one drag merge into one undo step. |
+| [`reaction_generate`](#reaction_generate) | mutating | Generate a procedural hit reaction as a NEW clip (undoable): the spine and head flinch away from the hit with a damped spring and recover to the base pose; optional knockback moves the root. Give 'direction' (side the hit comes from) or directionX/directionZ (push direction in the character's space), or pass the 'reactionArgs' of combat.hit_test. Base pose: a clip frame (baseClipId/baseFrame) or the working pose. Returns clipId. |
+| [`reaction_remove_rule`](#reaction_remove_rule) | mutating | Remove a hit-reaction rule. |
+| [`reaction_set_rule`](#reaction_set_rule) | mutating | Add or replace (ruleId) a hit-reaction rule of a character: which reaction (a clip, or procedural when clipId is omitted) a hit from a direction/height/strength range plays. Returns ruleId. |
 | [`rig_import`](#rig_import) | external | Import a rigged character from a .glb/.gltf file. The file is embedded in the project. Returns characterId, rigId and the bone-mapping report. |
 | [`rig_inspect`](#rig_inspect) | readonly | List a rig's bones (name, parent, standard name, rest), controls and IK chains. |
 | [`rig_map_bone`](#rig_map_bone) | mutating | Correct the humanoid mapping: give a bone a Blazma standard name (e.g. thigh_l), or omit 'standard' to unmap it. IK chains are rebuilt. |
@@ -344,6 +368,331 @@ Effect: **mutating**. Command id: `clip.set_loop`.
 | `enabled` | boolean | yes | Loop on or off. |
 | `startFrame` | number | no | Loop start frame. |
 | `endFrame` | number | no | Loop end frame (exclusive); the clip length means clip end. |
+
+### `combat_hit_test`
+
+Test an attack clip's hitboxes against a defender's hurtboxes frame by frame, with adaptive swept sub-steps (no tunnelling at fast swings). The attacker stands at the origin facing +Z; the defender at defenderX/Y/Z facing defenderFacing degrees (default 1 m in front, facing the attacker), playing defenderClipId or its working pose. Reports each hitbox's first contact {frame, time, hitbox, hurtbox, bone, point, normal, direction, from, zone} and 'reactionArgs' for reaction.generate. Does not change anything.
+
+Effect: **readonly**. Command id: `combat.hit_test`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `attackerCharacterId` | string | yes | Attacker character. (min length 1) |
+| `attackClipId` | string | yes | Attack clip. (min length 1) |
+| `defenderCharacterId` | string | yes | Defender character. (min length 1) |
+| `defenderClipId` | string | no | Clip the defender plays (default: its working pose). (min length 1) |
+| `defenderX` | number | no | Defender X (m, default 0). |
+| `defenderY` | number | no | Defender Y (m, default 0). |
+| `defenderZ` | number | no | Defender Z (m, default 1). |
+| `defenderFacing` | number | no | Defender yaw in degrees (default 180 = facing the attacker). |
+| `startFrame` | integer | no | First frame (default 0). (min 0) |
+| `endFrame` | integer | no | Last frame (default: clip end). (min 0) |
+| `maxSubsteps` | integer | no | Most sub-steps between frames (1–64, default 8). (min 1) |
+| `hitboxId` | string | no | Only this hitbox. (min length 1) |
+
+### `combat_set_phases`
+
+Set a clip's attack phases: startup [startupStart, activeStart), active [activeStart, activeEnd), recovery [activeEnd, recoveryEnd) (frames, ends exclusive). fromMarkers=true reads them from the key-pose markers (anticipation/initial → startup, main_action or contact → active, follow_through → recovery, final → end). clear=true removes them.
+
+Effect: **mutating**. Command id: `combat.set_phases`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `clipId` | string | yes | Clip id. (min length 1) |
+| `startupStart` | integer | no | Startup start (default 0). (min 0) |
+| `activeStart` | integer | no | First active frame. (min 0) |
+| `activeEnd` | integer | no | End of the active frames (exclusive) = recovery start. (min 0) |
+| `recoveryEnd` | integer | no | End of recovery (exclusive; default clip length). (min 0) |
+| `fromMarkers` | boolean | no | Derive from the phase markers. |
+| `clear` | boolean | no | Remove the phases. |
+
+### `combat_shapes`
+
+World-space shapes for drawing: the hurtboxes of a character and (with clipId) the clip's hitboxes, at a (fractional) frame of the clip or in the working pose, each with 'active'. Optional placement (x/z/facingDegrees). Does not change anything.
+
+Effect: **readonly**. Command id: `combat.shapes`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `characterId` | string | yes | Character id. (min length 1) |
+| `clipId` | string | no | Clip played on the character (optional). (min length 1) |
+| `frame` | number | no | Frame (default 0). |
+| `x` | number | no | Placement X (m). |
+| `z` | number | no | Placement Z (m). |
+| `facingDegrees` | number | no | Placement yaw (degrees). |
+
+### `combo_add_attack`
+
+Append (or insert at 'index') an attack clip to a combo, with its input and cancel window: [cancelStartFrame, cancelEndFrame) of this clip is when the NEXT attack may start; linkFrame (default: window start) is where it starts when baked; blendFrames is this attack's fade-in. Returns attackId.
+
+Effect: **mutating**. Command id: `combo.add_attack`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `comboId` | string | yes | Combo id. (min length 1) |
+| `clipId` | string | yes | Attack clip (animates the combo's character). (min length 1) |
+| `input` | string | no | Input label, e.g. 'X' or 'light'. (min length 1) |
+| `cancelStartFrame` | integer | no | Cancel window start. (min 0) |
+| `cancelEndFrame` | integer | no | Cancel window end (exclusive). (min 0) |
+| `linkFrame` | integer | no | Frame where the next attack starts when baked. (min 0) |
+| `blendFrames` | integer | no | Fade-in frames (default 3). (min 0) |
+| `index` | integer | no | Insert position (default: end). (min 0) |
+
+### `combo_bake`
+
+Bake a combo with the sequence machinery: target 'clip' (default) creates a NEW normal clip (blended, root-aligned, with the attacks' events and hitboxes cut at each cancel); target 'sequence' creates a clip sequence you can edit further. Undoable. Returns clipId or sequenceId.
+
+Effect: **mutating**. Command id: `combo.bake`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `comboId` | string | yes | Combo id. (min length 1) |
+| `target` | string | no | clip (default) \| sequence. (min length 1) |
+| `name` | string | no | Name (default: the combo name). (min length 1) |
+| `reduceKeys` | boolean | no | Key reduction (clip, default true). |
+| `footLock` | boolean | no | Lock foot contacts (clip, default false). |
+
+### `combo_create`
+
+Create an empty attack combo for a character. Returns comboId.
+
+Effect: **mutating**. Command id: `combo.create`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `characterId` | string | yes | Character id. (min length 1) |
+| `name` | string | yes | Combo name. (min length 1) |
+
+### `combo_inspect`
+
+A combo's attacks on the combined timeline: start frame, cancel window, link, blend, input, hitbox count, total length. Does not change anything.
+
+Effect: **readonly**. Command id: `combo.inspect`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `comboId` | string | yes | Combo id. (min length 1) |
+
+### `combo_remove`
+
+Remove an attack from a combo, or the whole combo when attackId is omitted (clips are not deleted).
+
+Effect: **destructive**. Command id: `combo.remove`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `comboId` | string | yes | Combo id. (min length 1) |
+| `attackId` | string | no | Attack id; omit to remove the combo. (min length 1) |
+
+### `combo_set_cancel_window`
+
+Change an attack's cancel window, link frame, blend and/or input. clear=true removes the cancel window and link.
+
+Effect: **mutating**. Command id: `combo.set_cancel_window`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `comboId` | string | yes | Combo id. (min length 1) |
+| `attackId` | string | yes | Attack id. (min length 1) |
+| `cancelStartFrame` | integer | no | Window start. (min 0) |
+| `cancelEndFrame` | integer | no | Window end (exclusive). (min 0) |
+| `linkFrame` | integer | no | Link frame. (min 0) |
+| `blendFrames` | integer | no | Fade-in frames. (min 0) |
+| `input` | string | no | Input label. (min length 1) |
+| `clear` | boolean | no | Remove the window and link. |
+
+### `event_add`
+
+Add a typed event (hit, footstep, sound, vfx, custom) at a frame of a clip, with an optional flat JSON payload. Exported in the sidecar. Returns eventId.
+
+Effect: **mutating**. Command id: `event.add`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `clipId` | string | yes | Clip id. (min length 1) |
+| `frame` | number | yes | Frame (0 ≤ frame < clip length). |
+| `name` | string | yes | Event name. (min length 1) |
+| `kind` | string | no | hit \| footstep \| sound \| vfx \| custom (default). (min length 1) |
+| `payload` | string | no | Flat JSON object of strings/numbers/booleans (≤ 16 entries). (min length 1) |
+
+### `event_list`
+
+Events of a clip (frame, name, kind, payload), optionally of one kind. Does not change anything.
+
+Effect: **readonly**. Command id: `event.list`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `clipId` | string | yes | Clip id. (min length 1) |
+| `kind` | string | no | Only this kind. (min length 1) |
+
+### `event_remove`
+
+Remove an event from a clip.
+
+Effect: **mutating**. Command id: `event.remove`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `clipId` | string | yes | Clip id. (min length 1) |
+| `eventId` | string | yes | Event id. (min length 1) |
+
+### `event_update`
+
+Change an event's frame, name, kind and/or payload (at least one).
+
+Effect: **mutating**. Command id: `event.update`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `clipId` | string | yes | Clip id. (min length 1) |
+| `eventId` | string | yes | Event id. (min length 1) |
+| `frame` | number | no | New frame. |
+| `name` | string | no | New name. (min length 1) |
+| `kind` | string | no | hit \| footstep \| sound \| vfx \| custom (default). (min length 1) |
+| `payload` | string | no | New payload (replaces the old one); '{}' clears it. (min length 1) |
+
+### `hitbox_add`
+
+Add a hitbox to an attack clip: a sphere/capsule/box attached to a bone of the clip's rig or to a prop, active only on the given frames (default: the clip's active phase). Returns hitboxId.
+
+Effect: **mutating**. Command id: `hitbox.add`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `clipId` | string | yes | Clip id. (min length 1) |
+| `name` | string | yes | Hitbox name. (min length 1) |
+| `shape` | string | no | sphere (default) \| capsule (two sphere centres 'length' apart along local +Y) \| box. (min length 1) |
+| `radius` | number | no | Sphere/capsule radius (m, default 0.1). |
+| `length` | number | no | Capsule length between the sphere centres (m). |
+| `sizeX` | number | no | Box extent X (m). |
+| `sizeY` | number | no | Box extent Y (m). |
+| `sizeZ` | number | no | Box extent Z (m). |
+| `bone` | string | no | Attach to this bone of the clip's rig (id or name)… (min length 1) |
+| `propId` | string | no | …or to this prop (id or name). (min length 1) |
+| `activeFrames` | string | no | Active frames as 'start-end' ranges, end exclusive like durations, comma separated (e.g. '12-17,20-23'); a single number is one frame. (min length 1) |
+| `damage` | number | no | Damage (default 10). |
+| `knockback` | number | no | Knockback distance (m, default 0.3). |
+| `hitstopFrames` | integer | no | Hit-stop frames (default 0). (min 0) |
+| `tags` | string | no | Comma-separated tags. (min length 1) |
+| `x` | number | no | Offset X (m). |
+| `y` | number | no | Offset Y (m). |
+| `z` | number | no | Offset Z (m). |
+| `rx` | number | no | Offset rotation X (deg). |
+| `ry` | number | no | Offset rotation Y (deg). |
+| `rz` | number | no | Offset rotation Z (deg). |
+
+### `hitbox_list`
+
+A clip's phases and hitboxes (shape, attachment, offset, active frames, damage…). Does not change anything.
+
+Effect: **readonly**. Command id: `hitbox.list`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `clipId` | string | yes | Clip id. (min length 1) |
+
+### `hitbox_remove`
+
+Remove a hitbox from a clip.
+
+Effect: **mutating**. Command id: `hitbox.remove`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `clipId` | string | yes | Clip id. (min length 1) |
+| `hitboxId` | string | yes | Hitbox id. (min length 1) |
+
+### `hitbox_update`
+
+Change a hitbox (only the given fields): shape and size, attachment (bone or propId), offset, active frames, damage, knockback, hit-stop, tags, name.
+
+Effect: **mutating**. Command id: `hitbox.update`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `clipId` | string | yes | Clip id. (min length 1) |
+| `hitboxId` | string | yes | Hitbox id. (min length 1) |
+| `name` | string | no | New name. (min length 1) |
+| `shape` | string | no | sphere (default) \| capsule (two sphere centres 'length' apart along local +Y) \| box. (min length 1) |
+| `radius` | number | no | Radius (m). |
+| `length` | number | no | Capsule length (m). |
+| `sizeX` | number | no | Box extent X (m). |
+| `sizeY` | number | no | Box extent Y (m). |
+| `sizeZ` | number | no | Box extent Z (m). |
+| `bone` | string | no | Attach to this bone… (min length 1) |
+| `propId` | string | no | …or to this prop. (min length 1) |
+| `activeFrames` | string | no | Active frames as 'start-end' ranges, end exclusive like durations, comma separated (e.g. '12-17,20-23'); a single number is one frame. (min length 1) |
+| `damage` | number | no | Damage. |
+| `knockback` | number | no | Knockback (m). |
+| `hitstopFrames` | integer | no | Hit-stop frames. (min 0) |
+| `tags` | string | no | Comma-separated tags ('' clears). (min length 1) |
+| `x` | number | no | Offset X (m). |
+| `y` | number | no | Offset Y (m). |
+| `z` | number | no | Offset Z (m). |
+| `rx` | number | no | Offset rotation X (deg). |
+| `ry` | number | no | Offset rotation Y (deg). |
+| `rz` | number | no | Offset rotation Z (deg). |
+
+### `hurtbox_generate`
+
+Generate hurtboxes for a character from its rig: one capsule per body segment, radius from humanoid proportions (unmapped bones: 20% of the segment). Replaces the existing hurtboxes unless replace=false. Returns the hurtboxes.
+
+Effect: **mutating**. Command id: `hurtbox.generate`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `characterId` | string | yes | Character id. (min length 1) |
+| `radiusScale` | number | no | Multiply every radius (0.25–4, default 1). |
+| `replace` | boolean | no | Replace existing hurtboxes (default true). |
+
+### `hurtbox_list`
+
+A character's hurtboxes (bone, shape, offset, zone) and reaction rules. Does not change anything.
+
+Effect: **readonly**. Command id: `hurtbox.list`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `characterId` | string | yes | Character id. (min length 1) |
+
+### `hurtbox_remove`
+
+Remove one hurtbox, or all of a character's hurtboxes when hurtboxId is omitted.
+
+Effect: **mutating**. Command id: `hurtbox.remove`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `characterId` | string | yes | Character id. (min length 1) |
+| `hurtboxId` | string | no | Hurtbox id; omit for all. (min length 1) |
+
+### `hurtbox_update`
+
+Change a hurtbox (only the given fields): shape and size, bone, offset, zone (high|mid|low), enabled, name.
+
+Effect: **mutating**. Command id: `hurtbox.update`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `characterId` | string | yes | Character id. (min length 1) |
+| `hurtboxId` | string | yes | Hurtbox id. (min length 1) |
+| `name` | string | no | New name. (min length 1) |
+| `shape` | string | no | sphere (default) \| capsule (two sphere centres 'length' apart along local +Y) \| box. (min length 1) |
+| `radius` | number | no | Radius (m). |
+| `length` | number | no | Capsule length (m). |
+| `sizeX` | number | no | Box extent X (m). |
+| `sizeY` | number | no | Box extent Y (m). |
+| `sizeZ` | number | no | Box extent Z (m). |
+| `bone` | string | no | Bone (id or name). (min length 1) |
+| `zone` | string | no | high \| mid \| low. (min length 1) |
+| `enabled` | boolean | no | Disabled hurtboxes are ignored by hit tests. |
+| `x` | number | no | Offset X (m). |
+| `y` | number | no | Offset Y (m). |
+| `z` | number | no | Offset Z (m). |
+| `rx` | number | no | Offset rotation X (deg). |
+| `ry` | number | no | Offset rotation Y (deg). |
+| `rz` | number | no | Offset rotation Z (deg). |
 
 ### `key_auto_tangents`
 
@@ -904,6 +1253,55 @@ Effect: **mutating**. Command id: `prop.set_transform`.
 | `sx` | number | no | Scale X. |
 | `sy` | number | no | Scale Y. |
 | `sz` | number | no | Scale Z. |
+
+### `reaction_generate`
+
+Generate a procedural hit reaction as a NEW clip (undoable): the spine and head flinch away from the hit with a damped spring and recover to the base pose; optional knockback moves the root. Give 'direction' (side the hit comes from) or directionX/directionZ (push direction in the character's space), or pass the 'reactionArgs' of combat.hit_test. Base pose: a clip frame (baseClipId/baseFrame) or the working pose. Returns clipId.
+
+Effect: **mutating**. Command id: `reaction.generate`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `characterId` | string | yes | Character id. (min length 1) |
+| `direction` | string | no | front \| back \| left \| right: the side the hit comes FROM (the reaction bends away from it). (min length 1) |
+| `directionX` | number | no | Push direction X (character space, +X = its left). |
+| `directionZ` | number | no | Push direction Z (+Z = its forward). |
+| `height` | string | no | high \| mid (default) \| low. (min length 1) |
+| `strength` | number | no | 0–1 (default 0.5). |
+| `knockback` | number | no | Root travel (m, default 0). |
+| `durationSeconds` | number | no | Length (0.1–5 s, default 0.6). |
+| `baseClipId` | string | no | Clip whose pose to start from. (min length 1) |
+| `baseFrame` | integer | no | Frame of baseClipId (default its last frame). (min 0) |
+| `name` | string | no | Clip name (default 'Hit reaction'). (min length 1) |
+
+### `reaction_remove_rule`
+
+Remove a hit-reaction rule.
+
+Effect: **mutating**. Command id: `reaction.remove_rule`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `characterId` | string | yes | Character id. (min length 1) |
+| `ruleId` | string | yes | Rule id. (min length 1) |
+
+### `reaction_set_rule`
+
+Add or replace (ruleId) a hit-reaction rule of a character: which reaction (a clip, or procedural when clipId is omitted) a hit from a direction/height/strength range plays. Returns ruleId.
+
+Effect: **mutating**. Command id: `reaction.set_rule`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `characterId` | string | yes | Character id. (min length 1) |
+| `ruleId` | string | no | Rule to replace (omit to add). (min length 1) |
+| `name` | string | yes | Rule name. (min length 1) |
+| `direction` | string | no | any (default) \| front \| back \| left \| right. (min length 1) |
+| `height` | string | no | any (default) \| high \| mid \| low. (min length 1) |
+| `minStrength` | number | no | 0–1 (default 0). |
+| `maxStrength` | number | no | 0–1 (default 1). |
+| `clipId` | string | no | Reaction clip (omit for procedural). (min length 1) |
+| `durationSeconds` | number | no | Procedural reaction length (default 0.6). |
 
 ### `rig_import`
 
