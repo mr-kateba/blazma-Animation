@@ -51,7 +51,7 @@ Blazma.Core  ←  Blazma.Rigging  ←  Blazma.Motion  ←  Blazma.Physics
 | Blazma.Physics | مركز الكتلة، Support polygon، التوازن، المسارات الباليستية، الحركة الثانوية |
 | Blazma.Combat | Hitboxes، Hurtboxes، أحداث الهجوم، نوافذ الإلغاء |
 | Blazma.Export | glTF/GLB، JSON sidecar، Godot، ثم Unity/Unreal/FBX |
-| Blazma.AI | `IMotionGenerationProvider`، Kimodo adapter، إدارة المسودات، خط التحقق |
+| Blazma.AI | `IMotionGenerationProvider`، `KimodoProvider` (عميل عملية `kimodo-runner`)، المزوّد الإجرائي، هيكل SOMA، `MotionRetargeter`، تشخيص العتاد. خدمة الـJobs وأوامر `motion.*` في `Blazma.Commands/AICommands.cs` |
 | Blazma.Agent | MCP server، CLI، الجلسات، الصلاحيات |
 | Blazma.UI | واجهة Godot بالكامل |
 

@@ -82,6 +82,7 @@ No arguments.
 | [`animation_export`](#animation_export) | readonly | Export a clip as a .glb animation (glTF 2.0 binary) plus a '<name>.blazma.json' sidecar (fps, loop, markers, events, root motion, bone map). The built-in mannequin gets a new file with a simple mesh; an imported character's original file is kept and the animation is appended. Writes files outside the project (the project itself is not changed); agents may only create new files. The written file is re-read and validated. |
 | [`animation_validate`](#animation_validate) | readonly | Re-read an exported .glb and compare it with the clip frame by frame (position 1e-4 m, rotation 0.01°, scale 1e-4) and check its glTF structure, hierarchy and duration. Returns ok, max errors and issues. |
 | [`character_remove`](#character_remove) | destructive | Remove a character from the scene (undoable). |
+| [`clip_accept_draft`](#clip_accept_draft) | mutating | Accept a draft clip (generated motion): it becomes a normal clip (undoable). To discard a draft use clip.delete. |
 | [`clip_add_phase_markers`](#clip_add_phase_markers) | mutating | Add the 7 key-pose phase markers (Initial … Final) spread over the clip; phases that already have a marker are skipped. Returns {added, markers:[{markerId,name,frame,phase}]}. |
 | [`clip_create`](#clip_create) | mutating | Create an empty animation clip. Returns its clipId. |
 | [`clip_delete`](#clip_delete) | destructive | Delete a clip (undoable). |
@@ -100,6 +101,11 @@ No arguments.
 | [`marker_add`](#marker_add) | mutating | Add a named marker (optionally a key-pose phase) at a frame. Returns {markerId}. |
 | [`marker_delete`](#marker_delete) | mutating | Delete a marker. |
 | [`marker_update`](#marker_update) | mutating | Change a marker's frame, name and/or phase (at least one). |
+| [`motion_generate`](#motion_generate) | readonly | Start generating a motion from a text prompt for a character. Runs in the background and returns a jobId; it does not change the project. Poll motion.job_status, then call motion.job_apply to add the result as a DRAFT clip (undoable), review it, and keep it with clip.accept_draft (or remove it with clip.delete). Provider: kimodo (local AI, must be installed by the user) by default; 'procedural' is a built-in keyword demo (walk, run, jump, wave, squat, idle), not AI. Body only: fingers and face are not generated. |
+| [`motion_job_apply`](#motion_job_apply) | mutating | Add a finished generation job's motion to the project as a new DRAFT clip (undoable). Returns clipId. Review it, edit keys, then clip.accept_draft. |
+| [`motion_job_cancel`](#motion_job_cancel) | readonly | Cancel a running generation job (stops the Kimodo runner). Does not change the project. |
+| [`motion_job_status`](#motion_job_status) | readonly | State of a generation job (running, ready, failed, cancelled, applied) with progress, warnings and, once applied, its clipId. Without jobId: all jobs. Headless only: waitSeconds blocks until the job finishes (max 600). |
+| [`motion_providers`](#motion_providers) | readonly | List the motion generation providers and diagnostics: is kimodo-runner configured and found, are the model files there, CPU/RAM/GPU (best effort, offline). Never downloads anything. |
 | [`physics_analyze`](#physics_analyze) | readonly | Balance analysis of a clip, frame by frame: centre of mass (COM), foot contacts, support polygon (convex hull of the touching sole points, XZ), signed margin of the tested point to the polygon (inside positive, metres) and balanced/unbalanced/airborne. Returns {summary:{unbalancedRanges…}, frames:[…]}. Does not change anything. |
 | [`physics_auto_balance`](#physics_auto_balance) | mutating | Move the COM inside the support polygon (by 'margin') on unbalanced frames by shifting the hips horizontally; supporting feet stay planted (legs re-solved with IK). Keys the pelvis translation (and leg rotations of unpinned supporting legs) on corrected frames; every other frame keeps exactly its original pose (frames between the surrounding original keys are keyed with their original values). Refuses (no_leg_ik / track_locked / track_muted) when a supporting foot could not stay planted, unless allowFootSlide. At most 5000 frames and 200,000 keys (too_large). One undo step. Returns before/after margins per frame. |
 | [`physics_com`](#physics_com) | readonly | Centre of mass and static balance of a character: its working pose, or a clip frame when 'clipId' is given (with velocity, ZMP and capture point). Returns {com, totalMass, massSource, contacts, polygon, margin, state}. Does not change anything. |
@@ -189,6 +195,16 @@ Effect: **destructive**. Command id: `character.remove`.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `characterId` | string | yes | Character id. (min length 1) |
+
+### `clip_accept_draft`
+
+Accept a draft clip (generated motion): it becomes a normal clip (undoable). To discard a draft use clip.delete.
+
+Effect: **mutating**. Command id: `clip.accept_draft`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `clipId` | string | yes | Draft clip id. (min length 1) |
 
 ### `clip_add_phase_markers`
 
@@ -412,6 +428,68 @@ Effect: **mutating**. Command id: `marker.update`.
 | `frame` | number | no | New frame. |
 | `name` | string | no | New name. (min length 1) |
 | `phase` | string | no | none \| initial \| anticipation \| main_action \| contact \| follow_through \| recovery \| final. (min length 1) |
+
+### `motion_generate`
+
+Start generating a motion from a text prompt for a character. Runs in the background and returns a jobId; it does not change the project. Poll motion.job_status, then call motion.job_apply to add the result as a DRAFT clip (undoable), review it, and keep it with clip.accept_draft (or remove it with clip.delete). Provider: kimodo (local AI, must be installed by the user) by default; 'procedural' is a built-in keyword demo (walk, run, jump, wave, squat, idle), not AI. Body only: fingers and face are not generated.
+
+Effect: **readonly**. Command id: `motion.generate`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `characterId` | string | yes | Character to animate (its rig must be humanoid-mapped). (min length 1) |
+| `prompt` | string | yes | What the character should do, e.g. "a person walks forward". (min length 1) |
+| `durationSeconds` | number | yes | Length in seconds (0.2–30). |
+| `fps` | integer | no | Frame rate of the clip (default: the project frame rate). (min 1) |
+| `seed` | integer | no | Random seed (default: a random one, returned and stored in the clip). (min 0) |
+| `provider` | string | no | kimodo \| procedural. Default: kimodo, or the error provider_unavailable when it is not installed. (min length 1) |
+| `name` | string | no | Clip name (default from the prompt). (min length 1) |
+| `footCleanup` | boolean | no | Pin feet during ground contact (default true). |
+| `reduceKeys` | boolean | no | Remove keys that linear interpolation reproduces within 0.1° / 0.5 mm (default true). |
+| `loop` | boolean | no | Ask for a loopable motion (procedural only; Kimodo ignores constraints). |
+| `inPlace` | boolean | no | Remove travel (procedural only). |
+
+### `motion_job_apply`
+
+Add a finished generation job's motion to the project as a new DRAFT clip (undoable). Returns clipId. Review it, edit keys, then clip.accept_draft.
+
+Effect: **mutating**. Command id: `motion.job_apply`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `jobId` | string | yes | Job id (state ready). (min length 1) |
+| `name` | string | no | Clip name (default: the job's name). (min length 1) |
+
+### `motion_job_cancel`
+
+Cancel a running generation job (stops the Kimodo runner). Does not change the project.
+
+Effect: **readonly**. Command id: `motion.job_cancel`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `jobId` | string | yes | Job id. (min length 1) |
+
+### `motion_job_status`
+
+State of a generation job (running, ready, failed, cancelled, applied) with progress, warnings and, once applied, its clipId. Without jobId: all jobs. Headless only: waitSeconds blocks until the job finishes (max 600).
+
+Effect: **readonly**. Command id: `motion.job_status`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `jobId` | string | no | Job id from motion.generate (omit to list all jobs). (min length 1) |
+| `waitSeconds` | number | no | Wait up to this long for the job to finish (headless mode only; ignored in the app). |
+
+### `motion_providers`
+
+List the motion generation providers and diagnostics: is kimodo-runner configured and found, are the model files there, CPU/RAM/GPU (best effort, offline). Never downloads anything.
+
+Effect: **readonly**. Command id: `motion.providers`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `probe` | boolean | no | Also start kimodo-runner briefly and ask it for its own diagnostics (only in headless mode; can take seconds). |
 
 ### `physics_analyze`
 

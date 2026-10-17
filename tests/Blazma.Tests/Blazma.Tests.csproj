@@ -29,6 +29,8 @@
     <ProjectReference Include="..\..\agent\mcp\Blazma.Mcp.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\Blazma.Export\Blazma.Export.csproj" />
     <ProjectReference Include="..\..\src\Blazma.Physics\Blazma.Physics.csproj" />
+    <ProjectReference Include="..\..\src\Blazma.AI\Blazma.AI.csproj" />
+    <ProjectReference Include="..\Blazma.FakeKimodoRunner\Blazma.FakeKimodoRunner.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

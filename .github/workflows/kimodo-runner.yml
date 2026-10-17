@@ -1,0 +1,72 @@
+name: kimodo-runner (optional)
+
+# Builds the optional kimodo-runner (ai/kimodo) that Blazma starts as a separate process for local
+# text-to-motion. Manual only, not part of releases yet. It fetches kimodo.cpp at the pinned commit
+# (with its pinned GGML submodule) at configure time. No model weights are downloaded or bundled.
+on:
+  workflow_dispatch:
+    inputs:
+      vulkan:
+        description: "Build the GGML Vulkan backend (installs the Vulkan SDK on the runner)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: kimodo-runner (Windows x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the Vulkan SDK
+        if: ${{ inputs.vulkan }}
+        uses: humbletim/install-vulkan-sdk@v1.2
+        with:
+          version: latest
+          cache: true
+
+      - name: Configure (MSVC, Ninja)
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          cmake -S ai/kimodo -B ai/kimodo/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKIMODO_RUNNER_VULKAN=${{ inputs.vulkan && 'ON' || 'OFF' }}
+
+      - name: Build
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          cmake --build ai/kimodo/build --target kimodo-runner
+
+      - name: Protocol smoke test (no model)
+        shell: pwsh
+        run: |
+          $exe = "ai/kimodo/build/bin/kimodo-runner.exe"
+          & $exe --version
+          $req = '{"jsonrpc":"2.0","id":1,"method":"hello","params":{"protocol":1}}' + "`n" + '{"jsonrpc":"2.0","method":"shutdown"}'
+          $out = $req | & $exe --stdio
+          Write-Output $out
+          if (-not ($out -match '"protocol":1')) { throw "hello failed" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kimodo-runner-windows-x64${{ inputs.vulkan && '-vulkan' || '-cpu' }}
+          path: |
+            ai/kimodo/build/bin/*.exe
+            ai/kimodo/build/bin/*.dll
+
+  linux:
+    name: kimodo-runner (Linux x64, CPU)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build g++-13
+      - run: cmake -S ai/kimodo -B ai/kimodo/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++-13 -DKIMODO_RUNNER_VULKAN=OFF
+      - run: cmake --build ai/kimodo/build --target kimodo-runner
+      - name: Protocol smoke test (no model)
+        run: |
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"hello","params":{"protocol":1}}' '{"jsonrpc":"2.0","method":"shutdown"}' \
+            | ai/kimodo/build/bin/kimodo-runner --stdio | tee out.txt
+          grep -q '"protocol":1' out.txt

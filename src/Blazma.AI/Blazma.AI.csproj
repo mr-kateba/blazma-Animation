@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Motion AI: provider contract, Kimodo runner client (separate process), procedural provider, SOMA skeleton, retargeting. Godot-independent. -->
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>Blazma.AI</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Blazma.Core/Blazma.Core.csproj" />
+    <ProjectReference Include="../Blazma.Rigging/Blazma.Rigging.csproj" />
+    <ProjectReference Include="../Blazma.Motion/Blazma.Motion.csproj" />
+  </ItemGroup>
+</Project>

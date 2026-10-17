@@ -49,6 +49,13 @@ Tips:
 - `key_move` replaces keys it lands on. Move the latest keys first when shifting a block later.
 - A failed call changes nothing.
 
+## Text to motion (optional)
+
+- `motion_providers` says what is installed. Kimodo (local AI, body only: no fingers or face) works only after the user installed `kimodo-runner` and the model files; nothing is downloaded automatically. `provider: "procedural"` is a built-in keyword demo (walk, run, jump, wave, squat, idle), **not AI**.
+- `motion_generate {characterId, prompt, durationSeconds}` starts a background job and returns `jobId`; it does not change the project. Without Kimodo it fails with `provider_unavailable` (do not retry; tell the user, or use the procedural demo if that is what they want).
+- Poll `motion_job_status {jobId}` (headless: add `waitSeconds`). When `state` is `ready`, `motion_job_apply {jobId}` adds a **draft** clip (undoable) and returns `clipId`. Read the job's `warnings` (bones that are not driven).
+- Review and edit it like any clip (`anim_evaluate`, `key_set`, ...), then `clip_accept_draft {clipId}`; to discard it use `clip_delete`.
+
 ## Permissions and modes
 
 | Effect | Assisted mode (default in the app) | Autonomous mode | Headless |

@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Blazma.Agent/Blazma.Agent.csproj" />
+    <Project Path="src/Blazma.AI/Blazma.AI.csproj" />
     <Project Path="src/Blazma.Commands/Blazma.Commands.csproj" />
     <Project Path="src/Blazma.Core/Blazma.Core.csproj" />
     <Project Path="src/Blazma.Export/Blazma.Export.csproj" />
@@ -14,6 +15,7 @@
     <Project Path="agent/mcp/Blazma.Mcp.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Blazma.FakeKimodoRunner/Blazma.FakeKimodoRunner.csproj" />
     <Project Path="tests/Blazma.Tests/Blazma.Tests.csproj" />
   </Folder>
 </Solution>

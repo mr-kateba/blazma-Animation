@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Test stand-in for kimodo-runner: speaks the same stdio JSON-RPC protocol (docs/AI_INTEGRATION.md §5, the same one ai/kimodo/src/main.cpp implements)
+       with a fake motion, plus scripted failures (crash, hang, oversize, garbage). Never loads a model. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>fake-kimodo-runner</AssemblyName>
+    <RootNamespace>Blazma.FakeKimodoRunner</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Blazma.AI/Blazma.AI.csproj" />
+  </ItemGroup>
+</Project>

@@ -36,6 +36,10 @@ public sealed class CommandRegistry
 
     public IEnumerable<CommandDescriptor> All => _commands.Values;
 
+    /// <summary>Background motion generation used by the motion.* commands (null when they are not registered).
+    /// Hosts use it for job events, provider settings and diagnostics.</summary>
+    public MotionJobService? Motion { get; private set; }
+
     public void Register(CommandDescriptor descriptor)
     {
         if (!_commands.TryAdd(descriptor.Id, descriptor))
@@ -55,9 +59,10 @@ public sealed class CommandRegistry
     }
 
     /// <summary>Registry with every built-in command of this build.</summary>
-    public static CommandRegistry CreateDefault()
+    /// <param name="motion">Motion generation service; default: Kimodo from the BLAZMA_KIMODO_* environment variables + procedural.</param>
+    public static CommandRegistry CreateDefault(MotionJobService? motion = null)
     {
-        var r = new CommandRegistry();
+        var r = new CommandRegistry { Motion = motion ?? MotionJobService.CreateDefault() };
         BuiltinCommands.Register(r);
         PoseCommands.Register(r);
         RigCommands.Register(r);
@@ -65,6 +70,7 @@ public sealed class CommandRegistry
         AnimationEditCommands.Register(r);
         ExportCommands.Register(r);
         PhysicsCommands.Register(r);
+        AICommands.Register(r, r.Motion);
         return r;
     }
 }

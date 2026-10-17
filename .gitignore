@@ -16,3 +16,7 @@ app/godot/*.translation
 
 # Exported builds
 build/
+
+# kimodo-runner CMake builds (kimodo.cpp and GGML are fetched there, never committed)
+ai/kimodo/build*/
+ai/kimodo/out/

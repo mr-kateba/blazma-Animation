@@ -37,8 +37,11 @@
 | ✅ مسارات COM/الورك/القدمين | 6 | Physics | Adv | ✓ | physics_trajectories |
 | مسارات باليستية / قفز (توقع مسار الطيران) | 6+ | Physics | Adv | ✓ | — |
 | ✅ الحركة الثانوية (Spring) | 6 | Physics | Adv | ✓ | physics_secondary_motion |
-| توليد حركة من نص (Kimodo) | 7 | AI | Simple | ✓ | motion_generate |
-| Retargeting | 7–8 | Rigging | Adv | ✓ | motion_retarget |
+| ✅ توليد حركة من نص (Kimodo اختياري + مزوّد إجرائي للاختبار) كـJob في الخلفية | 7 | AI | Simple | ✓ | motion_generate / motion_job_status / motion_job_cancel / motion_job_apply |
+| ✅ تشخيص المزوّدات والعتاد (دون شبكة) | 7 | AI | Adv | ✓ | motion_providers |
+| ✅ مسودات المقاطع المولّدة (قبول/رفض) | 7 | AI/Commands | Simple | ✓ | clip_accept_draft / clip_delete |
+| ✅ Retarget من SOMA إلى أي هيكل بشري مطابَق (داخل motion_job_apply) | 7 | AI | — | ✓ | motion_job_apply |
+| Retargeting بين مقاطع المستخدم | 8 | Rigging | Adv | ✓ | motion_retarget |
 | Blending / Retiming / Loop cleanup | 8 | Motion | Adv | ✓ | motion_* |
 | كشف انزلاق القدم / Foot locking | 8 | Motion | Simple | ✓ | motion_fix_foot_sliding |
 | أنيميشن الأجسام | 8 | Core | Simple | ✓ | — |

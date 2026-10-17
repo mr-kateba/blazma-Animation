@@ -66,6 +66,8 @@ public sealed class HeadlessBackend : IAgentBackend, IAgentHostServices
         foreach (var dir in EnvList("BLAZMA_ALLOW_READ")) AllowRead(dir);
         foreach (var dir in EnvList("BLAZMA_ALLOW_WRITE")) AllowWrite(dir);
         _rpc = new AgentRpcHandler(_host, _registry, this);
+        // Headless calls run one at a time anyway, so motion.job_status may wait for a generation job to finish.
+        if (_registry.Motion is { } motion) motion.AllowBlockingWait = true;
     }
 
     static IEnumerable<string> EnvList(string name) =>
@@ -244,6 +246,7 @@ public sealed class HeadlessBackend : IAgentBackend, IAgentHostServices
     {
         _lock?.Dispose();
         _lock = null;
+        _registry.Motion?.Dispose(); // cancels running generation jobs and stops kimodo-runner
         _gate.Dispose();
         return ValueTask.CompletedTask;
     }

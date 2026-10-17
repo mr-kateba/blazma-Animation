@@ -20,6 +20,7 @@ static class Program
         3. Pose with pose_set_bone / pose_set_control, then record it with key_set {clipId, characterId, frame}. Animation is keys on frames; use key_move, key_copy / key_paste and clip_add_phase_markers to restructure.
         4. Destructive calls (clip_delete, character_remove, poselib_delete) may need the user's approval in the app: if a result says approval_required, tell the user and carry on with other work. Do not retry in a loop.
         5. Check results (anim_evaluate, pose_get) before saving; call project_save when done. Use edit_undo {transactionId} to take back your latest change.
+        6. Text to motion: motion_providers shows what is installed. motion_generate {characterId, prompt, durationSeconds} starts a background job (it fails with provider_unavailable when Kimodo is not installed; provider "procedural" is a keyword demo, not AI). Poll motion_job_status {jobId} (headless: waitSeconds), then motion_job_apply {jobId} adds a draft clip; edit it, then clip_accept_draft. Nothing is downloaded automatically.
 
         Conventions: rotations are in degrees, intrinsic Euler XYZ, local to the parent bone. Positions are in metres. +Y is up, +Z is forward, +X is the character's left. Frames are integers (frame 0 is the first).
         """;
