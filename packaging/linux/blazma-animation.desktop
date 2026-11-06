@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Blazma Animation
+Comment=3D character animation editor
+Exec=BlazmaAnimation %f
+Icon=blazma-animation
+Terminal=false
+Categories=Graphics;3DGraphics;
+MimeType=application/x-blazanim;
+StartupWMClass=Blazma Animation

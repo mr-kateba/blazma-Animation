@@ -125,9 +125,27 @@ dotnet test Blazma.slnx
 
 ## 7. النسخة الجاهزة (بدون تثبيت أي شيء)
 
-إذا وصلك الملف `BlazmaAnimation-0.1.0-phase1-win64.zip`:
+تُنشر النسخ الجاهزة في صفحة **Releases** في GitHub. اختر واحدة من اثنتين:
 
-1. فك الضغط في أي مجلد.
-2. شغّل `BlazmaAnimation.exe`.
-3. لا تحتاج تثبيت .NET ولا Godot، فكل شيء مدمج داخل المجلد.
-4. إذا ظهر تحذير SmartScreen: اضغط **More info** ثم **Run anyway** (البرنامج غير موقَّع رقميًا بعد).
+### أ) المثبّت (موصى به): `BlazmaAnimation-<الإصدار>-setup.exe`
+
+1. شغّل الملف. **لا يحتاج صلاحيات مدير**؛ يُثبَّت للمستخدم الحالي في `%LOCALAPPDATA%\Programs\BlazmaAnimation`.
+2. اختر المكوّنات: البرنامج (إلزامي)، ربط ملفات `.blazanim`، واختياريًا اختصار سطح المكتب. يُضاف اختصار في قائمة Start.
+3. للإزالة: Settings ← Apps، أو `uninstall.exe` في مجلد التثبيت.
+4. الإعدادات تبقى في `%APPDATA%\BlazmaAnimation` ولا تُحذف عند الإزالة.
+
+### ب) المحمولة: `BlazmaAnimation-<الإصدار>-win64.zip`
+
+1. فك الضغط في أي مجلد (يمكن وضعه على فلاش).
+2. شغّل `BlazmaAnimation.exe`. لا تحتاج تثبيت .NET ولا Godot.
+3. الملف `portable.txt` بجانب البرنامج يعني الوضع المحمول: تُحفظ الإعدادات والحفظ التلقائي في مجلد `userdata` بجانب البرنامج بدل `%APPDATA%`. احذف الملف لإلغاء الوضع المحمول.
+
+### تحذير SmartScreen
+
+البرنامج غير موقَّع رقميًا بعد. إذا ظهر التحذير اضغط **More info** ثم **Run anyway**. يمكنك التحقق من الملف بمقارنة `SHA256SUMS.txt`:
+
+```
+certutil -hashfile BlazmaAnimation-<الإصدار>-setup.exe SHA256
+```
+
+أدوات الذكاء الاصطناعي (`blazma-mcp.exe` و`blazma-anim.exe`) داخل مجلد `tools` في كلا النسختين. بناء الإصدارات بنفسك: `docs/RELEASING.md`.

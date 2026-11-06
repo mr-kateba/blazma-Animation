@@ -1,15 +1,17 @@
 name: Release
 
-# Builds the Windows x64 app and publishes it as a GitHub Release.
-# Trigger: push a tag like v0.1.0-phase1, or run manually with a tag name.
+# Manual only (workflow_dispatch). Runs scripts/build-release.sh — the same script you run locally — and,
+# if asked, uploads the artifacts to a GitHub Release with `gh`. See docs/RELEASING.md.
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
     inputs:
-      tag:
-        description: "Release tag (e.g. v0.1.0-phase1)"
+      version:
+        description: "Version without the leading v (e.g. 0.9.0 or 1.0.0-rc1)"
         required: true
+      publish:
+        description: "Create/update the GitHub Release and upload the artifacts"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -18,11 +20,9 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
   DOTNET_NOLOGO: 1
   GODOT_VERSION: 4.7.2
-  GODOT_BIN: /opt/godot/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64
-  TEMPLATES_DIR: ~/.local/share/godot/export_templates/4.7.2.stable.mono
 
 jobs:
-  windows-build:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,90 +33,56 @@ jobs:
             8.0.x
             10.0.x
 
-      - name: Core tests must pass before a release
-        run: dotnet test Blazma.slnx -warnaserror
+      - name: Install NSIS, zip and AppImage prerequisites
+        run: sudo apt-get update && sudo apt-get install -y nsis zip file libfuse2
 
-      - name: Cache Godot and Windows export templates
+      - name: Cache Godot and export templates
         id: godot-cache
         uses: actions/cache@v4
         with:
           path: |
             /opt/godot
             ~/.local/share/godot/export_templates
-          key: godot-${{ env.GODOT_VERSION }}-mono-win-templates
+          key: godot-${{ env.GODOT_VERSION }}-mono-win-linux-templates
 
-      - name: Install Godot ${{ env.GODOT_VERSION }} .NET and export templates
+      - name: Install Godot .NET and export templates (official release, SHA512 verified)
         if: steps.godot-cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           base=https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable
+          cd /tmp
+          curl -sSfL -O "$base/Godot_v${GODOT_VERSION}-stable_mono_linux_x86_64.zip"
+          curl -sSfL -O "$base/Godot_v${GODOT_VERSION}-stable_mono_export_templates.tpz"
+          curl -sSfL -O "$base/SHA512-SUMS.txt"
+          grep -E "Godot_v${GODOT_VERSION}-stable_mono_(linux_x86_64\.zip|export_templates\.tpz)" SHA512-SUMS.txt | sha512sum -c -
           sudo mkdir -p /opt/godot && sudo chown "$USER" /opt/godot
-          curl -sSfL -o /tmp/godot.zip "$base/Godot_v${GODOT_VERSION}-stable_mono_linux_x86_64.zip"
-          unzip -q /tmp/godot.zip -d /opt/godot
-          curl -sSfL -o /tmp/tpl.tpz "$base/Godot_v${GODOT_VERSION}-stable_mono_export_templates.tpz"
-          dir=$(eval echo "$TEMPLATES_DIR")
+          unzip -q Godot_v${GODOT_VERSION}-stable_mono_linux_x86_64.zip -d /opt/godot
+          dir=~/.local/share/godot/export_templates/${GODOT_VERSION}.stable.mono
           mkdir -p "$dir"
-          unzip -q -j -o /tmp/tpl.tpz 'templates/version.txt' 'templates/windows_*x86_64*' -d "$dir"
-          rm /tmp/godot.zip /tmp/tpl.tpz
+          unzip -q -j -o Godot_v${GODOT_VERSION}-stable_mono_export_templates.tpz 'templates/version.txt' 'templates/windows_*x86_64*' 'templates/linux_*x86_64*' -d "$dir"
 
-      - name: Export Windows build
-        run: |
-          set -euo pipefail
-          "$GODOT_BIN" --headless --path app/godot --import || true
-          mkdir -p build/windows
-          "$GODOT_BIN" --headless --path app/godot --export-release "Windows Desktop" ../../build/windows/BlazmaAnimation.exe
-          # The export must contain the C# assemblies, otherwise the app cannot start.
-          test -f build/windows/BlazmaAnimation.exe
-          test -f build/windows/BlazmaAnimation.pck
-          test -f build/windows/data_Blazma.UI_windows_x86_64/Blazma.UI.dll
-          test -f build/windows/data_Blazma.UI_windows_x86_64/Blazma.Core.dll
+      - name: Build release (tests, exports, tools, zip, installer, tar.gz, AppImage, checksums)
+        run: scripts/build-release.sh "${{ inputs.version }}"
 
-      - name: Publish agent tools (blazma-mcp.exe, blazma-anim.exe)
-        run: |
-          set -euo pipefail
-          for p in mcp cli; do
-            dotnet publish agent/$p -c Release -r win-x64 --self-contained \
-              -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
-              -p:EnableCompressionInSingleFile=true -p:DebugType=none \
-              -o build/windows/tools
-          done
-          test -f build/windows/tools/blazma-mcp.exe
-          test -f build/windows/tools/blazma-anim.exe
+      - name: Smoke test the artifacts
+        run: scripts/release-smoke.sh "${{ inputs.version }}"
 
-      - name: Package
-        id: pkg
-        run: |
-          set -euo pipefail
-          tag="${{ github.event.inputs.tag || github.ref_name }}"
-          name="BlazmaAnimation-${tag#v}-win64"
-          rm -f build/windows/data_*/*.pdb
-          cp app/godot/assets/fonts/OFL-IBM-Plex.txt build/windows/
-          mv build/windows "build/$name"
-          (cd build && zip -q -r -9 "$name.zip" "$name")
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "zip=build/$name.zip" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BlazmaAnimation-${{ inputs.version }}
+          path: build/release/${{ inputs.version }}/
+          retention-days: 30
 
       - name: Publish GitHub Release
+        if: ${{ inputs.publish }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag="${{ steps.pkg.outputs.tag }}"
-          cat > /tmp/notes.md <<'EOF'
-          ## Blazma Animation — نسخة تجريبية لـ Windows 64-bit
-
-          **التشغيل:** فك الضغط ثم شغّل `BlazmaAnimation.exe`. لا يحتاج تثبيت .NET ولا Godot.
-
-          **أدوات الذكاء الاصطناعي:** في مجلد `tools` الملفان `blazma-mcp.exe` (خادم MCP لـ Claude Code وCodex) و`blazma-anim.exe` (سطر الأوامر). الشرح: `docs/AGENT_SETUP_AR.md`.
-
-          إذا ظهر تحذير SmartScreen اضغط **More info** ثم **Run anyway** (البرنامج غير موقَّع رقميًا بعد).
-
-          التفاصيل والمشكلات المعروفة: `docs/reports/` في المستودع.
-          EOF
+          v="${{ inputs.version }}"; d="build/release/$v"; tag="v$v"
+          pre=""; case "$v" in *-*|0.*) pre="--prerelease";; esac
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" "${{ steps.pkg.outputs.zip }}" --clobber
+            gh release upload "$tag" "$d"/* --clobber
           else
-            gh release create "$tag" "${{ steps.pkg.outputs.zip }}" \
-              --title "Blazma Animation $tag" --notes-file /tmp/notes.md --prerelease \
-              --target "${{ github.sha }}"
+            gh release create "$tag" "$d"/* --title "Blazma Animation $v" --notes-file "$d/RELEASE_NOTES-$v.md" $pre --target "${{ github.sha }}"
           fi
