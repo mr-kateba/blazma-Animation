@@ -200,7 +200,10 @@ public sealed class HeadlessBackend : IAgentBackend, IAgentHostServices
             Swap(project, path, @lock);
         }
         catch { @lock.Dispose(); throw; }
-        return Describe();
+        var d = Describe();
+        if (_session.Project.LoadWarnings.Count > 0)
+            d["migrationWarnings"] = new JsonArray(_session.Project.LoadWarnings.Select(w => (JsonNode?)w).ToArray());
+        return d;
     }
 
     JsonObject CloseProject(JsonObject p)

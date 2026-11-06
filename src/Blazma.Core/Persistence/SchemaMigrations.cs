@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Blazma.Core.Model;
 
 namespace Blazma.Core.Persistence;
@@ -19,18 +20,49 @@ public static class SchemaMigrations
     };
 
     /// <summary>v5 adds combat data: typed events (<c>kind</c>), clip phases and hitboxes, character hurtboxes and reaction rules,
-    /// and combos (combos/&lt;id&gt;.json). v4 events become "Custom"; the combos index starts empty. Iterative (no recursion) and
-    /// tolerant of odd shapes: anything that is not an event object is left for validation to refuse.</summary>
+    /// and combos (combos/&lt;id&gt;.json). v4 events become "Custom"; the combos index starts empty. v4 events that break the v5
+    /// event limits are repaired with a migration warning instead of refusing the file: an empty name becomes "event" (a long one
+    /// is cut to <see cref="CombatLimits.MaxNameLength"/>), a payload keeps its first <see cref="CombatLimits.MaxPayloadEntries"/>
+    /// entries, a clip keeps its first <see cref="CombatLimits.MaxEventsPerClip"/> events. Iterative (no recursion) and tolerant of
+    /// odd shapes: anything that is not an event object is left for validation to refuse.</summary>
     static void V4ToV5(ArchiveDocument doc)
     {
-        doc.Root["combos"] ??= new System.Text.Json.Nodes.JsonArray();
-        foreach (var (path, entry) in doc.Entries)
+        doc.Root["combos"] ??= new JsonArray();
+        foreach (var (path, entry) in doc.Entries.OrderBy(e => e.Key, StringComparer.Ordinal))
         {
             if (!path.StartsWith("clips/", StringComparison.Ordinal) && !path.StartsWith("templates/", StringComparison.Ordinal)) continue;
-            var clip = path.StartsWith("templates/", StringComparison.Ordinal) ? entry["clip"] as System.Text.Json.Nodes.JsonObject : entry;
-            if (clip?["events"] is not System.Text.Json.Nodes.JsonArray events) continue;
+            var clip = path.StartsWith("templates/", StringComparison.Ordinal) ? entry["clip"] as JsonObject : entry;
+            if (clip?["events"] is not JsonArray events) continue;
+            var where = clip["name"] is JsonValue v && v.TryGetValue<string>(out var clipName) ? $"Clip '{clipName}'" : $"'{path}'";
+            if (events.Count > CombatLimits.MaxEventsPerClip)
+            {
+                doc.Warnings.Add($"{where}: {events.Count} events; only the first {CombatLimits.MaxEventsPerClip} were kept.");
+                while (events.Count > CombatLimits.MaxEventsPerClip) events.RemoveAt(events.Count - 1);
+            }
             foreach (var e in events)
-                if (e is System.Text.Json.Nodes.JsonObject o && o["kind"] is null) o["kind"] = nameof(EventKind.Custom);
+            {
+                if (e is not JsonObject o) continue;
+                if (o["kind"] is null) o["kind"] = nameof(EventKind.Custom);
+                var name = o["name"] is JsonValue nv && nv.TryGetValue<string>(out var n) ? n : null;
+                if (o["name"] is null or JsonValue && string.IsNullOrWhiteSpace(name))
+                {
+                    o["name"] = "event";
+                    doc.Warnings.Add($"{where}: an event with no name was named 'event'.");
+                    name = "event";
+                }
+                else if (name is { Length: > CombatLimits.MaxNameLength })
+                {
+                    o["name"] = name[..CombatLimits.MaxNameLength];
+                    doc.Warnings.Add($"{where}: event name '{name[..20]}…' was cut to {CombatLimits.MaxNameLength} characters.");
+                    name = name[..CombatLimits.MaxNameLength];
+                }
+                if (o["data"] is JsonObject data && data.Count > CombatLimits.MaxPayloadEntries)
+                {
+                    var extra = data.Skip(CombatLimits.MaxPayloadEntries).Select(kv => kv.Key).ToList();
+                    foreach (var k in extra) data.Remove(k);
+                    doc.Warnings.Add($"{where}: event '{name}' had {CombatLimits.MaxPayloadEntries + extra.Count} payload entries; only the first {CombatLimits.MaxPayloadEntries} were kept.");
+                }
+            }
         }
     }
 
@@ -38,9 +70,9 @@ public static class SchemaMigrations
     /// v3 files have none of them: the three indexes start empty.</summary>
     static void V3ToV4(ArchiveDocument doc)
     {
-        doc.Root["sequences"] ??= new System.Text.Json.Nodes.JsonArray();
-        doc.Root["props"] ??= new System.Text.Json.Nodes.JsonArray();
-        doc.Root["templates"] ??= new System.Text.Json.Nodes.JsonArray();
+        doc.Root["sequences"] ??= new JsonArray();
+        doc.Root["props"] ??= new JsonArray();
+        doc.Root["templates"] ??= new JsonArray();
     }
 
     /// <summary>
@@ -55,8 +87,8 @@ public static class SchemaMigrations
     /// <summary>v2 adds rigs, the pose library and the scene (characters). v1 files have none of them.</summary>
     static void V1ToV2(ArchiveDocument doc)
     {
-        doc.Root["rigs"] ??= new System.Text.Json.Nodes.JsonArray();
-        doc.Root["poses"] ??= new System.Text.Json.Nodes.JsonArray();
+        doc.Root["rigs"] ??= new JsonArray();
+        doc.Root["poses"] ??= new JsonArray();
     }
 
     public static void MigrateToCurrent(ArchiveDocument doc)

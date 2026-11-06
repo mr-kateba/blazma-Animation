@@ -50,7 +50,7 @@
 | ✅ أحداث مكتوبة (hit/footstep/sound/vfx/custom) بحمولة محدودة | 9 | Core/Commands | Adv | ✓ | event_add / event_update / event_remove / event_list |
 | ✅ مراحل الهجوم + Hitboxes (كرة/كبسولة/صندوق على عظمة أو جسم، إطارات نشطة، ضرر/دفع/توقف) | 9 | Combat | Adv | ✓ | combat_set_phases / hitbox_add / hitbox_update / hitbox_remove / hitbox_list |
 | ✅ Hurtboxes تلقائية قابلة للتعديل + أشكال للرسم | 9 | Combat | Adv | ✓ | hurtbox_generate / hurtbox_update / hurtbox_remove / hurtbox_list / combat_shapes |
-| ✅ اختبار الإصابة بالمسح (بلا نفق) | 9 | Combat | Adv | ✓ | combat_hit_test |
+| ✅ اختبار الإصابة بالمسح النسبي (وتحذير `may_have_missed_contacts` عند بلوغ الحد) | 9 | Combat | Adv | ✓ | combat_hit_test |
 | ✅ ردود الفعل (إجرائية + قواعد اتجاه/ارتفاع/قوة) | 9 | Combat | Adv | ✓ | reaction_generate / reaction_set_rule / reaction_remove_rule |
 | ✅ Combos بنوافذ إلغاء + خبز (مقطع/تسلسل) | 9 | Combat/Motion | Adv | ✓ | combo_create / combo_add_attack / combo_set_cancel_window / combo_remove / combo_inspect / combo_bake |
 | ✅ بيانات القتال في الـsidecar + تحقق | 9 | Export | Adv | ✓ | animation_export / animation_validate |

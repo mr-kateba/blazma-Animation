@@ -99,7 +99,8 @@ public static class Sidecar
     /// export and clipped to it; attachment = bone or prop node in the GLB), the export character's hurtboxes and reaction rules, and
     /// the combos that use the clip. Written only when there is something to write.
     /// </summary>
-    public static JsonObject? Combat(Project project, BakedClip baked, Rig rig, NodeBinding[] bindings, IReadOnlyList<ExportedProp> props, Core.Ids.ObjectId character)
+    public static JsonObject? Combat(Project project, BakedClip baked, Rig rig, NodeBinding[] bindings, IReadOnlyList<ExportedProp> props, Core.Ids.ObjectId character,
+        List<string>? warnings = null)
     {
         var clip = baked.Clip;
         var fps = clip.Fps;
@@ -135,6 +136,7 @@ public static class Sidecar
             {
                 var i = rig.IndexOf(h.Attachment.Target);
                 if (i >= 0) { name = rig.Bones[i].Name; node = bindings[i].Node; }
+                else warnings?.Add($"Hitbox '{h.Name}': its bone no longer exists; exported without an attachment.");
             }
             else
             {
@@ -165,7 +167,7 @@ public static class Sidecar
         foreach (var h in ch?.Combat?.Hurtboxes ?? new())
         {
             var i = rig.IndexOf(h.Bone);
-            if (i < 0) continue;
+            if (i < 0) { warnings?.Add($"Hurtbox '{h.Name}': its bone no longer exists; not exported."); continue; }
             hurtboxes.Add(new JsonObject
             {
                 ["id"] = h.Id.ToString(), ["name"] = h.Name, ["bone"] = rig.Bones[i].Name, ["node"] = bindings[i].Node,

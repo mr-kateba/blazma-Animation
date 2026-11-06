@@ -16,7 +16,8 @@ public sealed record ComboPlan(ClipSequence Sequence, IReadOnlyList<PlannedAttac
 /// <summary>
 /// Turns a combo into a clip sequence (docs/ARCHITECTURE.md §9.5): attack i+1 starts at attack i's link frame (default: the start of
 /// its cancel window; without a window, its end minus the next blend) and fades in over <c>BlendFrames</c>, with root alignment, so
-/// it plays with the Phase 8 sequence machinery (evaluation, bake). Sequence frames use the first attack clip's frame rate; every
+/// it plays with the Phase 8 sequence machinery (evaluation, bake). A followed (cancelled) attack's item stops once the next one
+/// has blended in (out frame = link + next blend, in clip frames); its events and hitboxes at or after the link are dropped. Sequence frames use the first attack clip's frame rate; every
 /// item plays its clip once at speed 1. Attacks whose clip is missing or animates another rig are skipped with a warning.
 /// </summary>
 public static class ComboPlanner
@@ -51,9 +52,11 @@ public static class ComboPlanner
             var nextBlend = i + 1 < usable.Count ? usable[i + 1].Attack.BlendFrames : 0;
             var link = a.Link?.ToFrame(clip.Fps) ?? cs ?? Math.Max(1, length - FromSeq(nextBlend, clip, fps));
             link = Math.Clamp(link, 1, length);
+            // A followed attack plays only until the next one has fully blended in (link + next blend); the last plays to its end.
+            var outFrame = i + 1 < usable.Count ? Math.Clamp(link + FromSeq(nextBlend, clip, fps), link, length) : length;
             seq.Items.Add(new SequenceItem
             {
-                Clip = clip.Id, StartFrame = start, InFrame = 0, OutFrame = length, Speed = 1, Loops = 1, BlendInFrames = blend, BlendCurve = BlendCurve.Smooth,
+                Clip = clip.Id, StartFrame = start, InFrame = 0, OutFrame = outFrame, Speed = 1, Loops = 1, BlendInFrames = blend, BlendCurve = BlendCurve.Smooth,
             });
             var next = start + ToSeq(link, clip, fps);
             planned.Add(new PlannedAttack(a, clip, start, blend, link, cs, ce, length, i + 1 < usable.Count ? next : start + ToSeq(length, clip, fps)));

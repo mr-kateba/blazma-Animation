@@ -27,8 +27,8 @@ public sealed record ReactionResult(Transform[][] Locals, long PeakFrame, double
 /// </summary>
 public static class HitReaction
 {
-    public const double MinSeconds = 0.1;
-    public const double MaxSeconds = 5;
+    public const double MinSeconds = CombatLimits.MinReactionSeconds;
+    public const double MaxSeconds = CombatLimits.MaxReactionSeconds;
     public const int MaxFrames = 2000;
 
     static readonly string[] Chain = { "pelvis", "spine_01", "spine_02", "spine_03", "neck", "head" };

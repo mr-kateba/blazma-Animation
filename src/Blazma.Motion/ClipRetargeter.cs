@@ -92,7 +92,7 @@ public static class ClipRetargeter
         clip.Metadata["retarget.sourceRig"] = sourceRig.Name;
         clip.Metadata["retarget.scale"] = map.Scale.ToString("0.#####", CultureInfo.InvariantCulture);
         if (options.TimeScale != 1) clip.Metadata["retarget.timeScale"] = options.TimeScale.ToString(CultureInfo.InvariantCulture);
-        CopyTiming(source, clip, options.TimeScale);
+        CopyTiming(source, clip, options.TimeScale, warnings);
         CopyCombat(source, sourceRig, targetRig, clip, options.TimeScale, map.Scale, warnings);
 
         var keyCount = BakedTracks.AddBoneTracks(clip, targetRig, locals,
@@ -117,7 +117,7 @@ public static class ClipRetargeter
     static Flicks Scaled(Flicks t, Clip target, double timeScale) =>
         timeScale == 1 ? t : Flicks.FromFrame((long)Math.Round(t.ToFrameExact(target.Fps) * timeScale), target.Fps);
 
-    static void CopyTiming(Clip source, Clip clip, double timeScale)
+    static void CopyTiming(Clip source, Clip clip, double timeScale, List<string> warnings)
     {
         clip.Loop = new LoopSettings
         {
@@ -127,8 +127,14 @@ public static class ClipRetargeter
         };
         foreach (var m in source.Markers)
             clip.Markers.Add(new Marker { Name = m.Name, Phase = m.Phase, Time = Scaled(m.Time, clip, timeScale) });
+        var late = 0;
         foreach (var e in source.Events)
-            clip.Events.Add(new AnimationEvent { Name = e.Name, Kind = e.Kind, Data = new Dictionary<string, string>(e.Data), Time = Scaled(e.Time, clip, timeScale) });
+        {
+            var t = Scaled(e.Time, clip, timeScale);
+            if (!CombatLimits.InTime(t)) { late++; continue; }
+            clip.Events.Add(new AnimationEvent { Name = e.Name, Kind = e.Kind, Data = new Dictionary<string, string>(e.Data), Time = t });
+        }
+        if (late > 0) warnings.Add($"{late} event(s) would land after {CombatLimits.MaxTime.ToSeconds():N0} s once re-timed; dropped.");
         // Prop tracks do not depend on the skeleton (a world transform, or an offset from the attachment bone): copied as they
         // are, re-timed. Keys that land on the same frame after re-timing keep the last one.
         foreach (var t in source.Tracks.Where(t => t.Target.Kind == TargetKind.Prop))
@@ -164,13 +170,27 @@ public static class ClipRetargeter
         var dstRest = new RigEvaluator(targetRig).RestModel();
         var s = double.IsFinite(scale) && scale > 0 ? scale : 1;
         var combat = new ClipCombat();
+        // Re-timed times stay inside the new clip and the archive's limit (CombatLimits.MaxTime).
+        var limit = clip.Duration < CombatLimits.MaxTime ? clip.Duration : CombatLimits.MaxTime;
+        var clamped = false;
+        Flicks Fit(Flicks t)
+        {
+            var r = Scaled(t, clip, timeScale);
+            if (r <= limit) return r;
+            clamped = true;
+            return limit;
+        }
         if (c.Phases is { } p)
             combat.Phases = new CombatPhases
             {
-                StartupStart = Scaled(p.StartupStart, clip, timeScale), ActiveStart = Scaled(p.ActiveStart, clip, timeScale),
-                RecoveryStart = Scaled(p.RecoveryStart, clip, timeScale), End = Scaled(p.End, clip, timeScale),
+                StartupStart = Fit(p.StartupStart), ActiveStart = Fit(p.ActiveStart), RecoveryStart = Fit(p.RecoveryStart), End = Fit(p.End),
             };
-        if (combat.Phases is { } q && q.RecoveryStart <= q.ActiveStart) combat.Phases = null;
+        if (combat.Phases is { } q && q.RecoveryStart <= q.ActiveStart)
+        {
+            combat.Phases = null;
+            warnings.Add("The attack phases vanish after re-timing; dropped.");
+        }
+        else if (clamped) warnings.Add("The attack phases ran past the end of the re-timed clip; they were cut at its end.");
         foreach (var h in c.Hitboxes)
         {
             var copy = new Hitbox
@@ -178,10 +198,11 @@ public static class ClipRetargeter
                 Id = h.Id, Name = h.Name, Shape = h.Shape.Clone(), Damage = h.Damage, Knockback = h.Knockback, HitstopFrames = h.HitstopFrames,
                 Tags = new List<string>(h.Tags),
                 Attachment = new HitboxAttachment { Kind = h.Attachment.Kind, Target = h.Attachment.Target, Offset = h.Attachment.Offset },
-                Active = h.Active.Select(r => new ClipRange { Start = Scaled(r.Start, clip, timeScale), End = Scaled(r.End, clip, timeScale) })
-                    .Where(r => r.End > r.Start).ToList(),
             };
-            if (copy.Active.Count == 0) { warnings.Add($"Hitbox '{h.Name}': its active frames vanish after re-timing; dropped."); continue; }
+            clamped = false;
+            copy.Active = h.Active.Select(r => new ClipRange { Start = Fit(r.Start), End = Fit(r.End) }).Where(r => r.End > r.Start).ToList();
+            if (copy.Active.Count == 0) { warnings.Add($"Hitbox '{h.Name}': its active frames vanish after re-timing (or lie past the clip's end); dropped."); continue; }
+            if (clamped) warnings.Add($"Hitbox '{h.Name}': active frames past the end of the re-timed clip were cut.");
             if (h.Attachment.Kind == HitboxAttachKind.Bone)
             {
                 var si = sourceRig.IndexOf(h.Attachment.Target);

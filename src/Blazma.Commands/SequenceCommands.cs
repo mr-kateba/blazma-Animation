@@ -412,7 +412,8 @@ public sealed class BakeSequence(ObjectId sequenceId, string? name, bool reduceK
     }
 
     /// <summary>The bake itself, for any sequence (also one that is not in the project, e.g. a combo's).</summary>
-    internal static Clip Bake(Project p, ClipSequence s, SequenceEvaluator ev, string clipName, bool reduceKeys, bool footLock, List<Diagnostic> warnings, out JsonObject data)
+    internal static Clip Bake(Project p, ClipSequence s, SequenceEvaluator ev, string clipName, bool reduceKeys, bool footLock, List<Diagnostic> warnings, out JsonObject data,
+        Func<SequenceItem, AnimationEvent, bool>? keepEvent = null)
     {
         warnings.AddRange(ev.Warnings.Select(w => new Diagnostic("sequence", w)));
         var rig = ev.Rig;
@@ -449,7 +450,7 @@ public sealed class BakeSequence(ObjectId sequenceId, string? name, bool reduceK
             var startFrame = (long)Math.Round(range.Start);
             if (startFrame <= last) clip.Markers.Add(new Marker { Name = c.Name, Time = Flicks.FromFrame(startFrame, s.Fps) });
             // Events where the evaluator actually plays them (speed, loops, phase and wrap of looping clips).
-            foreach (var e in c.Events)
+            foreach (var e in c.Events.Where(e => keepEvent is null || keepEvent(item, e)))
                 foreach (var at in ev.FramesPlaying(item.Id, e.Time))
                 {
                     var frame = (long)Math.Round(at);

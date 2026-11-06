@@ -63,7 +63,7 @@ public static class AnimationExporter
                 ["node"] = x.Node,
                 ["attachedTo"] = x.Bone >= 0 ? rig.Bones[x.Bone].Name : null,
             }).ToArray());
-        if (Sidecar.Combat(project, baked, rig, bindings, props, PropExport.CharacterFor(project, rig, options.Character)) is { } combat)
+        if (Sidecar.Combat(project, baked, rig, bindings, props, PropExport.CharacterFor(project, rig, options.Character), warnings) is { } combat)
             sidecar["combat"] = combat;
         return new ExportResult
         {

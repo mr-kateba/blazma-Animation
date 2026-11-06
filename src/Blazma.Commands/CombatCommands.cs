@@ -136,7 +136,7 @@ public static class CombatCommands
             S.Of(S.Str("characterId", "Character id.", true), S.Str("ruleId", "Rule to replace (omit to add).", false), S.Str("name", "Rule name.", true),
                  S.Str("direction", "any (default) | front | back | left | right.", false), S.Str("height", "any (default) | high | mid | low.", false),
                  S.Num("minStrength", "0–1 (default 0).", false), S.Num("maxStrength", "0–1 (default 1).", false),
-                 S.Str("clipId", "Reaction clip (omit for procedural).", false), S.Num("durationSeconds", "Procedural reaction length (default 0.6).", false)),
+                 S.Str("clipId", "Reaction clip (omit for procedural).", false), S.Num("durationSeconds", $"Procedural reaction length ({CombatLimits.MinReactionSeconds}–{CombatLimits.MaxReactionSeconds} s, default 0.6).", false)),
             a => new SetReactionRule(S.Id(a, "characterId"), S.OptId(a, "ruleId"), a)));
 
         r.Register(new("reaction.remove_rule", "Remove a hit-reaction rule.", CommandEffect.Mutating,
@@ -202,7 +202,8 @@ public static class CombatCommands
 
         // ---- hit test -------------------------------------------------------------------------------------------------
         r.Register(new("combat.hit_test",
-            "Test an attack clip's hitboxes against a defender's hurtboxes frame by frame, with adaptive swept sub-steps (no tunnelling at fast swings). " +
+            "Test an attack clip's hitboxes against a defender's hurtboxes frame by frame, with swept sub-steps chosen from the relative motion of the hitbox and each hurtbox (both move); " +
+            "when more sub-steps were needed than maxSubsteps allows it warns 'may_have_missed_contacts'. " +
             "The attacker stands at the origin facing +Z; the defender at defenderX/Y/Z facing defenderFacing degrees (default 1 m in front, facing the attacker), " +
             "playing defenderClipId or its working pose. Reports each hitbox's first contact {frame, time, hitbox, hurtbox, bone, point, normal, direction, from, zone} " +
             "and 'reactionArgs' for reaction.generate. Does not change anything.",
@@ -835,7 +836,7 @@ public sealed class SetReactionRule(ObjectId characterId, ObjectId? ruleId, Json
             Height = CombatCommands.Enum(_args, "height", HitHeight.Any),
             MinStrength = CombatCommands.Bounded(_args, "minStrength", 0, 1, 0),
             MaxStrength = CombatCommands.Bounded(_args, "maxStrength", 0, 1, 1),
-            DurationSeconds = CombatCommands.Bounded(_args, "durationSeconds", 0.05, CombatLimits.MaxReactionSeconds, 0.6),
+            DurationSeconds = CombatCommands.Bounded(_args, "durationSeconds", CombatLimits.MinReactionSeconds, CombatLimits.MaxReactionSeconds, 0.6),
         };
         if (S.OptId(_args, "clipId") is { } clipId)
         {
@@ -1211,7 +1212,11 @@ public sealed class BakeCombo(ObjectId comboId, string? name, bool reduceKeys, b
         var ev = SequenceCommands.Evaluator(p, plan.Sequence);
         if (ev.SkippedForBlending.Count > 0)
             throw new CommandException("too_many_blends", $"More than {SequenceEvaluator.MaxBlending} attacks would blend at the same time; lengthen the links or shorten the blends.");
-        var clip = BakeSequence.Bake(p, plan.Sequence, ev, name ?? combo.Name, reduceKeys, footLock, warnings, out data);
+        // A followed attack is cut at its link: its events at or after that clip frame never play (nor do its hitboxes, below).
+        var cutAt = new Dictionary<SequenceItem, long>();
+        for (var i = 0; i + 1 < plan.Attacks.Count; i++) cutAt[plan.Sequence.Items[i]] = plan.Attacks[i].LinkFrame;
+        var clip = BakeSequence.Bake(p, plan.Sequence, ev, name ?? combo.Name, reduceKeys, footLock, warnings, out data,
+            (item, e) => !cutAt.TryGetValue(item, out var link) || e.Time < Flicks.FromFrame(link, p.FindClip(item.Clip)!.Fps));
         clip.Metadata["source"] = "combo";
         clip.Metadata["comboId"] = combo.Id.ToString();
         clip.Metadata.Remove("sequenceId");
@@ -1351,9 +1356,14 @@ public sealed class HitTest(JsonObject args) : ICommand
             ["startFrame"] = report.StartFrame,
             ["endFrame"] = report.EndFrame,
             ["evaluations"] = report.Evaluations,
+            ["substepsUsed"] = report.SubstepsUsed,
+            ["substepsRequired"] = report.SubstepsRequired == int.MaxValue ? null : report.SubstepsRequired,
+            ["mayHaveMissedContacts"] = report.MayHaveMissedContacts,
             ["reactionArgs"] = reactionArgs,
             ["reactionRule"] = rule,
-        }, report.Warnings.Select(w => new Diagnostic("hit_test", w)).ToList());
+        }, report.Warnings.Select(w => w.StartsWith(HitDetector.MissedWarningCode + ":", StringComparison.Ordinal)
+            ? new Diagnostic(HitDetector.MissedWarningCode, w[(HitDetector.MissedWarningCode.Length + 1)..].Trim())
+            : new Diagnostic("hit_test", w)).ToList());
     }
 
     public IReadOnlyList<Change> Undo(Project p) => Array.Empty<Change>();

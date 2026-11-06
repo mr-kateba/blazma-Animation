@@ -41,33 +41,77 @@ public sealed class HitTestReport
     public long EndFrame { get; set; }
     public int FramesTested { get; set; }
 
-    /// <summary>Pose evaluations (frames + sub-steps) actually done.</summary>
+    /// <summary>Pose evaluations (distinct sample times: frames, sub-steps, refinement and velocity samples) actually done.</summary>
     public int Evaluations { get; set; }
+
+    /// <summary>Bone evaluations actually done (attacker + moving defender, per sample time).</summary>
+    public double BoneWork { get; set; }
+
+    /// <summary>Most sub-steps any frame interval needed for the guaranteed step bound (may exceed <see cref="HitTestOptions.MaxSubsteps"/>).</summary>
+    public int SubstepsRequired { get; set; }
+
+    /// <summary>Most sub-steps actually used in one frame interval (the shared grid).</summary>
+    public int SubstepsUsed { get; set; }
+
+    /// <summary>True when the sub-step cap was below what the step bound needed (or a refinement was cut short): a contact
+    /// could have been missed where the motion between sub-steps is not a rigid swing (warning code may_have_missed_contacts).</summary>
+    public bool MayHaveMissedContacts { get; set; }
+
     public HitInfo? First => Hits.Count == 0 ? null : Hits.MinBy(h => h.Time);
 }
 
 /// <summary>
-/// Swept hit detection between an attack clip's hitboxes and a defender's hurtboxes (docs/ARCHITECTURE.md §9.3). For each frame
-/// where a hitbox is active, the interval since the previous frame is split into adaptive sub-steps (enough that the hitbox moves at
-/// most its own thickness plus the thinnest hurtbox radius per step, capped by <see cref="HitTestOptions.MaxSubsteps"/>); both characters are evaluated at
-/// each sub-step time (the real animation, not an interpolation), the hitbox is tested against every hurtbox, and — so a fast
-/// swing cannot pass through a thin target between two sub-steps — so is the volume it swept since the previous sub-step. Each
-/// hitbox reports its first contact only (one hit per hitbox); an instant contact's time is refined by bisection inside its sub-step
-/// (the reported frame is the first frame whose test from the previous frame finds it, i.e. ⌈time⌉).
+/// Swept hit detection between an attack clip's hitboxes and a defender's hurtboxes (docs/ARCHITECTURE.md §9.3).
+/// <para>For each frame interval (f−1, f] where a hitbox stays active, ONE sub-step grid is shared by all hitboxes and both
+/// characters: n = max over (hitbox, hurtbox) pairs of the steps needed so that no point of the hitbox moves more than half the
+/// thinner shape of the pair RELATIVE to the hurtbox per step (centre chord with an arc-length correction for the rotation, plus
+/// the rotation of the farthest extreme point: capsule end, box corner), capped by <see cref="HitTestOptions.MaxSubsteps"/>. Each
+/// sample time is evaluated once per character.</para>
+/// <para>Each sub-step is tested in the hurtbox's frame (so defender motion counts): the hitbox's relative pose is interpolated
+/// (centre lerp, rotation slerp) at enough geometric samples, each inflated by a conservative margin = sampling gap + the arc
+/// sagitta of a rigid swing (chord/2 · tan(θ/4)) + a slack for non-rigid relative motion. A candidate is resolved on the REAL
+/// animation by time bisection down to 1/1024 frame (earliest contact first); the reported time is that of a real overlap, or —
+/// when a tiny interval still moves farther than the shapes are thick — the swept contact. When the required sub-steps exceed the
+/// cap, the report says so (<see cref="HitTestReport.MayHaveMissedContacts"/>).</para>
+/// <para>Work is bounded: frames × MaxSubsteps × (attacker + defender bones) plus the refinement allowance is checked before any
+/// work, and the bone evaluations actually done are enforced during the test (too_large).</para>
 /// </summary>
 public static class HitDetector
 {
     public const int MaxFrames = 10_000;
     public const int MaxSubstepsLimit = 64;
 
-    /// <summary>Bisection steps that refine a contact time inside its sub-step.</summary>
+    /// <summary>Bisection depth of the refinement inside a sub-step (contact time to ~1/1024 frame).</summary>
     public const int RefineSteps = 10;
+
+    /// <summary>Smallest refinement interval (frames).</summary>
+    public const double MinInterval = 1.0 / 1024;
+
+    /// <summary>Refinement nodes allowed per (hitbox, sub-step) before giving up on it (flagged as may_have_missed_contacts).</summary>
+    public const int MaxResolveNodes = 256;
+
+    /// <summary>Most interpolated poses per swept pair test.</summary>
+    public const int MaxGeometricSamples = 32;
 
     /// <summary>Budget of shape pair tests (frames × sub-steps × hitboxes × hurtboxes).</summary>
     public const double MaxPairWork = 5_000_000;
 
-    /// <summary>Budget of bone evaluations (frames × sub-steps × (attacker + defender bones)).</summary>
+    /// <summary>Budget of bone evaluations (frames × sub-steps × (attacker + defender bones) + refinement), checked before and during.</summary>
     public const double MaxPoseWork = 20_000_000;
+
+    /// <summary>Code of the warning raised when the sub-step cap was too low for the step bound.</summary>
+    public const string MissedWarningCode = "may_have_missed_contacts";
+
+    sealed class Sample(double frame)
+    {
+        public double Frame { get; } = frame;
+        public Flicks T;
+        public Transform[] A = Array.Empty<Transform>();
+        public Transform[] D = Array.Empty<Transform>();
+        public WorldShape?[] Hit = Array.Empty<WorldShape?>();
+        public bool[] HitKnown = Array.Empty<bool>();
+        public WorldShape[]? Hurt;
+    }
 
     public static HitTestReport Run(Project project, Character attacker, Clip attack, Character defender, Clip? defenderClip, HitTestOptions o)
     {
@@ -85,7 +129,14 @@ public static class HitDetector
         var hitboxes = (attack.Combat?.Hitboxes ?? new List<Hitbox>()).Where(h => o.Hitbox is not { } only || h.Id == only).ToList();
         if (hitboxes.Count == 0)
             throw new CombatException(o.Hitbox is null ? "no_hitboxes" : "not_found", o.Hitbox is null ? $"Clip '{attack.Name}' has no hitbox." : $"Hitbox '{o.Hitbox}' is not in clip '{attack.Name}'.");
-        var hurtboxes = (defender.Combat?.Hurtboxes ?? new List<Hurtbox>()).Where(h => h.Enabled && rigD.IndexOf(h.Bone) >= 0).ToList();
+        var report = new HitTestReport();
+        var hurtboxes = new List<Hurtbox>();
+        foreach (var h in defender.Combat?.Hurtboxes ?? new List<Hurtbox>())
+        {
+            if (!h.Enabled) continue;
+            if (rigD.IndexOf(h.Bone) < 0) { report.Warnings.Add($"Hurtbox '{h.Name}': its bone no longer exists; skipped."); continue; }
+            hurtboxes.Add(h);
+        }
         if (hurtboxes.Count == 0) throw new CombatException("no_hurtboxes", $"'{defender.Name}' has no enabled hurtbox (run hurtbox.generate).");
 
         var fps = attack.Fps;
@@ -98,135 +149,227 @@ public static class HitDetector
         var steps = (double)frames * o.MaxSubsteps;
         if (steps * hitboxes.Count * hurtboxes.Count > MaxPairWork)
             throw new CombatException("too_large", $"{frames} frames × {o.MaxSubsteps} sub-steps × {hitboxes.Count} hitboxes × {hurtboxes.Count} hurtboxes is more than {MaxPairWork:N0} tests.");
-        if (steps * (rigA.Bones.Count + rigD.Bones.Count) > MaxPoseWork)
-            throw new CombatException("too_large", $"{frames} frames × {o.MaxSubsteps} sub-steps × {rigA.Bones.Count + rigD.Bones.Count} bones is more than {MaxPoseWork:N0} bone evaluations.");
+        var planned = PlannedPoseWork(frames, o.MaxSubsteps, hitboxes.Count, rigA.Bones.Count + rigD.Bones.Count);
+        if (planned > MaxPoseWork)
+            throw new CombatException("too_large", $"{frames} frames × {o.MaxSubsteps} sub-steps (+ refinement) × {rigA.Bones.Count + rigD.Bones.Count} bones is more than {MaxPoseWork:N0} bone evaluations.");
+        report.StartFrame = start;
+        report.EndFrame = end;
+        report.FramesTested = (int)frames;
 
-        var report = new HitTestReport { StartFrame = start, EndFrame = end, FramesTested = (int)frames };
         var evA = new RigEvaluator(rigA);
         var evD = new RigEvaluator(rigD);
         var staticDefender = defenderClip is null ? evD.Model(defender.Pose) : null;
-        var cache = new Dictionary<double, (Transform[] A, Transform[] D, Flicks T)>();
-        (Transform[] A, Transform[] D, Flicks T) At(double frame)
+        var costPerSample = rigA.Bones.Count + (staticDefender is null ? rigD.Bones.Count : 0);
+        var restD = evD.RestModel();
+        var headingBone = SequenceEvaluator.HeadingBoneOf(rigD);
+        var hurtLocal = hurtboxes.Select(h => WorldShape.From(h.Shape, Transform.Identity)).ToArray();
+        var hurtThick = hurtboxes.Select(h => Thickness(h.Shape)).ToArray();
+        var hurtBound = hurtboxes.Select(h => Bound(h.Shape)).ToArray();
+
+        // Samples of the current frame interval only (each time evaluated once per character); older ones are dropped per frame.
+        var cache = new Dictionary<double, Sample>();
+        Sample At(double frame)
         {
             if (cache.TryGetValue(frame, out var hit)) return hit;
+            report.BoneWork += costPerSample;
+            if (report.BoneWork > MaxPoseWork)
+                throw new CombatException("too_large", $"The hit test was stopped after {MaxPoseWork:N0} bone evaluations (the refinement needed more than planned); test fewer frames or hitboxes.");
             var t = CombatEvaluator.TimeOf(frame, fps);
-            var a = evA.Model(ClipEvaluator.Evaluate(attack, rigA, t));
-            var d = staticDefender ?? evD.Model(ClipEvaluator.Evaluate(defenderClip!, rigD, ClipEvaluator.PlaybackTime(defenderClip!, t)));
+            var s = new Sample(frame)
+            {
+                T = t,
+                A = evA.Model(ClipEvaluator.Evaluate(attack, rigA, t)),
+                D = staticDefender ?? evD.Model(ClipEvaluator.Evaluate(defenderClip!, rigD, ClipEvaluator.PlaybackTime(defenderClip!, t))),
+                Hit = new WorldShape?[hitboxes.Count],
+                HitKnown = new bool[hitboxes.Count],
+            };
             report.Evaluations++;
-            if (cache.Count > 4 * MaxSubstepsLimit) cache.Clear(); // only the current and previous frame are needed
-            return cache[frame] = (a, d, t);
+            return cache[frame] = s;
         }
-        WorldShape? HitShape(Hitbox h, double frame)
+        WorldShape? HitOf(Sample s, int i)
         {
-            var s = At(frame);
-            return CombatEvaluator.HitboxShape(project, h, attack, rigA, attacker.Id, s.A, s.T, Transform.Identity);
+            if (!s.HitKnown[i])
+            {
+                s.Hit[i] = CombatEvaluator.HitboxShape(project, hitboxes[i], attack, rigA, attacker.Id, s.A, s.T, Transform.Identity);
+                s.HitKnown[i] = true;
+            }
+            return s.Hit[i];
         }
-        List<(Hurtbox Box, WorldShape Shape)> HurtShapes(double frame)
+        WorldShape[] HurtOf(Sample s)
         {
-            var s = At(frame);
-            var list = new List<(Hurtbox, WorldShape)>(hurtboxes.Count);
-            foreach (var h in hurtboxes)
-                if (CombatEvaluator.HurtboxShape(rigD, h, s.D, placement) is { } w) list.Add((h, w));
-            return list;
+            if (s.Hurt is null)
+            {
+                s.Hurt = new WorldShape[hurtboxes.Count];
+                for (var k = 0; k < hurtboxes.Count; k++) s.Hurt[k] = CombatEvaluator.HurtboxShape(rigD, hurtboxes[k], s.D, placement)!.Value;
+            }
+            return s.Hurt;
         }
 
-        var minHurt = hurtboxes.Min(h => Thickness(h.Shape));
-        var done = new HashSet<ObjectId>();
-        var broken = new HashSet<ObjectId>();
-        var capped = false;
+        var done = new bool[hitboxes.Count];
+        var broken = new bool[hitboxes.Count];
+        var gridSteps = 1;
         for (var f = start; f <= end; f++)
         {
-            foreach (var h in hitboxes)
+            foreach (var key in cache.Keys.Where(k => k < f - 1).ToList()) cache.Remove(key);
+            var active = Enumerable.Range(0, hitboxes.Count).Where(i => !done[i] && !broken[i] && CombatEvaluator.IsActiveFrame(hitboxes[i], f, fps)).ToList();
+            if (active.Count == 0) continue;
+            var cur = At(f);
+            foreach (var i in active)
+                if (HitOf(cur, i) is null)
+                {
+                    broken[i] = true;
+                    report.Warnings.Add($"Hitbox '{hitboxes[i].Name}': its bone or prop no longer exists; skipped.");
+                }
+            var sweepers = new List<int>();
+            foreach (var i in active)
             {
-                if (done.Contains(h.Id) || broken.Contains(h.Id) || !CombatEvaluator.IsActiveFrame(h, f, fps)) continue;
-                if (HitShape(h, f) is not { } cur)
+                if (broken[i]) continue;
+                if (f > start && CombatEvaluator.IsActiveFrame(hitboxes[i], f - 1, fps) && HitOf(At(f - 1), i) is not null) sweepers.Add(i);
+                else if (Instant(cur, i) is { } c) Record(i, c.K, c.C, cur, false);
+            }
+            if (sweepers.Count == 0) continue;
+
+            // One grid for every hitbox and both characters: the largest need over the hitbox/hurtbox pairs.
+            var prev = At(f - 1);
+            var need = 1.0;
+            foreach (var i in sweepers)
+                for (var k = 0; k < hurtboxes.Count; k++)
                 {
-                    broken.Add(h.Id);
-                    report.Warnings.Add($"Hitbox '{h.Name}': its bone or prop no longer exists; skipped.");
-                    continue;
+                    var (dC, theta, rho) = Relative(HitOf(prev, i)!.Value, HitOf(cur, i)!.Value, HurtOf(prev)[k], HurtOf(cur)[k], hitboxes[i].Shape);
+                    var arc = theta > 1e-9 ? dC * (theta / 2) / Math.Sin(theta / 2) : dC;
+                    var tol = Math.Max(1e-4, Math.Min(Thickness(hitboxes[i].Shape), hurtThick[k]) / 2);
+                    var r = (arc + rho * theta) / tol;
+                    need = Math.Max(need, double.IsFinite(r) ? r : double.MaxValue);
                 }
-                var sweep = f > start && CombatEvaluator.IsActiveFrame(h, f - 1, fps);
-                if (!sweep)
+            var required = need >= MaxSubstepsLimit * 1e6 ? int.MaxValue : (int)Math.Ceiling(need - 1e-9);
+            report.SubstepsRequired = Math.Max(report.SubstepsRequired, required);
+            if (required > o.MaxSubsteps) report.MayHaveMissedContacts = true;
+            var n = Math.Clamp(required, 1, o.MaxSubsteps);
+            gridSteps = n;
+            report.SubstepsUsed = Math.Max(report.SubstepsUsed, n);
+            var a = prev;
+            for (var s = 1; s <= n; s++)
+            {
+                if (sweepers.All(i => done[i])) break;
+                var b = s == n ? cur : At(f - 1 + (double)s / n);
+                foreach (var i in sweepers)
                 {
-                    if (TestAt(h, f, cur, null) is { } instant) Record(instant);
-                    continue;
+                    if (done[i]) continue;
+                    var nodes = 0;
+                    if (Resolve(i, a, b, 0, ref nodes) is { } r)
+                        Record(i, r.K, r.C, r.At, Instant(b, i) is null); // swept: the sub-step sample itself does not overlap
                 }
-                var prev = HitShape(h, f - 1)!.Value;
-                var moved = Math.Max((cur.A - prev.A).Length(), (cur.B - prev.B).Length());
-                var needed = Math.Ceiling(moved / Math.Max(1e-4, Thickness(h.Shape) + minHurt));
-                if (!double.IsFinite(needed)) needed = o.MaxSubsteps;
-                if (needed > o.MaxSubsteps) capped = true;
-                var n = (int)Math.Clamp(needed, 1, o.MaxSubsteps);
-                for (var s = 1; s <= n; s++)
-                {
-                    var t = f - 1 + (double)s / n;
-                    var shape = s == n ? cur : HitShape(h, t)!.Value;
-                    if (TestAt(h, t, shape, prev) is { } contact)
-                    {
-                        Record(contact.Swept ? contact : Refine(h, f - 1 + (double)(s - 1) / n, t, contact));
-                        break;
-                    }
-                    prev = shape;
-                }
+                a = b;
             }
         }
-        if (capped) report.Warnings.Add($"A hitbox moved more than its thickness plus the thinnest hurtbox radius per sub-step even with {o.MaxSubsteps} sub-steps; the swept-volume test still catches pass-through contacts, but the contact time is less precise (raise maxSubsteps).");
-        report.Hits.Sort((a, b) => a.Time.CompareTo(b.Time));
+        if (report.MayHaveMissedContacts)
+            report.Warnings.Add($"{MissedWarningCode}: the motion needed {(report.SubstepsRequired == int.MaxValue ? "too many" : report.SubstepsRequired.ToString(System.Globalization.CultureInfo.InvariantCulture))} sub-steps per frame but at most {o.MaxSubsteps} were used. Rigid swings are still covered by the swept test, but a contact made by non-rigid motion between sub-steps may have been missed; raise maxSubsteps.");
+        report.Hits.Sort((x, y) => x.Time.CompareTo(y.Time));
         return report;
 
-        // The contact is inside (lo, hi]: bisect on the real animation (lo has no overlap, hi has) to ~1/1000 of a frame.
-        HitInfo Refine(Hitbox h, double lo, double hi, HitInfo best)
+        (int K, Contact C)? Instant(Sample s, int i)
         {
-            for (var i = 0; i < RefineSteps && hi - lo > 1e-4; i++)
+            if (HitOf(s, i) is not { } shape) return null;
+            var hurts = HurtOf(s);
+            (int K, Contact C)? best = null;
+            for (var k = 0; k < hurts.Length; k++)
+                if (Collision.Test(shape, hurts[k], out var c) && (best is null || c.Depth > best.Value.C.Depth)) best = (k, c);
+            return best;
+        }
+
+        // Earliest contact of hitbox i in (a, b], on the real animation: a conservative swept test prunes, bisection resolves.
+        (int K, Contact C, Sample At)? Resolve(int i, Sample a, Sample b, int depth, ref int nodes)
+        {
+            if (Sweep(i, a, b) is not { } cand) return null;
+            if (++nodes > MaxResolveNodes) { report.MayHaveMissedContacts = true; return null; }
+            if (b.Frame - a.Frame <= MinInterval * 1.0000001 || depth >= 2 * RefineSteps)
             {
-                var mid = (lo + hi) / 2;
-                if (TestAt(h, mid, HitShape(h, mid)!.Value, null) is { } m) { hi = mid; best = m; }
-                else lo = mid;
+                if (Instant(b, i) is { } c) return (c.K, c.C, b);
+                // A tiny interval that still moves farther than the shapes are thick: a pass-through, reported as the swept contact.
+                return cand.Disp > cand.Thick ? (cand.K, cand.C, b) : null;
+            }
+            var m = At((a.Frame + b.Frame) / 2);
+            return Resolve(i, a, m, depth + 1, ref nodes) ?? Resolve(i, m, b, depth + 1, ref nodes);
+        }
+
+        (int K, Contact C, double Disp, double Thick)? Sweep(int i, Sample a, Sample b)
+        {
+            var h0 = HitOf(a, i)!.Value;
+            var h1 = HitOf(b, i)!.Value;
+            var u0 = HurtOf(a);
+            var u1 = HurtOf(b);
+            var shape = hitboxes[i].Shape;
+            var bound = Bound(shape);
+            var thick = Thickness(shape);
+            (int, Contact, double, double)? best = null;
+            for (var k = 0; k < hurtboxes.Count; k++)
+            {
+                var q0 = u0[k].Rotation.Conjugate();
+                var q1 = u1[k].Rotation.Conjugate();
+                var c0 = q0.Rotate(h0.Center - u0[k].Center);
+                var c1 = q1.Rotate(h1.Center - u1[k].Center);
+                var r0 = (q0 * h0.Rotation).Normalized();
+                var r1 = (q1 * h1.Rotation).Normalized();
+                var dC = (c1 - c0).Length();
+                var theta = Quat.AngleBetween(r0, r1);
+                var rho = Extent(shape);
+                var disp = dC + rho * theta;
+                if (!double.IsFinite(disp)) continue;
+                var pairThick = Math.Max(1e-4, Math.Min(thick, hurtThick[k]));
+                var samples = (int)Math.Clamp(Math.Ceiling(disp / (pairThick / 2)), 1, MaxGeometricSamples);
+                // Rigid-swing sagitta of the centre path + slack for non-rigid relative motion + the gap between geometric samples.
+                var margin = dC / 2 * Math.Tan(theta / 4) + disp * theta / 4 + disp / (2 * samples);
+                if (DistancePointSegment(Vec3.Zero, c0, c1) > bound + margin + hurtBound[k]) continue;
+                for (var j = 0; j <= samples; j++)
+                {
+                    var u = (double)j / samples;
+                    var pose = new Transform(Vec3.Lerp(c0, c1, u), Quat.Slerp(r0, r1, u), Vec3.One);
+                    if (!Collision.Test(Inflate(WorldShape.From(shape, pose), margin), hurtLocal[k], out var c)) continue;
+                    var world = new Contact(u1[k].Center + u1[k].Rotation.Rotate(c.Point), u1[k].Rotation.Rotate(c.Normal), c.Depth);
+                    if (best is null) best = (k, world, disp, pairThick);
+                    break;
+                }
+                if (best is not null) break;
             }
             return best;
         }
 
-        void Record(HitInfo hit)
+        void Record(int i, int k, Contact c, Sample s, bool swept)
         {
-            done.Add(hit.Hitbox.Id);
-            report.Hits.Add(hit);
+            done[i] = true;
+            report.Hits.Add(Describe(i, k, c, s, swept));
         }
 
-        HitInfo? TestAt(Hitbox h, double t, WorldShape shape, WorldShape? previous)
+        HitInfo Describe(int i, int k, Contact c, Sample s, bool swept)
         {
-            var hurts = HurtShapes(t);
-            (Hurtbox Box, Contact C)? best = null;
-            var swept = false;
-            foreach (var (box, hs) in hurts)
-                if (Collision.Test(shape, hs, out var c) && (best is null || c.Depth > best.Value.C.Depth)) best = (box, c);
-            if (best is null && previous is { } p)
-            {
-                foreach (var sweepShape in SweptVolume(p, shape))
-                    foreach (var (box, hs) in hurts)
-                        if (Collision.Test(sweepShape, hs, out var c) && (best is null || c.Depth > best.Value.C.Depth)) best = (box, c);
-                swept = best is not null;
-            }
-            if (best is not { } b) return null;
-            return Describe(h, b.Box, b.C, t, shape, swept);
-        }
-
-        HitInfo Describe(Hitbox h, Hurtbox box, Contact c, double t, WorldShape shape, bool swept)
-        {
-            // Velocity of the hitbox point nearest the contact, by a backward difference over a small step.
-            var dt = 1.0 / Math.Max(1, o.MaxSubsteps);
+            var h = hitboxes[i];
+            var box = hurtboxes[k];
+            var t = s.Frame;
+            var shape = HitOf(s, i)!.Value;
+            // Velocity of the hitbox point nearest the contact RELATIVE to the hurtbox (defender motion removed), by a short difference.
+            var dt = 1.0 / Math.Max(64, gridSteps);
             var u = SegmentParam(shape, c.Point);
+            var other = At(t - dt >= 0 ? t - dt : t + dt);
+            var sign = t - dt >= 0 ? 1 : -1;
             Vec3 velocity = Vec3.Zero;
-            if (t - dt >= 0 && HitShape(h, t - dt) is { } before)
-                velocity = (Lerp(shape, u) - Lerp(before, u)) / (dt / fps.FramesPerSecond);
-            else if (HitShape(h, t + dt) is { } after)
-                velocity = (Lerp(after, u) - Lerp(shape, u)) / (dt / fps.FramesPerSecond);
+            if (HitOf(other, i) is { } os)
+            {
+                var hs = HurtOf(s)[k];
+                var ho = HurtOf(other)[k];
+                var relS = hs.Rotation.Conjugate().Rotate(Lerp(shape, u) - hs.Center);
+                var relO = ho.Rotation.Conjugate().Rotate(Lerp(os, u) - ho.Center);
+                velocity = hs.Rotation.Rotate(relS - relO) * sign / (dt / fps.FramesPerSecond);
+            }
             var dir = velocity.Length() > 0.05 ? velocity.Normalized() : -c.Normal;
-            var local = placement.Rotation.Conjugate().Rotate(dir);
+            // The defender's actual facing at the hit: its placement yaw × the heading of its pelvis/root in the pose it plays.
+            var heading = SequenceEvaluator.HeadingOf(s.D, restD, headingBone);
+            var facing = (placement.Rotation * Quat.FromAxisAngle(Vec3.UnitY, heading)).Normalized();
+            var local = facing.Conjugate().Rotate(dir);
             var horizontal = new Vec3(local.X, 0, local.Z);
             if (horizontal.Length() < 0.05)
             {
-                var n = placement.Rotation.Conjugate().Rotate(-c.Normal);
-                horizontal = new Vec3(n.X, 0, n.Z);
+                var nn = facing.Conjugate().Rotate(-c.Normal);
+                horizontal = new Vec3(nn.X, 0, nn.Z);
             }
             if (horizontal.Length() < 1e-6) horizontal = new Vec3(0, 0, -1); // straight down: treat as pushed back (hit from the front)
             horizontal = horizontal.Normalized();
@@ -239,24 +382,45 @@ public static class HitDetector
         }
     }
 
+    /// <summary>Bone evaluations a test is planned to need: one shared grid of <paramref name="maxSubsteps"/> sub-steps per frame
+    /// (each sample time evaluated once per character) plus a refinement allowance per hitbox (a bisection path and a velocity sample).</summary>
+    public static double PlannedPoseWork(long frames, int maxSubsteps, int hitboxes, int bones) =>
+        ((double)frames * maxSubsteps + 1 + hitboxes * (2.0 * RefineSteps + 4)) * bones;
+
     /// <summary>Hit strength 0–1 from a hitbox: knockback 1 m or damage 100 is a full-strength hit.</summary>
     public static double StrengthOf(Hitbox h) => Math.Clamp(Math.Max(h.Knockback / 1.0, h.Damage / 100.0), 0, 1);
 
-    /// <summary>Capsules covering the volume a sphere/capsule/box swept between two placements (conservative for spheres and capsules;
-    /// a box sweeps its centre with its smallest half extent).</summary>
-    static IEnumerable<WorldShape> SweptVolume(WorldShape from, WorldShape to)
+    /// <summary>Relative motion of a hitbox in a hurtbox's frame between two samples: centre chord, rotation angle and the
+    /// distance of the farthest extreme point (capsule end, box corner) from the centre.</summary>
+    static (double CentreChord, double Angle, double Extent) Relative(WorldShape h0, WorldShape h1, WorldShape u0, WorldShape u1, CollisionShape shape)
     {
-        if (to.IsBox)
-        {
-            yield return WorldShape.Capsule(from.A, to.A, to.Thickness);
-            yield break;
-        }
-        yield return WorldShape.Capsule(from.A, to.A, to.Radius);
-        if (to.Kind == CollisionShapeKind.Capsule)
-        {
-            yield return WorldShape.Capsule(from.B, to.B, to.Radius);
-            yield return WorldShape.Capsule(from.Center, to.Center, to.Radius);
-        }
+        var q0 = u0.Rotation.Conjugate();
+        var q1 = u1.Rotation.Conjugate();
+        var c0 = q0.Rotate(h0.Center - u0.Center);
+        var c1 = q1.Rotate(h1.Center - u1.Center);
+        return ((c1 - c0).Length(), Quat.AngleBetween((q0 * h0.Rotation).Normalized(), (q1 * h1.Rotation).Normalized()), Extent(shape));
+    }
+
+    /// <summary>Farthest point of the shape's core (segment or box) from its centre.</summary>
+    static double Extent(CollisionShape s) => s.Kind switch
+    {
+        CollisionShapeKind.Capsule => s.Length / 2,
+        CollisionShapeKind.Box => (s.Size * 0.5).Length(),
+        _ => 0,
+    };
+
+    /// <summary>Radius of a sphere around the centre that contains the whole shape.</summary>
+    static double Bound(CollisionShape s) => s.Kind == CollisionShapeKind.Box ? (s.Size * 0.5).Length() : Extent(s) + s.Radius;
+
+    static WorldShape Inflate(WorldShape s, double m) =>
+        s.IsBox ? s with { Half = s.Half + new Vec3(m, m, m) } : s with { Radius = s.Radius + m };
+
+    static double DistancePointSegment(Vec3 p, Vec3 a, Vec3 b)
+    {
+        var d = b - a;
+        var l2 = d.LengthSquared();
+        var u = l2 < 1e-18 ? 0 : Math.Clamp(Vec3.Dot(p - a, d) / l2, 0, 1);
+        return (a + d * u - p).Length();
     }
 
     static double Thickness(CollisionShape s) => s.Kind == CollisionShapeKind.Box ? Math.Min(s.Size.X, Math.Min(s.Size.Y, s.Size.Z)) / 2 : s.Radius;

@@ -151,6 +151,7 @@ public static class ProjectArchive
                 project.Assets.Add(asset);
             }
             Validate(project);
+            project.LoadWarnings.AddRange(doc.Warnings);
             if (project.Id.IsEmpty)
                 throw new ProjectFormatException("invalid_json", "project.json has no id.");
             return project;
@@ -333,4 +334,7 @@ public sealed class ArchiveDocument(JsonObject root)
     public JsonObject Root { get; } = root;
     public Dictionary<string, JsonObject> Entries { get; } = new(StringComparer.Ordinal);
     public Dictionary<string, byte[]> Binary { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>What the schema migrations repaired (shown to the user; see <see cref="Model.Project.LoadWarnings"/>).</summary>
+    public List<string> Warnings { get; } = new();
 }

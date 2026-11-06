@@ -92,7 +92,7 @@ No arguments.
 | [`clip_retarget`](#clip_retarget) | mutating | Retarget a clip from one character to another (rig → rig through the humanoid maps; differently proportioned or imported characters). Creates a NEW normal clip (undoable): mapped bones point the same way in the world, hip/root travel is scaled by the leg-length ratio, animated IK targets/poles are mapped, unmapped bones stay at rest (warning). With footLock (default true) the source's foot contacts are kept planted on the target. Returns clipId and a report. |
 | [`clip_set_duration`](#clip_set_duration) | mutating | Set a clip's length in frames. |
 | [`clip_set_loop`](#clip_set_loop) | mutating | Enable/disable looping and optionally set the loop range (startFrame < endFrame ≤ clip length). |
-| [`combat_hit_test`](#combat_hit_test) | readonly | Test an attack clip's hitboxes against a defender's hurtboxes frame by frame, with adaptive swept sub-steps (no tunnelling at fast swings). The attacker stands at the origin facing +Z; the defender at defenderX/Y/Z facing defenderFacing degrees (default 1 m in front, facing the attacker), playing defenderClipId or its working pose. Reports each hitbox's first contact {frame, time, hitbox, hurtbox, bone, point, normal, direction, from, zone} and 'reactionArgs' for reaction.generate. Does not change anything. |
+| [`combat_hit_test`](#combat_hit_test) | readonly | Test an attack clip's hitboxes against a defender's hurtboxes frame by frame, with swept sub-steps chosen from the relative motion of the hitbox and each hurtbox (both move); when more sub-steps were needed than maxSubsteps allows it warns 'may_have_missed_contacts'. The attacker stands at the origin facing +Z; the defender at defenderX/Y/Z facing defenderFacing degrees (default 1 m in front, facing the attacker), playing defenderClipId or its working pose. Reports each hitbox's first contact {frame, time, hitbox, hurtbox, bone, point, normal, direction, from, zone} and 'reactionArgs' for reaction.generate. Does not change anything. |
 | [`combat_set_phases`](#combat_set_phases) | mutating | Set a clip's attack phases: startup [startupStart, activeStart), active [activeStart, activeEnd), recovery [activeEnd, recoveryEnd) (frames, ends exclusive). fromMarkers=true reads them from the key-pose markers (anticipation/initial → startup, main_action or contact → active, follow_through → recovery, final → end). clear=true removes them. |
 | [`combat_shapes`](#combat_shapes) | readonly | World-space shapes for drawing: the hurtboxes of a character and (with clipId) the clip's hitboxes, at a (fractional) frame of the clip or in the working pose, each with 'active'. Optional placement (x/z/facingDegrees). Does not change anything. |
 | [`combo_add_attack`](#combo_add_attack) | mutating | Append (or insert at 'index') an attack clip to a combo, with its input and cancel window: [cancelStartFrame, cancelEndFrame) of this clip is when the NEXT attack may start; linkFrame (default: window start) is where it starts when baked; blendFrames is this attack's fade-in. Returns attackId. |
@@ -371,7 +371,7 @@ Effect: **mutating**. Command id: `clip.set_loop`.
 
 ### `combat_hit_test`
 
-Test an attack clip's hitboxes against a defender's hurtboxes frame by frame, with adaptive swept sub-steps (no tunnelling at fast swings). The attacker stands at the origin facing +Z; the defender at defenderX/Y/Z facing defenderFacing degrees (default 1 m in front, facing the attacker), playing defenderClipId or its working pose. Reports each hitbox's first contact {frame, time, hitbox, hurtbox, bone, point, normal, direction, from, zone} and 'reactionArgs' for reaction.generate. Does not change anything.
+Test an attack clip's hitboxes against a defender's hurtboxes frame by frame, with swept sub-steps chosen from the relative motion of the hitbox and each hurtbox (both move); when more sub-steps were needed than maxSubsteps allows it warns 'may_have_missed_contacts'. The attacker stands at the origin facing +Z; the defender at defenderX/Y/Z facing defenderFacing degrees (default 1 m in front, facing the attacker), playing defenderClipId or its working pose. Reports each hitbox's first contact {frame, time, hitbox, hurtbox, bone, point, normal, direction, from, zone} and 'reactionArgs' for reaction.generate. Does not change anything.
 
 Effect: **readonly**. Command id: `combat.hit_test`.
 
@@ -1269,7 +1269,7 @@ Effect: **mutating**. Command id: `reaction.generate`.
 | `height` | string | no | high \| mid (default) \| low. (min length 1) |
 | `strength` | number | no | 0–1 (default 0.5). |
 | `knockback` | number | no | Root travel (m, default 0). |
-| `durationSeconds` | number | no | Length (0.1–5 s, default 0.6). |
+| `durationSeconds` | number | no | Length (0.05–10 s, default 0.6). |
 | `baseClipId` | string | no | Clip whose pose to start from. (min length 1) |
 | `baseFrame` | integer | no | Frame of baseClipId (default its last frame). (min 0) |
 | `name` | string | no | Clip name (default 'Hit reaction'). (min length 1) |
@@ -1301,7 +1301,7 @@ Effect: **mutating**. Command id: `reaction.set_rule`.
 | `minStrength` | number | no | 0–1 (default 0). |
 | `maxStrength` | number | no | 0–1 (default 1). |
 | `clipId` | string | no | Reaction clip (omit for procedural). (min length 1) |
-| `durationSeconds` | number | no | Procedural reaction length (default 0.6). |
+| `durationSeconds` | number | no | Procedural reaction length (0.05–10 s, default 0.6). |
 
 ### `rig_import`
 

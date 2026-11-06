@@ -54,9 +54,9 @@ previews/             صور مصغّرة
 | 1 → 2 | الهياكل، مكتبة الوضعيات، المشهد (الشخصيات) | فهارس `rigs` و`poses` فارغة |
 | 2 → 3 | علامات المقاطع (Markers) ومسارات `pinned` لأهداف IK | لا تغيير في JSON (الرفع يمنع النسخ الأقدم من حذف العلامات عند الحفظ) |
 | 3 → 4 | التسلسلات، الأجسام (Props) ومساراتها (`target.kind = "Prop"`)، مكتبة القوالب | فهارس `sequences` و`props` و`templates` فارغة في `project.json` |
-| 4 → 5 | بيانات القتال: أنواع الأحداث، مراحل المقطع وHitboxes، Hurtboxes وقواعد رد الفعل للشخصية، Combos (§11) | فهرس `combos` فارغ؛ كل حدث بلا `kind` (في المقاطع ومقاطع القوالب) يصبح `"Custom"`. دالة نقية تمشي القوائم بحلقات (بلا عَوْد) |
+| 4 → 5 | بيانات القتال: أنواع الأحداث، مراحل المقطع وHitboxes، Hurtboxes وقواعد رد الفعل للشخصية، Combos (§11) | فهرس `combos` فارغ؛ كل حدث بلا `kind` (في المقاطع ومقاطع القوالب) يصبح `"Custom"`. أحداث v4 التي تخالف حدود §11 **تُصلَح بتحذير ترحيل** بدل رفض الملف: الاسم الفارغ ← `"event"` (والطويل يُقص إلى 200)، الحمولة تُبقي أول 16 مدخلًا، والمقطع أول 1024 حدثًا. دالة نقية تمشي القوائم بحلقات (بلا عَوْد) |
 
-ملف المخطط 4 الحقيقي `tests/fixtures/schema-v4/project-v4.blazanim` (مقطع هجوم من قالب بعلامة وحدثين بلا `kind`، سيف مربوط، تسلسل) يُفتح ويُرقّى ويُحفظ بالمخطط 5 دون فقدان (`CombatTests.Acceptance_Phase9_V4FixtureOpensAndUpgradesToV5_WithoutLosingData`).
+ملف المخطط 4 الحقيقي `tests/fixtures/schema-v4/project-v4.blazanim` (مقطع هجوم من قالب بعلامة وحدثين بلا `kind`، سيف مربوط، تسلسل) يُفتح ويُرقّى ويُحفظ بالمخطط 5 دون فقدان (`CombatTests.Acceptance_Phase9_V4FixtureOpensAndUpgradesToV5_WithoutLosingData`). وأرشيف v4 مصنوع يدويًا بأحداث مخالفة يُفتح مُصلَحًا مع ثلاثة تحذيرات (`CombatReviewFixTests.V4Archive_EventsBreakingTheV5Limits_AreRepairedWithWarnings`). تحذيرات الترحيل في `Project.LoadWarnings` (لا تُحفظ)، ويعيدها `project_open` في `migrationWarnings`.
 
 ملف المخطط 3 الحقيقي `tests/fixtures/schema-v3/project-v3.blazanim` (شخصية، مقطع بعلامة وتكرار ومسارات `pinned`، ووضعية في المكتبة) يُفتح ويُرقّى ويُحفظ بالمخطط 4 دون فقدان (`TemplateAndSchemaTests.Acceptance_Phase8_V3FixtureOpensAndUpgradesToV4_WithoutLosingData`).
 
@@ -319,7 +319,7 @@ previews/             صور مصغّرة
 | الأحداث | ≤ 1024 للمقطع؛ الحمولة ≤ 16 مدخلًا، المفتاح ≤ 64 والقيمة ≤ 256 محرفًا؛ الزمن 0–100,000 ث |
 | Hitboxes | ≤ 32 للمقطع؛ 1–16 نطاقًا نشطًا مرتبة غير متداخلة؛ damage 0–1,000,000؛ knockback 0–100 م؛ hitstop 0–600 إطار؛ ≤ 8 وسوم ≤ 32 محرفًا |
 | الأشكال | نصف القطر وأبعاد الصندوق > 0 و≤ 10 م، طول الكبسولة 0–10 م؛ الإزاحة منتهية ضمن ±100 م والدوران غير صفري |
-| Hurtboxes / قواعد رد الفعل | ≤ 64 / ≤ 64 للشخصية؛ القوة `0 ≤ min ≤ max ≤ 1`؛ المدة 0.05–10 ث |
+| Hurtboxes / قواعد رد الفعل | ≤ 64 / ≤ 64 للشخصية؛ القوة `0 ≤ min ≤ max ≤ 1`؛ المدة 0.05–10 ث (`CombatLimits.MinReactionSeconds`–`MaxReactionSeconds`، وهي حدود `reaction.generate` أيضًا) |
 | Combos | ≤ 256 في المشروع، ≤ 32 ضربة، الإدخال ≤ 32 محرفًا، الدمج 0–600 إطار، النافذة كاملة (بداية ونهاية) و`link` داخلها |
 | المعرّفات | فريدة داخل كل قائمة (والشخصيات فريدة في المشهد) |
 

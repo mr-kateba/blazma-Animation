@@ -180,6 +180,8 @@ public static class CombatLimits
     public const double MaxDamage = 1_000_000;
     public const double MaxKnockback = 100;
     public const int MaxHitstopFrames = 600;
+    /// <summary>Reaction length range (s), shared by reaction rules, reaction.generate and HitReaction.Build.</summary>
+    public const double MinReactionSeconds = 0.05;
     public const double MaxReactionSeconds = 10;
 
     /// <summary>Latest time any combat range or event may have (100,000 s).</summary>
@@ -303,7 +305,7 @@ public static class CombatLimits
         var what = $"reaction '{r.Name}'";
         if (!Enum.IsDefined(r.Direction) || !Enum.IsDefined(r.Height)) return $"{what} has an unknown direction or height";
         if (!(r.MinStrength >= 0 && r.MinStrength <= r.MaxStrength && r.MaxStrength <= 1)) return $"{what}: strengths must satisfy 0 ≤ min ≤ max ≤ 1";
-        if (!(r.DurationSeconds >= 0.05 && r.DurationSeconds <= MaxReactionSeconds)) return $"{what}: duration must be between 0.05 and {MaxReactionSeconds} s";
+        if (!(r.DurationSeconds >= MinReactionSeconds && r.DurationSeconds <= MaxReactionSeconds)) return $"{what}: duration must be between {MinReactionSeconds} and {MaxReactionSeconds} s";
         return null;
     }
 

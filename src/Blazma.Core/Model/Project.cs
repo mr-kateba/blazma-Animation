@@ -13,6 +13,10 @@ public sealed class Project
     /// <summary>Schema version written by this build. See docs/DATA_FORMAT.md §4.</summary>
     public const int CurrentSchemaVersion = 5;
 
+    /// <summary>What opening the file repaired (schema migrations); not saved.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public List<string> LoadWarnings { get; } = new();
+
     public ObjectId Id { get; set; } = ObjectId.New();
     public string Name { get; set; } = "Untitled";
     public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
