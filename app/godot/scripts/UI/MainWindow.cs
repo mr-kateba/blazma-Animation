@@ -89,6 +89,7 @@ public partial class MainWindow : Control
         App.SessionChanged += OnSessionChanged;
         App.SettingsChanged += OnSettingsChanged;
         App.ErrorRaised += OnError;
+        App.LoadWarningsRaised += OnLoadWarnings;
         App.ActiveClipChanged += OnActiveClipChanged;
         App.InfoRaised += OnInfo;
         App.PlaybackChanged += OnPlaybackForMenus;
@@ -110,6 +111,7 @@ public partial class MainWindow : Control
         App.SessionChanged -= OnSessionChanged;
         App.SettingsChanged -= OnSettingsChanged;
         App.ErrorRaised -= OnError;
+        App.LoadWarningsRaised -= OnLoadWarnings;
         App.ActiveClipChanged -= OnActiveClipChanged;
         App.InfoRaised -= OnInfo;
         App.PlaybackChanged -= OnPlaybackForMenus;
@@ -146,7 +148,7 @@ public partial class MainWindow : Control
     }
 
     /// <summary>Top-level menu popup by index (Project, Edit, Animation, Rigging, Settings); used by screenshot tests.</summary>
-    public PopupMenu MenuPopup(int index) => index switch { 0 => _mProject, 1 => _mEdit, 2 => _mAnim, 3 => _mRigging, 5 => _mPhysics, 7 => _mProps, _ => _mSettings };
+    public PopupMenu MenuPopup(int index) => index switch { 0 => _mProject, 1 => _mEdit, 2 => _mAnim, 3 => _mRigging, 5 => _mPhysics, 7 => _mProps, 8 => _mCombat, _ => _mSettings };
 
     // ---- UI construction ---------------------------------------------------------------------
 
@@ -198,6 +200,7 @@ public partial class MainWindow : Control
 
         BuildMotionLayers();
         BuildPhysicsLayers();
+        BuildCombatLayers();
         _center.AddChild(Rail);
         _center.AddChild(Inspector);
 
@@ -212,6 +215,8 @@ public partial class MainWindow : Control
         PropsPanelNode.SizeFlagsHorizontal = SizeFlags.Fill;
         _rightDock.AddChild(PhysicsPanelNode);
         _rightDock.AddChild(PropsPanelNode);
+        CombatPanelNode.SizeFlagsHorizontal = SizeFlags.Fill;
+        _rightDock.AddChild(CombatPanelNode);
         _rightDock.AddChild(HistoryPanel);
         _splitInner.AddChild(_rightDock);
 
@@ -273,6 +278,7 @@ public partial class MainWindow : Control
         row.AddChild(_segLang);
         row.AddChild(_segTheme);
         row.AddChild(BuildPropsPanelToggle());
+        row.AddChild(BuildCombatPanelToggle());
         row.AddChild(BuildPhysicsPanelToggle());
         row.AddChild(BuildAiButton());
 
@@ -352,10 +358,12 @@ public partial class MainWindow : Control
         _mPhysics = new PopupMenu { Name = "Physics" };
         _mProps = new PopupMenu { Name = "Props" };
         _mSettings = new PopupMenu { Name = "Settings" };
-        foreach (var m in new[] { _mProject, _mEdit, _mAnim, _mRigging, _mPhysics, _mProps, _mSettings }) _menuBar.AddChild(m);
+        _mCombat = new PopupMenu { Name = "Combat" };
+        foreach (var m in new[] { _mProject, _mEdit, _mAnim, _mRigging, _mPhysics, _mProps, _mSettings, _mCombat }) _menuBar.AddChild(m);
         BuildRiggingMenu();
         BuildPhysicsMenu();
         BuildPropsMenu();
+        BuildCombatMenu();
 
         _mProject.AddItem("New", MNew);
         _mProject.AddItem("Open…", MOpen);
@@ -504,6 +512,7 @@ public partial class MainWindow : Control
         UpdatePhysicsMenu();
         UpdateMotionMenu();
         UpdatePhase8Menu();
+        UpdateCombatMenu();
     }
 
     static void SetItemText(PopupMenu m, int id, string text, bool disabled)
@@ -567,6 +576,7 @@ public partial class MainWindow : Control
         BuildPhysicsDialogs();
         BuildMotionDialogs();
         BuildPhase8Dialogs();
+        BuildPhase9Dialogs();
     }
 
     /// <summary>Text is translated here, then the dialog's own auto-translation is off so user content is never "translated".</summary>
@@ -791,7 +801,8 @@ public partial class MainWindow : Control
         ValidateSelection(replaced);
         if (activeBefore != SelectedClipId) Timeline.SyncClips(); // the selection was repaired silently (for example a first generated clip)
         // Pose edits (gizmo drags fire one per mouse step) only touch the 3D view, the inspector and the status.
-        var poseOnly = args.Changes.All(c => c.Kind is Change.PoseChanged or Change.SaveStateChanged or Change.PropChanged or Change.SequenceChanged or Change.TemplateChanged);
+        var poseOnly = args.Changes.All(c => c.Kind is Change.PoseChanged or Change.SaveStateChanged or Change.PropChanged or Change.SequenceChanged or Change.TemplateChanged
+            or Change.CombatChanged or Change.ComboChanged);
         // Key / marker / curve edits that do not change the clip list only touch the timeline, the inspector and the status.
         var sig = ClipSignature();
         var clipLight = !replaced && !poseOnly && sig == _clipSig
@@ -822,6 +833,7 @@ public partial class MainWindow : Control
         UpdateChip();
         UpdateMenus();
         RefreshPhase8Ui();
+        RefreshPhase9Ui();
     }
 
     void UpdateChip()
@@ -924,6 +936,9 @@ public partial class MainWindow : Control
         if (message.Contains("must be between 1 and 10,000,000")) return Tr("The length must be between 1 and 10,000,000 frames.");
         return Tr(message);
     }
+
+    void OnLoadWarnings(IReadOnlyList<string> warnings) =>
+        _toast.Notify(Tr("This project was made with an older version and was repaired while opening:") + " " + string.Join(" ", warnings.Take(3)), _palette.Warn);
 
     void OnError(string message)
     {

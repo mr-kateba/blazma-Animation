@@ -320,6 +320,14 @@ public partial class SelfTest : Node
         await Settle();
         await ShotMenu(1, "en-dark-menu-edit");
 
+        if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_P9") == "1")
+        {
+            // Development shortcut: only the Phase 9 scenario (it starts from a new project).
+            await RunPhase9();
+            Finish();
+            return;
+        }
+
         if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_P8") == "1")
         {
             // Development shortcut: only the Phase 8 scenario (it starts from a new project).
@@ -348,6 +356,9 @@ public partial class SelfTest : Node
 
         // Phase 8: templates, retarget, foot lock, sequences, props.
         await RunPhase8();
+
+        // Phase 9: combat tools (phases, events, hitboxes, hurtboxes, hit test, reactions, combos).
+        await RunPhase9();
 
         // Restore the user's settings.
         App.SetLanguage(backup.Language); App.SetTheme(backup.Theme); App.SetAdvancedMode(backup.AdvancedMode);

@@ -164,7 +164,7 @@ public partial class MainWindow
         if (PropsPanelNode is null) return;
         PropsPanelButton.SetPressedNoSignal(App.Settings.PropsPanel);
         PropsPanelNode.SyncVisible();
-        PropsPanelNode.ReserveBelow = HistoryPanel.Visible ? 170 : 0;
+        PropsPanelNode.ReserveBelow = (HistoryPanel.Visible ? 170 : 0) + (CombatPanelOpen ? 180 : 0);
         Props.Refresh();
         UpdatePropsMenu();
     }
@@ -391,6 +391,12 @@ public partial class MainWindow
         "too_many_blends" => Tr("Too many clips blend at the same time (at most 8). Move a clip so fewer overlap."),
         "invalid_gltf" => Tr("This file is not a valid .glb model."),
         "unsupported_source" => Tr("This kind of model file is not supported."),
+        "missing_markers" => Tr("The clip has no Main Action (or Contact) and Follow-through (or Recovery) markers yet. Add the key-pose phases first (Animation > Add Key-pose Phases) and place them, or type the frames."),
+        "no_hitboxes" => Tr("This attack clip has no hitbox yet. Add one in the Combat panel."),
+        "no_hurtboxes" => Tr("The defender has no hurtboxes yet. Generate them in the Combat panel."),
+        "empty_combo" => Tr("None of the combo's attacks can be played. Their clips are missing or belong to another character."),
+        "no_rig" => Tr("This clip has no keys yet, so it does not know which skeleton it animates. Key a pose first."),
+        "no_bones" or "no_segments" or "no_spine" => Tr("This character's skeleton has no humanoid body parts to build from. Map its bones first (Rigging > Bone Mapping)."),
         "internal_error" => Tr("Something went wrong inside Blazma. Your project is unchanged. Please try again."),
         _ => null,
     };

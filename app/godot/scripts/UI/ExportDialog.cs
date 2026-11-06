@@ -287,7 +287,7 @@ public partial class ExportDialog : ConfirmationDialog
         if (!string.IsNullOrEmpty(last) && System.IO.Directory.Exists(last)) return last;
         if (App.FilePath is { } fp && System.IO.Path.GetDirectoryName(fp) is { Length: > 0 } dir && System.IO.Directory.Exists(dir)) return dir;
         var docs = OS.GetSystemDir(OS.SystemDir.Documents);
-        return !string.IsNullOrEmpty(docs) && System.IO.Directory.Exists(docs) ? docs : Godot.ProjectSettings.GlobalizePath("user://");
+        return !string.IsNullOrEmpty(docs) && System.IO.Directory.Exists(docs) ? docs : AppPaths.UserDir;
     }
 
     void RefreshHint()

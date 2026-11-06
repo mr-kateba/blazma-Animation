@@ -5,7 +5,7 @@ namespace Blazma.UI.App;
 /// <summary>Per-user preferences stored in user://settings.cfg (never inside projects).</summary>
 public sealed class AppSettings
 {
-    const string Path = "user://settings.cfg";
+    static string Path => AppPaths.Combine("settings.cfg");
     const int MaxRecent = 10;
 
     public string Language { get; set; } = "en";
@@ -29,6 +29,10 @@ public sealed class AppSettings
     public bool ShowContacts { get; set; }
     /// <summary>Phase 8: the Props panel is open.</summary>
     public bool PropsPanel { get; set; }
+    /// <summary>Phase 9: hurtboxes and hitboxes drawn in the viewport, and the combat strip under the timeline. Off by default.</summary>
+    public bool ShowCombat { get; set; }
+    /// <summary>Phase 9: the Combat panel is open.</summary>
+    public bool CombatPanel { get; set; }
     public List<string> RecentFiles { get; } = new();
     /// <summary>Folder of the last animation export (Phase 4).</summary>
     public string LastExportDir { get; set; } = "";
@@ -68,6 +72,8 @@ public sealed class AppSettings
         PhysicsPanel = (bool)cfg.GetValue("ui", "physics_panel", PhysicsPanel);
         ShowContacts = (bool)cfg.GetValue("ui", "show_contacts", ShowContacts);
         PropsPanel = (bool)cfg.GetValue("ui", "props_panel", PropsPanel);
+        ShowCombat = (bool)cfg.GetValue("ui", "show_combat", ShowCombat);
+        CombatPanel = (bool)cfg.GetValue("ui", "combat_panel", CombatPanel);
         AutosaveMinutes = Math.Clamp((int)cfg.GetValue("files", "autosave_minutes", AutosaveMinutes), 0, 60);
         RecentFiles.Clear();
         RecentFiles.AddRange(((string[])cfg.GetValue("files", "recent", Array.Empty<string>())).Take(MaxRecent));
@@ -101,6 +107,8 @@ public sealed class AppSettings
         cfg.SetValue("ui", "physics_panel", PhysicsPanel);
         cfg.SetValue("ui", "show_contacts", ShowContacts);
         cfg.SetValue("ui", "props_panel", PropsPanel);
+        cfg.SetValue("ui", "show_combat", ShowCombat);
+        cfg.SetValue("ui", "combat_panel", CombatPanel);
         cfg.SetValue("files", "autosave_minutes", AutosaveMinutes);
         cfg.SetValue("files", "recent", RecentFiles.ToArray());
         cfg.SetValue("files", "last_export_dir", LastExportDir);
@@ -112,6 +120,7 @@ public sealed class AppSettings
         cfg.SetValue("ai", "kimodo_device", KimodoDevice);
         cfg.SetValue("ai", "kimodo_timeout_seconds", KimodoTimeoutSeconds);
         foreach (var (k, v) in Layout) cfg.SetValue("layout", k, v);
+        System.IO.Directory.CreateDirectory(AppPaths.UserDir);
         cfg.Save(Path);
     }
 

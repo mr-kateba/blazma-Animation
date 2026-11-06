@@ -41,6 +41,7 @@ public partial class MainWindow
         row.AddChild(TrailButton);
         row.AddChild(OnionButton);
         AddPhysicsToolbar(row);
+        AddCombatToolbar(row);
         _viewTools.AddChild(W.Margin(row, 4, 4, 4, 4));
         _viewTools.AnchorLeft = 0.5f; _viewTools.AnchorRight = 0.5f;
         _viewTools.GrowHorizontal = GrowDirection.Both;
@@ -152,6 +153,7 @@ public partial class MainWindow
         Timeline.Graph.Rebuild(true);
         SyncPropsUi();
         SyncPhysicsUi();
+        SyncCombatUi();
         Timeline.Contacts.Sync();
     }
 

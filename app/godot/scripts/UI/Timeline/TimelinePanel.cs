@@ -12,7 +12,7 @@ namespace Blazma.UI.Views;
 /// </summary>
 public partial class TimelinePanel : PanelContainer
 {
-    public const int TabTimeline = 0, TabDope = 1, TabGraph = 2, TabClips = 3, TabPoses = 4, TabSequence = 5;
+    public const int TabTimeline = 0, TabDope = 1, TabGraph = 2, TabClips = 3, TabPoses = 4, TabSequence = 5, TabCombo = 6;
 
     readonly MainWindow _host;
     public ClipStrip Strip { get; }
@@ -21,6 +21,10 @@ public partial class TimelinePanel : PanelContainer
     public BalanceStrip Balance { get; }
     /// <summary>Phase 8: foot contacts under the canvas.</summary>
     public ContactStrip Contacts { get; }
+    /// <summary>Phase 9: attack phases, hitbox active ranges and event markers under the canvas.</summary>
+    public CombatStrip Combat { get; }
+    /// <summary>Phase 9: the combo editor (Advanced).</summary>
+    public ComboView Combo { get; }
     /// <summary>Phase 8: the sequence editor (Advanced).</summary>
     public SequenceView Sequence { get; }
     /// <summary>Phase 8: opens the Templates browser (prominent in Simple mode).</summary>
@@ -77,7 +81,7 @@ public partial class TimelinePanel : PanelContainer
         // header: tabs, clip picker, add marker
         var head = new HBoxContainer { LayoutDirection = LayoutDirectionEnum.Locale };
         head.AddThemeConstantOverride("separation", 10);
-        Tabs = new Segmented("Timeline", "Dope Sheet", "Graph", "Clips", "Poses", "Sequence");
+        Tabs = new Segmented("Timeline", "Dope Sheet", "Graph", "Clips", "Poses", "Sequence", "Combo");
         Tabs.Selected += i => SelectTab(i);
         head.AddChild(Tabs);
         var clipLabel = W.Label("Clip", "Dim");
@@ -191,6 +195,8 @@ public partial class TimelinePanel : PanelContainer
         tl.AddChild(Canvas);
         tl.AddChild(Balance);
         tl.AddChild(Contacts);
+        Combat = new CombatStrip(host, Canvas) { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        tl.AddChild(Combat);
         tl.AddChild(KeyPoses);
         _timelineTab = tl;
         Dope = new DopeSheetView(host);
@@ -198,7 +204,8 @@ public partial class TimelinePanel : PanelContainer
         Strip = new ClipStrip(host);
         Strip.Embed();
         Sequence = new SequenceView(host);
-        foreach (var c in new Control[] { tl, Dope, Graph, Strip, Sequence }) { W.Fill(c); stack.AddChild(c); }
+        Combo = new ComboView(host);
+        foreach (var c in new Control[] { tl, Dope, Graph, Strip, Sequence, Combo }) { W.Fill(c); stack.AddChild(c); }
         root.AddChild(stack);
 
         App.PlaybackChanged += Sync;
@@ -233,7 +240,7 @@ public partial class TimelinePanel : PanelContainer
 
     public void SelectTab(int index)
     {
-        if (index is TabGraph or TabSequence && !App.Settings.AdvancedMode) index = TabTimeline;
+        if (index is TabGraph or TabSequence or TabCombo && !App.Settings.AdvancedMode) index = TabTimeline;
         _tab = index;
         Tabs.SetIndex(_tab);
         _timelineTab.Visible = _tab == TabTimeline;
@@ -241,14 +248,16 @@ public partial class TimelinePanel : PanelContainer
         Graph.Visible = _tab == TabGraph;
         Strip.Visible = _tab is TabClips or TabPoses;
         Sequence.Visible = _tab == TabSequence;
+        Combo.Visible = _tab == TabCombo;
         _transport.Visible = _tab <= TabGraph;
         AddMarkerButton.Visible = _tab <= TabGraph;
         if (_tab is TabClips or TabPoses) Strip.SetPosesMode(_tab == TabPoses);
         App.SetSequenceMode(_tab == TabSequence);
         if (_tab == TabSequence) Sequence.Sync();
+        if (_tab == TabCombo) Combo.Sync();
         if (_tab == TabGraph) Graph.Rebuild(true);
         Dope.QueueRedraw(); Canvas.QueueRedraw();
-        CustomMinimumSize = new Vector2(0, _tab switch { TabDope => 336, TabGraph => 350, TabSequence => 336, _ => 284 });
+        CustomMinimumSize = new Vector2(0, _tab switch { TabDope => 336, TabGraph => 350, TabSequence => 336, TabCombo => 336, _ => 284 });
     }
 
     /// <summary>Graph is an Advanced-mode tab.</summary>
@@ -256,8 +265,9 @@ public partial class TimelinePanel : PanelContainer
     {
         Tabs[TabGraph].Visible = advanced;
         Tabs[TabSequence].Visible = advanced;
+        Tabs[TabCombo].Visible = advanced;
         RetargetButton.Visible = advanced;
-        if (!advanced && _tab is TabGraph or TabSequence) SelectTab(TabTimeline);
+        if (!advanced && _tab is TabGraph or TabSequence or TabCombo) SelectTab(TabTimeline);
     }
 
     // ---- sync ------------------------------------------------------------------------------------------------------------------

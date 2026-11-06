@@ -120,8 +120,9 @@ public partial class MainWindow
         PhysicsPanelButton.SetPressedNoSignal(s.PhysicsPanel);
         PhysicsPanelButton.Visible = s.AdvancedMode; // Simple mode reaches the panel from the Physics menu
         PhysicsPanelNode.SyncVisible();
-        _rightDock.Visible = PhysicsPanelNode.Visible || HistoryPanel.Visible || PropsPanelNode.Visible;
-        PhysicsPanelNode.ReserveBelow = (HistoryPanel.Visible ? 170 : 0) + (PropsPanelNode.Visible ? 180 : 0);
+        _rightDock.Visible = PhysicsPanelNode.Visible || HistoryPanel.Visible || PropsPanelNode.Visible || CombatPanelOpen;
+        PhysicsPanelNode.ReserveBelow = (HistoryPanel.Visible ? 170 : 0) + (PropsPanelNode.Visible ? 180 : 0) + (CombatPanelOpen ? 180 : 0);
+        CombatPanelNode.ReserveBelow = HistoryPanel.Visible ? 170 : 0;
         PhysicsView.QueueRedraw();
         Timeline.Balance.Sync();
         UpdatePhysicsMenu();

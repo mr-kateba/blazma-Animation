@@ -2714,3 +2714,695 @@ msgstr "التسلسل كبير جدًا: فيه مقاطع كثيرة أو هو
 msgid "This sequence is too big to play: it has too many clips or is too long."
 msgstr "هذا التسلسل كبير جدًا للتشغيل: فيه مقاطع كثيرة أو هو طويل جدًا."
 
+
+# Phase 9: combat
+
+msgid "Hit"
+msgstr "ضربة"
+
+msgid "Footstep"
+msgstr "وقع قدم"
+
+msgid "Sound"
+msgstr "صوت"
+
+msgid "Visual effect"
+msgstr "مؤثر بصري"
+
+msgid "Custom"
+msgstr "مخصص"
+
+msgid "High"
+msgstr "عالٍ"
+
+msgid "Low"
+msgstr "منخفض"
+
+msgid "Middle"
+msgstr "متوسط"
+
+msgid "front"
+msgstr "أمام"
+
+msgid "back"
+msgstr "خلف"
+
+msgid "Front"
+msgstr "الأمام"
+
+msgid "Back"
+msgstr "الخلف"
+
+msgid "Left side"
+msgstr "الجانب الأيسر"
+
+msgid "Right side"
+msgstr "الجانب الأيمن"
+
+msgid "Any side"
+msgstr "أي جانب"
+
+msgid "Capsule"
+msgstr "كبسولة"
+
+msgid "startup"
+msgstr "البداية"
+
+msgid "Startup"
+msgstr "البداية"
+
+msgid "active"
+msgstr "الفعل"
+
+msgid "Active"
+msgstr "الفعل"
+
+msgid "recovery"
+msgstr "الانتهاء"
+
+msgid "Fill"
+msgstr "تعبئة"
+
+msgid "Sphere: a ball. Capsule: a rounded stick (a blade or a limb). Box: a block."
+msgstr "كرة: شكل كروي. كبسولة: عصا مستديرة (نصل أو طرف). صندوق: كتلة."
+
+msgid "Radius of the sphere or of the capsule, in metres."
+msgstr "نصف قطر الكرة أو الكبسولة بالمتر."
+
+msgid "Distance between the two ends of the capsule's round caps, in metres."
+msgstr "المسافة بين طرفي الكبسولة المستديرين بالمتر."
+
+msgid "Width of the box, in metres."
+msgstr "عرض الصندوق بالمتر."
+
+msgid "Height of the box, in metres."
+msgstr "ارتفاع الصندوق بالمتر."
+
+msgid "Depth of the box, in metres."
+msgstr "عمق الصندوق بالمتر."
+
+msgid "Dim"
+msgstr "خافت"
+
+msgid "Shape"
+msgstr "الشكل"
+
+msgid "Radius"
+msgstr "نصف القطر"
+
+msgid "Width"
+msgstr "العرض"
+
+msgid "Height"
+msgstr "الارتفاع"
+
+msgid "Depth"
+msgstr "العمق"
+
+msgid "Phases"
+msgstr "المراحل"
+
+msgid "Events"
+msgstr "الأحداث"
+
+msgid "Hitboxes"
+msgstr "صناديق الضرب"
+
+msgid "Hurtboxes"
+msgstr "صناديق الإصابة"
+
+msgid "Select or create a clip first. Combat data belongs to a clip."
+msgstr "اختر مقطعًا أو أنشئ واحدًا أولًا. بيانات القتال تتبع المقطع."
+
+msgid "Set phases"
+msgstr "تعيين المراحل"
+
+msgid "Use these frames as the startup, active and recovery parts of the attack."
+msgstr "استخدم هذه الإطارات كأجزاء البداية والفعل والانتهاء للهجمة."
+
+msgid "From markers"
+msgstr "من العلامات"
+
+msgid "Read the phases from the key-pose markers: Main Action or Contact starts the active part, Follow-through or Recovery ends it."
+msgstr "اقرأ المراحل من علامات الوضعيات: الحركة الرئيسية أو التماس تبدأ جزء الفعل، والمتابعة أو الاسترداد تنهيه."
+
+msgid "Remove the attack phases of this clip."
+msgstr "أزل مراحل الهجمة من هذا المقطع."
+
+msgid "What the game should do or listen for, for example “footstep_left”."
+msgstr "ما الذي يجب أن تفعله اللعبة أو تنتظره، مثل «footstep_left»."
+
+msgid "Add event"
+msgstr "إضافة حدث"
+
+msgid "Add an event at the frame above."
+msgstr "أضف حدثًا عند الإطار أعلاه."
+
+msgid "Update"
+msgstr "تحديث"
+
+msgid "Change the selected event."
+msgstr "غيّر الحدث المحدد."
+
+msgid "Remove the selected event."
+msgstr "أزل الحدث المحدد."
+
+msgid "Playhead"
+msgstr "المؤشر"
+
+msgid "Use the current frame."
+msgstr "استخدم الإطار الحالي."
+
+msgid "Prop"
+msgstr "عنصر"
+
+msgid "Use selected"
+msgstr "استخدم المحدد"
+
+msgid "Pick the bone or prop that is selected in the viewport."
+msgstr "اختر العظمة أو العنصر المحدد في نافذة العرض."
+
+msgid "Frames where the hitbox can hit, as ranges: 12-17,20-23. The last frame of a range is not included. Empty: the active phase."
+msgstr "الإطارات التي يمكن لصندوق الضرب أن يصيب فيها، كمدى: 12-17,20-23. آخر إطار في المدى غير مشمول. فارغ: جزء الفعل."
+
+msgid "Active phase"
+msgstr "جزء الفعل"
+
+msgid "Use the active frames of the attack phases."
+msgstr "استخدم إطارات الفعل من مراحل الهجمة."
+
+msgid "Words for the game, separated by commas, for example: slash, heavy."
+msgstr "كلمات للعبة مفصولة بفواصل، مثل: slash, heavy."
+
+msgid "Add hitbox"
+msgstr "إضافة صندوق ضرب"
+
+msgid "Add a hitbox with the values below to this clip."
+msgstr "أضف صندوق ضرب بالقيم أدناه إلى هذا المقطع."
+
+msgid "Apply to selected"
+msgstr "تطبيق على المحدد"
+
+msgid "Change the selected hitbox to the values below."
+msgstr "غيّر صندوق الضرب المحدد إلى القيم أدناه."
+
+msgid "Remove the selected hitbox."
+msgstr "أزل صندوق الضرب المحدد."
+
+msgid "Generate hurtboxes"
+msgstr "توليد صناديق الإصابة"
+
+msgid "Build a hurtbox for each body part of the character from its skeleton. Existing hurtboxes are replaced."
+msgstr "ابنِ صندوق إصابة لكل جزء من جسم الشخصية انطلاقًا من هيكلها. الصناديق الموجودة تُستبدل."
+
+msgid "Can be hit"
+msgstr "يمكن إصابته"
+
+msgid "A hurtbox that cannot be hit is ignored by hit tests."
+msgstr "صندوق الإصابة الذي لا يمكن إصابته يُتجاهل في اختبارات الضرب."
+
+msgid "Change the selected hurtbox."
+msgstr "غيّر صندوق الإصابة المحدد."
+
+msgid "Remove the selected hurtbox."
+msgstr "أزل صندوق الإصابة المحدد."
+
+msgid "Remove all"
+msgstr "إزالة الكل"
+
+msgid "Remove every hurtbox of this character."
+msgstr "أزل كل صناديق الإصابة لهذه الشخصية."
+
+msgid "Hit test…"
+msgstr "اختبار الضرب…"
+
+msgid "Swing the attack clip at another character and see where and when it hits."
+msgstr "حرّك مقطع الهجمة نحو شخصية أخرى وانظر أين ومتى يصيبها."
+
+msgid "Combo editor"
+msgstr "محرر الكومبو"
+
+msgid "Chain attacks into a combo with cancel windows."
+msgstr "اربط الهجمات في كومبو مع نوافذ إلغاء."
+
+msgid "Floating"
+msgstr "عائم"
+
+msgid "Combat"
+msgstr "القتال"
+
+msgid "Close the Combat panel"
+msgstr "أغلق لوحة القتال"
+
+msgid "Startup starts"
+msgstr "تبدأ البداية عند"
+
+msgid "First frame of the wind-up (usually 0)."
+msgstr "أول إطار من التحضير (غالبًا 0)."
+
+msgid "Active starts"
+msgstr "يبدأ الفعل عند"
+
+msgid "First frame where the attack can hit."
+msgstr "أول إطار يمكن للهجمة أن تصيب فيه."
+
+msgid "Active ends"
+msgstr "ينتهي الفعل عند"
+
+msgid "Where the active part ends and the recovery begins. This frame is not included."
+msgstr "حيث ينتهي جزء الفعل ويبدأ الانتهاء. هذا الإطار غير مشمول."
+
+msgid "Recovery ends"
+msgstr "ينتهي الانتهاء عند"
+
+msgid "Where the attack is over. This frame is not included."
+msgstr "حيث تنتهي الهجمة. هذا الإطار غير مشمول."
+
+msgid "Frames count from 0. An end frame is the first frame after the part."
+msgstr "الإطارات تُعدّ من 0. إطار النهاية هو أول إطار بعد الجزء."
+
+msgid "No events yet. Events tell the game when something happens, like a footstep or a sound."
+msgstr "لا توجد أحداث بعد. الأحداث تخبر اللعبة متى يحدث شيء، كوقع قدم أو صوت."
+
+msgid "Kind"
+msgstr "النوع"
+
+msgid "Payload"
+msgstr "البيانات"
+
+msgid "No hitboxes in this clip yet. A hitbox is the part of the attack that hurts: a fist, a foot or a blade."
+msgstr "لا توجد صناديق ضرب في هذا المقطع بعد. صندوق الضرب هو الجزء الذي يؤذي من الهجمة: قبضة أو قدم أو نصل."
+
+msgid "Attached to"
+msgstr "مرتبط بـ"
+
+msgid "Target"
+msgstr "الهدف"
+
+msgid "A hitbox follows a bone of the character or a prop (like a sword) held by it."
+msgstr "صندوق الضرب يتبع عظمة من الشخصية أو عنصرًا (مثل سيف) تحمله."
+
+msgid "Offset from the bone or prop"
+msgstr "إزاحة عن العظمة أو العنصر"
+
+msgid "Section"
+msgstr "قسم"
+
+msgid "When and how hard"
+msgstr "متى وبأي قوة"
+
+msgid "Active frames"
+msgstr "إطارات الفعل"
+
+msgid "Damage"
+msgstr "الضرر"
+
+msgid "Knockback"
+msgstr "الدفع"
+
+msgid "Hit-stop frames"
+msgstr "إطارات التوقف"
+
+msgid "Tags"
+msgstr "الوسوم"
+
+msgid "How much damage the hit does. The game decides what the number means."
+msgstr "مقدار الضرر الذي تسببه الضربة. اللعبة تقرر معنى الرقم."
+
+msgid "How far the defender is pushed, in metres."
+msgstr "المسافة التي يُدفع بها المدافع بالمتر."
+
+msgid "How many frames both fighters freeze when the hit lands."
+msgstr "عدد الإطارات التي يتجمد فيها المقاتلان عند الإصابة."
+
+msgid "Set the attack phases first (Phases page)."
+msgstr "عيّن مراحل الهجمة أولًا (صفحة المراحل)."
+
+msgid "Radius scale"
+msgstr "مقياس نصف القطر"
+
+msgid "Make every generated hurtbox thicker or thinner."
+msgstr "اجعل كل صناديق الإصابة المولدة أسمك أو أنحف."
+
+msgid "Zone"
+msgstr "المنطقة"
+
+msgid "Which part of the body the hurtbox belongs to. Reactions use it: a high hit makes the head snap back."
+msgstr "أي جزء من الجسم ينتمي إليه صندوق الإصابة. ردود الفعل تستخدمه: الضربة العالية تجعل الرأس يرتد للخلف."
+
+msgid "Clip: {0}  ·  Character: {1}"
+msgstr "المقطع: {0}  ·  الشخصية: {1}"
+
+msgid "This clip has no attack phases yet. Set the frames below, or read them from the key-pose markers."
+msgstr "هذا المقطع لا يحتوي على مراحل هجمة بعد. اكتب الإطارات أدناه أو اقرأها من علامات الوضعيات."
+
+msgid "Frame {0} is outside the attack."
+msgstr "الإطار {0} خارج الهجمة."
+
+msgid "Frame {0} is in the {1} part."
+msgstr "الإطار {0} ضمن جزء {1}."
+
+msgid "The phases must go in order: startup, then active (at least one frame), then recovery, all inside the clip."
+msgstr "يجب أن تكون المراحل بالترتيب: البداية ثم الفعل (إطار واحد على الأقل) ثم الانتهاء، كلها داخل المقطع."
+
+msgid "Give the event a name first."
+msgstr "أعطِ الحدث اسمًا أولًا."
+
+msgid "This clip has no keys yet. Key a pose first so a hitbox can follow a bone, or attach to a prop."
+msgstr "لا توجد مفاتيح في هذا المقطع بعد. أنشئ وضعية أولًا ليتبع صندوق الضرب عظمة، أو اربطه بعنصر."
+
+msgid "Tip: set the attack phases first, then new hitboxes are active during the active part."
+msgstr "نصيحة: عيّن مراحل الهجمة أولًا لتكون صناديق الضرب الجديدة فعّالة خلال جزء الفعل."
+
+msgid "Hitbox {0}"
+msgstr "صندوق ضرب {0}"
+
+msgid "Give the hitbox a name first."
+msgstr "أعطِ صندوق الضرب اسمًا أولًا."
+
+msgid "Choose the bone or prop the hitbox follows first."
+msgstr "اختر العظمة أو العنصر الذي يتبعه صندوق الضرب أولًا."
+
+msgid "Regenerate hurtboxes"
+msgstr "إعادة توليد صناديق الإصابة"
+
+msgid "{0} has no hurtboxes yet. Generate them from its skeleton, then fine-tune each one."
+msgstr "{0} ليس لديها صناديق إصابة بعد. ولّدها من هيكلها ثم اضبط كل واحد."
+
+msgid "{0}: {1} hurtboxes."
+msgstr "{0}: {1} من صناديق الإصابة."
+
+msgid "Follows the bone {0}"
+msgstr "يتبع العظمة {0}"
+
+msgid "Generate reaction"
+msgstr "توليد رد فعل"
+
+msgid "Make a flinch clip for the defender from this hit: its direction, height and strength."
+msgstr "أنشئ مقطع ارتداد للمدافع من هذه الضربة: اتجاهها وارتفاعها وقوتها."
+
+msgid "Go to hit frame"
+msgstr "اذهب إلى إطار الإصابة"
+
+msgid "Move the timeline to the frame of the first hit."
+msgstr "انقل المخطط الزمني إلى إطار أول إصابة."
+
+msgid "Hit Test"
+msgstr "اختبار الضرب"
+
+msgid "Run hit test"
+msgstr "تشغيل اختبار الضرب"
+
+msgid "Swing an attack at another character to see where and when it hits. The attacker stands at the middle facing forward."
+msgstr "حرّك هجمة نحو شخصية أخرى لترى أين ومتى تصيبها. يقف المهاجم في المنتصف متجهًا للأمام."
+
+msgid "Attacker"
+msgstr "المهاجم"
+
+msgid "Attack clip"
+msgstr "مقطع الهجمة"
+
+msgid "Defender"
+msgstr "المدافع"
+
+msgid "Defender plays"
+msgstr "المدافع يشغّل"
+
+msgid "Left"
+msgstr "يسار"
+
+msgid "How far the defender stands to the attacker's left (negative: right), in metres."
+msgstr "كم يبعد المدافع إلى يسار المهاجم (سالب: اليمين) بالمتر."
+
+msgid "How far in front of the attacker the defender stands, in metres."
+msgstr "كم يبعد المدافع أمام المهاجم بالمتر."
+
+msgid "Faces"
+msgstr "يواجه"
+
+msgid "The direction the defender faces: 180 looks at the attacker, 0 turns away."
+msgstr "اتجاه مواجهة المدافع: 180 ينظر إلى المهاجم، 0 يدير ظهره."
+
+msgid "Defender stands"
+msgstr "يقف المدافع"
+
+msgid "no hitbox"
+msgstr "بلا صندوق ضرب"
+
+msgid "Its current pose"
+msgstr "وضعيته الحالية"
+
+msgid "Add a character and an attack clip first."
+msgstr "أضف شخصية ومقطع هجمة أولًا."
+
+msgid "This clip has no hitbox yet. Add one in the Combat panel (Hitboxes page)."
+msgstr "هذا المقطع بلا صندوق ضرب بعد. أضف واحدًا في لوحة القتال (صفحة صناديق الضرب)."
+
+msgid "The defender has no hurtboxes yet. Generate them in the Combat panel (Hurtboxes page)."
+msgstr "المدافع ليس لديه صناديق إصابة بعد. ولّدها في لوحة القتال (صفحة صناديق الإصابة)."
+
+msgid "That clip animates a different character than the one chosen."
+msgstr "هذا المقطع يحرك شخصية مختلفة عن المختارة."
+
+msgid "The clip is too long or has too many shapes to test at once."
+msgstr "المقطع طويل جدًا أو فيه أشكال كثيرة لاختباره دفعة واحدة."
+
+msgid "The hit test could not run: {0}"
+msgstr "تعذر تشغيل اختبار الضرب: {0}"
+
+msgid "{0} frames tested."
+msgstr "تم اختبار {0} إطارًا."
+
+msgid "No hit. The attack never touches the defender in these frames."
+msgstr "لا إصابة. الهجمة لا تلمس المدافع في هذه الإطارات."
+
+msgid "Move the defender closer, check the hitbox size and active frames, or check that the hurtboxes cover the body."
+msgstr "قرّب المدافع، أو راجع حجم صندوق الضرب وإطاراته الفعالة، أو تأكد أن صناديق الإصابة تغطي الجسم."
+
+msgid "Hit on frame {0}: {1} touches {2}."
+msgstr "إصابة عند الإطار {0}: {1} يلمس {2}."
+
+msgid "Exact moment: frame {0}"
+msgstr "اللحظة الدقيقة: الإطار {0}"
+
+msgid "Body part: {0}, zone: {1}"
+msgstr "الجزء المصاب: {0}، المنطقة: {1}"
+
+msgid "Hit from: {0}"
+msgstr "الإصابة من: {0}"
+
+msgid "Strength: {0}%"
+msgstr "القوة: {0}٪"
+
+msgid "Damage {0}, knockback {1} m, hit-stop {2} frames"
+msgstr "الضرر {0}، الدفع {1} م، التوقف {2} إطارات"
+
+msgid "A fast swing: the hit was caught between two frames, where it would have passed through."
+msgstr "ضربة سريعة: التُقطت الإصابة بين إطارين كانت ستمر فيهما دون ملامسة."
+
+msgid "Matching reaction rule: {0}"
+msgstr "قاعدة رد الفعل المطابقة: {0}"
+
+msgid "No reaction rule matches. A procedural flinch can be generated."
+msgstr "لا توجد قاعدة رد فعل مطابقة. يمكن توليد ارتداد إجرائي."
+
+msgid "{0} hits in all."
+msgstr "{0} إصابات في المجموع."
+
+msgid "Hit reaction {0}"
+msgstr "رد فعل {0}"
+
+msgid "The reaction could not be generated: {0}"
+msgstr "تعذر توليد رد الفعل: {0}"
+
+msgid "Reaction clip added. It is selected and playing on the defender."
+msgstr "أُضيف مقطع رد الفعل. وهو محدد ويعمل على المدافع."
+
+msgid "Show hurtboxes (where a character can be hit) and hitboxes (the part of an attack that hurts) in the viewport, and the combat strip under the timeline."
+msgstr "اعرض صناديق الإصابة (أماكن إصابة الشخصية) وصناديق الضرب (جزء الهجمة الذي يؤذي) في نافذة العرض، وشريط القتال تحت المخطط الزمني."
+
+msgid "Transport"
+msgstr "التشغيل"
+
+msgid "Show or hide the Combat panel: attack phases, events, hitboxes and hurtboxes of the clip."
+msgstr "أظهر أو أخفِ لوحة القتال: مراحل الهجمة والأحداث وصناديق الضرب والإصابة للمقطع."
+
+msgid "Combat Panel"
+msgstr "لوحة القتال"
+
+msgid "Show Hitboxes and Hurtboxes"
+msgstr "إظهار صناديق الضرب والإصابة"
+
+msgid "Generate Hurtboxes"
+msgstr "توليد صناديق الإصابة"
+
+msgid "Add Event at Playhead…"
+msgstr "إضافة حدث عند المؤشر…"
+
+msgid "Hit Test…"
+msgstr "اختبار الضرب…"
+
+msgid "Combo Editor"
+msgstr "محرر الكومبو"
+
+msgid "Add a character first."
+msgstr "أضف شخصية أولًا."
+
+msgid "Create an attack clip first, then test it."
+msgstr "أنشئ مقطع هجمة أولًا ثم اختبره."
+
+msgid "Add Event"
+msgstr "إضافة حدث"
+
+msgid "Add"
+msgstr "إضافة"
+
+msgid "event"
+msgstr "حدث"
+
+msgid "Combo {0}"
+msgstr "كومبو {0}"
+
+msgid "Add a character first, then make a combo for it."
+msgstr "أضف شخصية أولًا ثم أنشئ لها كومبو."
+
+msgid "New Combo"
+msgstr "كومبو جديد"
+
+msgid "Combo deleted: {0}"
+msgstr "حُذف الكومبو: {0}"
+
+msgid "This clip has no hitbox yet, so the attack cannot hit anything. Add one in the Combat panel."
+msgstr "هذا المقطع بلا صندوق ضرب، فلا يمكن للهجمة أن تصيب شيئًا. أضف واحدًا في لوحة القتال."
+
+msgid "That clip animates a different character than this combo."
+msgstr "هذا المقطع يحرك شخصية مختلفة عن شخصية الكومبو."
+
+msgid "The combo is too big: it has too many attacks or is too long to process."
+msgstr "الكومبو كبير جدًا: فيه هجمات كثيرة أو هو أطول من أن يُعالَج."
+
+msgid "Baked into the sequence “{0}”."
+msgstr "تم الدمج في التسلسل «{0}»."
+
+msgid "Show sequence"
+msgstr "عرض التسلسل"
+
+msgid "{0} ({1}) at frame {2}"
+msgstr "{0} ({1}) عند الإطار {2}"
+
+msgid "{0}: hits on frames {1}–{2}"
+msgstr "{0}: إصابات في الإطارات {1}–{2}"
+
+msgid "Attacks"
+msgstr "الهجمات"
+
+msgid "Add attacks to see the combined timeline."
+msgstr "أضف هجمات لترى المخطط الزمني المجمّع."
+
+msgid "Frames {0}–{1} on the combined timeline"
+msgstr "الإطارات {0}–{1} على المخطط الزمني المجمّع"
+
+msgid "Cancel window: frames {0}–{1}"
+msgstr "نافذة الإلغاء: الإطارات {0}–{1}"
+
+msgid "The next attack starts at frame {0}"
+msgstr "الهجمة التالية تبدأ عند الإطار {0}"
+
+msgid "Combo"
+msgstr "الكومبو"
+
+msgid "Create an empty combo for the selected character."
+msgstr "أنشئ كومبو فارغًا للشخصية المحددة."
+
+msgid "Delete the combo. The clips stay. Ctrl+Z brings it back."
+msgstr "احذف الكومبو. تبقى المقاطع. Ctrl+Z يعيده."
+
+msgid "The button or command that starts this attack, for example X or light."
+msgstr "الزر أو الأمر الذي يبدأ هذه الهجمة، مثل X أو light."
+
+msgid "Add attack"
+msgstr "إضافة هجمة"
+
+msgid "Add the chosen clip at the end of the combo. It gets a cancel window over the recovery part when the clip has attack phases."
+msgstr "أضف المقطع المختار في نهاية الكومبو. يحصل على نافذة إلغاء فوق جزء الانتهاء عندما يكون للمقطع مراحل هجمة."
+
+msgid "Turn the combo into one normal clip that plays all the attacks. The combo stays."
+msgstr "حوّل الكومبو إلى مقطع عادي واحد يشغّل كل الهجمات. يبقى الكومبو."
+
+msgid "Bake to sequence"
+msgstr "دمج في تسلسل"
+
+msgid "Turn the combo into a sequence you can edit further in the Sequence tab."
+msgstr "حوّل الكومبو إلى تسلسل يمكنك تعديله أكثر في تبويب التسلسل."
+
+msgid "Change the selected attack."
+msgstr "غيّر الهجمة المحددة."
+
+msgid "No cancel window"
+msgstr "بلا نافذة إلغاء"
+
+msgid "Remove the cancel window and link: the next attack starts near the end of this one."
+msgstr "أزل نافذة الإلغاء والربط: الهجمة التالية تبدأ قرب نهاية هذه."
+
+msgid "Remove attack"
+msgstr "إزالة الهجمة"
+
+msgid "Remove this attack from the combo. The clip itself is not deleted."
+msgstr "أزل هذه الهجمة من الكومبو. المقطع نفسه لا يُحذف."
+
+msgid "Input"
+msgstr "الإدخال"
+
+msgid "The button or command that starts this attack."
+msgstr "الزر أو الأمر الذي يبدأ هذه الهجمة."
+
+msgid "Cancel from"
+msgstr "الإلغاء من"
+
+msgid "First frame of this clip where the next attack may start."
+msgstr "أول إطار في هذا المقطع يمكن للهجمة التالية أن تبدأ فيه."
+
+msgid "Cancel to"
+msgstr "الإلغاء إلى"
+
+msgid "Where the cancel window ends. This frame is not included."
+msgstr "حيث تنتهي نافذة الإلغاء. هذا الإطار غير مشمول."
+
+msgid "Link at"
+msgstr "الربط عند"
+
+msgid "Frame of this clip where the next attack starts when the combo is baked. 0: the start of the cancel window."
+msgstr "إطار من هذا المقطع تبدأ عنده الهجمة التالية عند دمج الكومبو. 0: بداية نافذة الإلغاء."
+
+msgid "Frames over which this attack fades in over the one before it."
+msgstr "عدد الإطارات التي تتلاشى فيها هذه الهجمة داخل التي قبلها."
+
+msgid "No combo yet"
+msgstr "لا كومبو بعد"
+
+msgid "Create a combo, then add the attack clips in order."
+msgstr "أنشئ كومبو ثم أضف مقاطع الهجمات بالترتيب."
+
+msgid "This character has no clips to add yet. Key or generate an attack clip first."
+msgstr "هذه الشخصية ليس لها مقاطع لإضافتها بعد. أنشئ مقطع هجمة أو ولّده أولًا."
+
+msgid "Add the first attack."
+msgstr "أضف الهجمة الأولى."
+
+msgid "None of the attacks can be played. Their clips are missing or belong to another character."
+msgstr "لا يمكن تشغيل أي من الهجمات. مقاطعها مفقودة أو تخص شخصية أخرى."
+
+msgid "{0} attacks, {1} frames in all."
+msgstr "{0} هجمات، {1} إطارًا في المجموع."
+
+msgid "The cancel window must start before it ends and stay inside the clip."
+msgstr "يجب أن تبدأ نافذة الإلغاء قبل أن تنتهي وتبقى داخل المقطع."
+
+msgid "The link frame must be inside the cancel window."
+msgstr "يجب أن يقع إطار الربط داخل نافذة الإلغاء."
+
+msgid "This attack moves in a way the test cannot follow exactly, so a very short touch may have been missed. Try again with a slightly bigger hitbox."
+msgstr "هذه الهجمة تتحرك بطريقة لا يستطيع الاختبار تتبعها بدقة، فقد يكون لمس قصير جدًا قد فاته. جرّب مرة أخرى بصندوق ضرب أكبر قليلًا."
+
+msgid "This project was made with an older version and was repaired while opening:"
+msgstr "أُنشئ هذا المشروع بإصدار أقدم وأُصلح أثناء الفتح:"

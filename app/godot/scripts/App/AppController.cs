@@ -32,6 +32,9 @@ public partial class AppController : Node
     /// <summary>Raised when a user-facing error should be shown (already translated where possible).</summary>
     public event Action<string>? ErrorRaised;
 
+    /// <summary>Raised after opening a project that had to be repaired by a migration (messages from the core).</summary>
+    public event Action<IReadOnlyList<string>>? LoadWarningsRaised;
+
     public event Action? SettingsChanged;
 
     RecoverySession? _recovery;
@@ -39,6 +42,8 @@ public partial class AppController : Node
     double _sinceAutosave;
     ulong _lastAutosaveVersion;
     ulong _version;
+    /// <summary>Counts every session change (caches of derived data key on it).</summary>
+    public ulong SessionVersion => _version;
     readonly Queue<Action> _posted = new();
 
     public string? FilePath => Session.FilePath;
@@ -49,8 +54,8 @@ public partial class AppController : Node
     {
         Instance = this;
         Settings.Load();
-        Recovery = new RecoveryStore(Godot.ProjectSettings.GlobalizePath("user://recovery"));
-        var log = new JsonlOpLog(Godot.ProjectSettings.GlobalizePath("user://logs/oplog.jsonl"));
+        Recovery = new RecoveryStore(AppPaths.Combine("recovery"));
+        var log = new JsonlOpLog(AppPaths.Combine(System.IO.Path.Combine("logs", "oplog.jsonl")));
         Session = new ProjectSession(NewDefaultProject("Untitled"), null, log);
         Session.Changed += OnSessionChanged;
         Physics = new PhysicsAnalysis(this);
@@ -132,6 +137,7 @@ public partial class AppController : Node
         SessionChanged?.Invoke(args);
         AfterSessionNotify(args);
         Phase8After(args);
+        Phase9After(args);
     }
 
     // ---- Files -------------------------------------------------------------------------------
@@ -179,6 +185,7 @@ public partial class AppController : Node
         Session.ReplaceProject(project, path);
         _recovery = Recovery.BeginSession(project, path);
         Settings.AddRecent(path);
+        if (project.LoadWarnings.Count > 0) LoadWarningsRaised?.Invoke(project.LoadWarnings.ToList());
         return true;
     }
 
