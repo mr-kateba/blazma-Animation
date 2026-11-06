@@ -51,7 +51,13 @@ isa "ELF 64-bit.*x86-64" "$L/BlazmaAnimation.x86_64" && ok "app is ELF x86-64" |
 timeout 90 "$L/BlazmaAnimation.x86_64" --headless --quit-after 60 >"$T/launch.log" 2>&1; RC=$?
 [ $RC -eq 0 ] && ok "headless launch exits cleanly (rc 0)" || { bad "headless launch rc=$RC"; tail -5 "$T/launch.log"; }
 grep -qE "SCRIPT ERROR|Failed to create an autoload|not compiling" "$T/launch.log" && bad "script errors at startup" || ok "no script/autoload errors at startup"
-[ -d "$XDG_DATA_HOME/BlazmaAnimation/recovery" ] && ok "C# app code ran (user dir created)" || bad "app code did not run"
+# The tarball ships portable.txt, so the app keeps its data in userdata/ next to the executable.
+[ -d "$L/userdata/recovery" ] && ok "C# app code ran in portable mode (userdata/ next to the app)" || bad "app code did not run (no userdata/recovery)"
+[ ! -e "$XDG_DATA_HOME/BlazmaAnimation/recovery" ] && ok "portable mode left the user data folder untouched" || bad "portable mode still wrote to the user data folder"
+# Without the marker the app uses the normal per-user folder.
+rm "$L/portable.txt"; rm -rf "$L/userdata"
+timeout 90 "$L/BlazmaAnimation.x86_64" --headless --quit-after 60 >"$T/launch2.log" 2>&1
+[ -d "$XDG_DATA_HOME/BlazmaAnimation/recovery" ] && [ ! -e "$L/userdata" ] && ok "without portable.txt the app uses the user data folder" || bad "non-portable launch did not use the user data folder"
 "$L/tools/blazma-anim" commands >"$T/cmds.txt" 2>&1 && [ "$(wc -l <"$T/cmds.txt")" -gt 50 ] && ok "blazma-anim commands ($(wc -l <"$T/cmds.txt") commands)" || bad "blazma-anim commands"
 "$L/tools/blazma-mcp" --help 2>&1 | grep -q "MCP server" && ok "blazma-mcp --help" || bad "blazma-mcp --help"
 # MCP handshake: initialize must answer on stdio
