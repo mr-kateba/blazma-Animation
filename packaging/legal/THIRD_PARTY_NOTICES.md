@@ -24,3 +24,13 @@ RiggedFigure, CesiumMan and RiggedSimple from KhronosGroup/glTF-Sample-Assets.
 Copyright (c) 2017 Cesium, "Cesium for Everything". Licensed under Creative Commons Attribution 4.0
 International (https://creativecommons.org/licenses/by/4.0/legalcode). Unmodified copies.
 CesiumMan also carries the Cesium logo texture (c) 2015 Cesium (LicenseRef-LegalMark-Cesium).
+
+## kimodo-runner (only if the `tools/kimodo` folder is present)
+Blazma's local text-to-motion runner (`ai/kimodo`, built by the manual `kimodo-runner` workflow) links:
+- **kimodo.cpp** — Apache-2.0, https://github.com/localai-org/kimodo.cpp (pinned commit in `ai/kimodo/CMakeLists.txt`).
+- **GGML** — MIT, Copyright (c) 2023-2024 The ggml authors, https://github.com/ggml-org/ggml.
+- **nlohmann/json 3.11.3** — MIT, Copyright (c) 2013-2022 Niels Lohmann, https://github.com/nlohmann/json.
+
+No model weights are shipped. The Kimodo models the user downloads from Hugging Face inside the app carry their own
+licences (NVIDIA Open Model License for the SOMA motion model; Meta Llama 3 Community License for the text encoder,
+"Built with Meta Llama 3"); their licence and NOTICE files are downloaded next to the models.

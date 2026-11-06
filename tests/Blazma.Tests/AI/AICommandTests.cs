@@ -49,6 +49,28 @@ public class AICommandTests
     }
 
     [Fact]
+    public void AiHardware_And_AiModels_AreReadOnly_And_Hide_Paths_From_Agents()
+    {
+        var reg = NewRegistry(new KimodoSettings { ModelDirectory = Path.Combine(Path.GetTempPath(), "blazma-secret-user", "models") });
+        var (s, _) = NewProject();
+        var hw = Ok(reg, s, "ai.hardware", new { }).Data!;
+        Assert.NotNull(hw["recommendation"]?["tier"]);
+        Assert.True((int)hw["logicalCpus"]! > 0);
+
+        var m = Ok(reg, s, "ai.models", new { }).Data!;
+        var tiers = m["tiers"]!.AsArray();
+        Assert.Equal(new[] { "light", "standard", "reference" }, tiers.Select(t => (string)t!["id"]!));
+        Assert.Single(tiers, t => (bool)t!["recommended"]!);
+        Assert.All(tiers, t => Assert.False((bool)t!["installed"]!));
+        Assert.False((bool)m["downloadAvailableToAgents"]!);
+        Assert.Null(m["modelsDirectory"]); // the test origin counts as an agent
+        Assert.True((bool)m["modelsDirectoryConfigured"]!);
+        Assert.DoesNotContain("blazma-secret-user", m.ToJsonString());
+        Assert.Equal(CommandEffect.ReadOnly, reg.Create("ai.models", new JsonObject()).Effect);
+        Assert.DoesNotContain(reg.All.Select(c => c.Id), id => id.Contains("download", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Commands_AreRegistered_WithTheRightEffects()
     {
         var reg = NewRegistry();

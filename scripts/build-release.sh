@@ -9,6 +9,11 @@
 #   BLAZMA_SRC     source tree to build (default: this repo). Use it to build a clean copy, e.g. `git archive HEAD | tar -x -C DIR`.
 #   APPIMAGETOOL   path to appimagetool (default: downloaded once into build/cache from the official AppImage GitHub releases)
 #   SKIP_TESTS=1   same as --skip-tests
+#   KIMODO_RUNNER_WIN / KIMODO_RUNNER_LINUX   optional: folder (or .zip) with a kimodo-runner build (the artifacts of the manual
+#                  `kimodo-runner` workflow: kimodo-runner[.exe], GGML libraries, SHA256SUMS.txt). Default: build/cache/kimodo-runner-win64
+#                  and build/cache/kimodo-runner-linux-x64 when present. Bundled into tools/kimodo/ (the app finds it there: the repo
+#                  is private, so its release assets can't be downloaded anonymously) and also published as kimodo-runner-<version>-*.zip/.tar.gz.
+#                  Missing = the release has no runner (Kimodo then needs a runner the user builds; docs/AI_INTEGRATION.md §5).
 # Output: build/release/<version>/   (zip, setup.exe, tar.gz, AppImage, SHA256SUMS.txt, RELEASE_NOTES-<version>.md)
 set -euo pipefail
 export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
@@ -100,6 +105,25 @@ if [ $SKIP_LINUX = 0 ]; then
   chmod +x "$WORK/tools-linux/blazma-mcp" "$WORK/tools-linux/blazma-anim"
 fi
 
+# ---------------------------------------------------------------- 3b. optional kimodo-runner (never model weights)
+stage_runner() { # source (dir or zip), exe name, dest-dir → copies runner + libraries, checks SHA256SUMS.txt if present
+  local src="$1" exe="$2" dst="$3" tmp
+  if [ -f "$src" ] && [[ "$src" == *.zip ]]; then tmp="$WORK/runner-unzip-$exe"; rm -rf "$tmp"; mkdir -p "$tmp"; unzip -q "$src" -d "$tmp"; src="$tmp"; fi
+  local dir; dir="$(dirname "$(find "$src" -type f -name "$exe" | head -1)")"
+  [ -f "$dir/$exe" ] || die "kimodo-runner: no $exe in $1"
+  if [ -f "$dir/SHA256SUMS.txt" ]; then (cd "$dir" && sha256sum -c --quiet SHA256SUMS.txt) || die "kimodo-runner: checksum mismatch in $1"; fi
+  find "$dir" -maxdepth 1 -type f -name '*.gguf' | grep -q . && die "kimodo-runner: $1 contains model weights — never bundle them"
+  mkdir -p "$dst"
+  find "$dir" -maxdepth 1 \( -type f -o -type l \) \( -name "$exe" -o -name '*.dll' -o -name '*.so*' -o -name SHA256SUMS.txt \) -exec cp -P {} "$dst/" \;
+  [ "$exe" = kimodo-runner ] && chmod +x "$dst/$exe"
+  echo "kimodo-runner from $1: $(ls "$dst" | tr '\n' ' ')"
+}
+RUNNER_WIN="${KIMODO_RUNNER_WIN:-$CACHE/kimodo-runner-win64}"; RUNNER_LINUX="${KIMODO_RUNNER_LINUX:-$CACHE/kimodo-runner-linux-x64}"
+HAVE_RUNNER_WIN=0; HAVE_RUNNER_LINUX=0
+if [ -e "$RUNNER_WIN" ]; then log "kimodo-runner (Windows)"; stage_runner "$RUNNER_WIN" kimodo-runner.exe "$WORK/runner-win"; HAVE_RUNNER_WIN=1
+else echo "NOTE: no Windows kimodo-runner at $RUNNER_WIN — the release will not include it"; fi
+if [ $SKIP_LINUX = 0 ] && [ -e "$RUNNER_LINUX" ]; then log "kimodo-runner (Linux)"; stage_runner "$RUNNER_LINUX" kimodo-runner "$WORK/runner-linux"; HAVE_RUNNER_LINUX=1; fi
+
 # ---------------------------------------------------------------- 4. assemble
 DOCS=(AGENT_SETUP_AR.md AI_INTEGRATION.md MCP_TOOLS.md CLI_REFERENCE.md AGENT_RECIPES.md)
 add_common() { # stage-dir
@@ -119,6 +143,10 @@ cp "$WORK/win/BlazmaAnimation.exe" "$WORK/win/BlazmaAnimation.pck" "$WSTAGE/"
 [ -f "$WORK/win/BlazmaAnimation.console.exe" ] && cp "$WORK/win/BlazmaAnimation.console.exe" "$WSTAGE/"
 cp -r "$WIN_DATA" "$WSTAGE/"; find "$WSTAGE" -name '*.pdb' -delete
 mkdir -p "$WSTAGE/tools"; cp "$WORK/tools-win/blazma-mcp.exe" "$WORK/tools-win/blazma-anim.exe" "$WSTAGE/tools/"
+if [ $HAVE_RUNNER_WIN = 1 ]; then
+  cp -r "$WORK/runner-win" "$WSTAGE/tools/kimodo"
+  (cd "$WORK" && rm -rf "kimodo-runner-$VERSION-win64" && cp -r runner-win "kimodo-runner-$VERSION-win64" && zip -q -r -9 -X "$OUT/kimodo-runner-$VERSION-win64.zip" "kimodo-runner-$VERSION-win64")
+fi
 add_common "$WSTAGE"
 
 log "Windows portable zip"
@@ -144,6 +172,10 @@ if [ $SKIP_LINUX = 0 ]; then
   cp -r "$WORK/linux/data_Blazma.UI_linuxbsd_x86_64" "$LSTAGE/"; find "$LSTAGE" -name '*.pdb' -delete
   chmod +x "$LSTAGE/BlazmaAnimation.x86_64"
   cp "$WORK/tools-linux/blazma-mcp" "$WORK/tools-linux/blazma-anim" "$LSTAGE/tools/"
+  if [ $HAVE_RUNNER_LINUX = 1 ]; then
+    cp -r "$WORK/runner-linux" "$LSTAGE/tools/kimodo"
+    tar --sort=name --owner=0 --group=0 --numeric-owner -C "$WORK" --transform "s|^runner-linux|kimodo-runner-$VERSION-linux-x64|" -czf "$OUT/kimodo-runner-$VERSION-linux-x64.tar.gz" runner-linux
+  fi
   add_common "$LSTAGE"
   cp "$ROOT/packaging/linux/blazma-animation.desktop" "$ROOT/packaging/assets/blazma.png" "$LSTAGE/"
   # AppImage first (it must not contain portable.txt), then the portable tarball
@@ -190,6 +222,7 @@ NOTES="$OUT/RELEASE_NOTES-$VERSION.md"
   echo "- **Linux:** \`BlazmaAnimation-$VERSION-x86_64.AppImage\` (chmod +x ثم تشغيل) أو \`$LINNAME.tar.gz\`."
   echo "- لا يحتاج .NET ولا Godot. البرنامج غير موقَّع رقميًا: في Windows اضغط **More info** ثم **Run anyway** في SmartScreen."
   echo "- أدوات الذكاء الاصطناعي في مجلد \`tools\`؛ الشرح في \`docs/AGENT_SETUP_AR.md\`."
+  [ $HAVE_RUNNER_WIN = 1 ] && echo "- \`kimodo-runner\` (توليد الحركة محليًا) مضمَّن في \`tools/kimodo\`. نماذج Kimodo لا تُضمَّن: تُنزَّل من داخل البرنامج (الإعدادات ← AI) بضغطة من المستخدم بعد عرض الحجم والتراخيص."
   echo "- تحقق من الملفات بـ \`SHA256SUMS.txt\`."
   echo
   echo "## ما تم إنجازه (من تقارير المراحل)"

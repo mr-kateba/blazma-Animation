@@ -10,6 +10,10 @@
     <ProjectReference Include="../Blazma.Motion/Blazma.Motion.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Kimodo download packages (docs/AI_INTEGRATION.md §5.1): sizes, SHA-256 and licences, verified against Hugging Face. -->
+    <EmbeddedResource Include="ModelCatalog.json" LogicalName="Blazma.AI.ModelCatalog.json" />
+  </ItemGroup>
+  <ItemGroup>
     <!-- Protocol/environment helpers are unit-tested directly. -->
     <InternalsVisibleTo Include="Blazma.Tests" />
   </ItemGroup>

@@ -46,6 +46,8 @@ Use as `blazma-anim exec <file> <id> --arg name=value ...`.
 
 | Command id | Effect | Arguments (`*` = required) | Summary |
 |---|---|---|---|
+| `ai.hardware` | readonly | - | This PC's hardware for local AI (offline, read-only): OS, CPU threads, RAM, graphics cards (name, vendor, VRAM, integrated or discrete; Windows from the registry, Linux from sysfs, NVIDIA VRAM from nvidia-smi when installed), the best GPU, and which Kimodo package (light / standard / reference) and device fit it. |
+| `ai.models` | readonly | - | The downloadable Kimodo model packages (tiers) with download size, licences, RAM/VRAM needs (estimates), whether each fits this PC, the recommended one, and whether it is installed in the configured models folder. Read-only. Downloading is NOT available to agents: only the user can start it, from Settings → AI after seeing the size and licences (DECISIONS D43). |
 | `anim.evaluate` | readonly | `clipId`*:string, `characterId`*:string, `frame`*:number | The pose a clip produces at a frame (does not change anything). Returns per-bone rotation/position and the pose JSON. |
 | `anim.pose_from_frame` | mutating | `clipId`*:string, `characterId`*:string, `frame`*:number | Set the character's working pose to what the clip gives at a frame (undoable). |
 | `animation.export` | readonly | `clipId`*:string, `characterId`:string, `path`*:string, `rootMotion`:string, `startFrame`:integer, `endFrame`:integer, `sidecar`:boolean, `overwrite`:boolean, `validate`:boolean | Export a clip as a .glb animation (glTF 2.0 binary) plus a '<name>.blazma.json' sidecar (fps, loop, markers, events, root motion, bone map). The built-in mannequin gets a new file with a simple mesh; an imported character's original file is kept and the animation is appended. Writes files outside the project (the project itself is not changed); agents may only create new files. The written file is re-read and validated. |
@@ -149,6 +151,18 @@ Use as `blazma-anim exec <file> <id> --arg name=value ...`.
 | `track.set_flags` | mutating | `clipId`*:string, `trackId`*:string, `locked`:boolean, `muted`:boolean | Lock/unlock and/or mute/unmute a track (at least one flag). |
 
 ## Argument details
+
+### `ai.hardware`
+
+This PC's hardware for local AI (offline, read-only): OS, CPU threads, RAM, graphics cards (name, vendor, VRAM, integrated or discrete; Windows from the registry, Linux from sysfs, NVIDIA VRAM from nvidia-smi when installed), the best GPU, and which Kimodo package (light / standard / reference) and device fit it. (effect: readonly)
+
+No arguments.
+
+### `ai.models`
+
+The downloadable Kimodo model packages (tiers) with download size, licences, RAM/VRAM needs (estimates), whether each fits this PC, the recommended one, and whether it is installed in the configured models folder. Read-only. Downloading is NOT available to agents: only the user can start it, from Settings → AI after seeing the size and licences (DECISIONS D43). (effect: readonly)
+
+No arguments.
 
 ### `anim.evaluate`
 

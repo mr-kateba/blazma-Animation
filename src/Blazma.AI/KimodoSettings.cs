@@ -3,8 +3,10 @@ using System.Globalization;
 namespace Blazma.AI;
 
 /// <summary>
-/// Where the user installed kimodo-runner and the Kimodo GGUF files (docs/AI_INTEGRATION.md §5). Nothing is ever
-/// downloaded: if a file is missing the provider is "unavailable" and says what to install where.
+/// Where the user installed kimodo-runner and the Kimodo GGUF files (docs/AI_INTEGRATION.md §5). Nothing is downloaded
+/// automatically: if a file is missing the provider is "unavailable" and says what to install where. The user can download a
+/// package from Settings (<see cref="ModelDownloader"/>, only on their click, DECISIONS D43); <see cref="ModelInstallResult.ApplyTo"/>
+/// then fills in the folder, model, text encoder and device.
 /// Agents cannot change these settings (they choose an executable); only the user (app settings) or the
 /// environment of the process can.
 /// </summary>
@@ -163,7 +165,7 @@ public sealed record KimodoSettings
         if (ResolveRunner() is null) return $"kimodo-runner was not found at '{RunnerPath}'.";
         if (!MotionModels.ContainsKey(Model))
             return $"Unsupported Kimodo model '{Model}'. Supported: {string.Join(", ", MotionModels.Keys)} (G1 and SMPL-X are not supported).";
-        if (ModelDirectory is null) return $"The Kimodo model folder is not configured. Download the GGUF files yourself and set the folder in Settings or {ModelsEnv}.";
+        if (ModelDirectory is null) return $"The Kimodo model folder is not configured. Download a model package in Settings → AI, or download the GGUF files yourself and set the folder in Settings or {ModelsEnv}.";
         if (ResolveMotionModel() is null) return $"'{MotionModels[Model]}' was not found in '{ModelDirectory}' (or its 'models' folder).";
         if (ResolveTextModel() is not { } text) return $"No Kimodo text encoder ({string.Join(", ", TextModels.Take(2))}, …) was found in '{ModelDirectory}'.";
         if (!HasTokenizer(text)) return $"'{TokenizerFile}' must be next to '{Path.GetFileName(text)}'.";

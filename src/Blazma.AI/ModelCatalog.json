@@ -1,0 +1,85 @@
+{
+  "format": 1,
+  "verified": "2026-11-06: file list, sizes and SHA-256 read from the Hugging Face API (tree of each repo at the pinned commit, LFS oid) and the repos' MANIFEST.json.",
+  "sources": {
+    "text": { "repo": "LocalAI-io/Llama-3-Kimodo-GGML", "revision": "f583f3ee2b093f6d9ec524463b4152622abf11a6" },
+    "soma-rp": { "repo": "LocalAI-io/Kimodo-SOMA-RP-v1.1-GGML", "revision": "65f8b8ab34ee7524161cc87b20ae4cb4f5d3a12d" },
+    "soma-seed": { "repo": "LocalAI-io/Kimodo-SOMA-SEED-v1.1-GGML", "revision": "4d88f95fb21a1ff00001b495a330fbaab05cf7bb" }
+  },
+  "licences": {
+    "nvidia-open-model": {
+      "name": "NVIDIA Open Model License",
+      "url": "https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/",
+      "summaryEn": "Kimodo SOMA motion model. Commercial use permitted by the model licence; the GGUF conversion grants no additional rights.",
+      "summaryAr": "نموذج الحركة Kimodo SOMA. الاستخدام التجاري مسموح بترخيص النموذج، والتحويل إلى GGUF لا يمنح حقوقًا إضافية."
+    },
+    "meta-llama-3": {
+      "name": "Meta Llama 3 Community License",
+      "url": "https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct",
+      "summaryEn": "Text encoder built from Meta Llama 3 (\"Built with Meta Llama 3\") and MIT-licensed LLM2Vec adapters. Read the licence and its acceptable use policy before use.",
+      "summaryAr": "مُرمِّز النص مبني على Meta Llama 3 (\"Built with Meta Llama 3\") ومحوّلات LLM2Vec بترخيص MIT. اقرأ الترخيص وسياسة الاستخدام المقبول قبل الاستخدام."
+    }
+  },
+  "files": {
+    "soma-rp": { "source": "soma-rp", "path": "models/kimodo-soma-rp-v1.1-f32.gguf", "size": 1133166784, "sha256": "3bf1229f4c1eff1d28f5196a854113da2df9a11a5e21c60694630903bf948ee4", "licence": "nvidia-open-model" },
+    "soma-rp-notice": { "source": "soma-rp", "path": "NOTICE", "target": "NOTICE-Kimodo-SOMA.txt", "size": 163, "sha256": "778107843e1cb26e19aeaabb54977a6c7e6553b099a4b6b7c4c5cfed96c21eb4", "licence": "nvidia-open-model" },
+    "tokenizer": { "source": "text", "path": "tokenizer.gguf", "size": 7295054, "sha256": "81614aca62a98846c02b72cc2e5378e5bdce8b4d507b88f96eb1faa90dae607e", "licence": "meta-llama-3" },
+    "llama-licence": { "source": "text", "path": "LICENSE-META-LLAMA-3.txt", "size": 7801, "sha256": "475211637354ce4c14b9c3dacccbefbaba735fe1b0db97d6c4fd11cd1356819f", "licence": "meta-llama-3" },
+    "llama-notice": { "source": "text", "path": "NOTICE", "target": "NOTICE-Llama-3-Kimodo.txt", "size": 148, "sha256": "97b5a240c05ff37063fcd1701ab047b2ef51dca2447b215d10735af3bfc97eff", "licence": "meta-llama-3" },
+    "text-q4_k_m": { "source": "text", "path": "Llama-3-Kimodo-Q4_K_M.gguf", "size": 5058327904, "sha256": "c06f2cb6a7615e949bcbb5b582ad35a191338b68b5a51abe17d259ebe574c005", "licence": "meta-llama-3" },
+    "text-q8_0": { "source": "text", "path": "Llama-3-Kimodo-Q8_0.gguf", "size": 8142058752, "sha256": "b26d0e74b115b33a7f2df5aca04426548365e99217cd590986f8abc4172e4c5c", "licence": "meta-llama-3" },
+    "text-bf16": { "source": "text", "path": "Llama-3-Kimodo-BF16.gguf", "size": 15177675936, "sha256": "d9a60017b3981bac874c4d118fc7e34f05b41763a12f0c0c7ee1e3b84eebb20f", "licence": "meta-llama-3" }
+  },
+  "tiers": [
+    {
+      "id": "light",
+      "nameEn": "Light (for most PCs)",
+      "nameAr": "خفيف (لمعظم الأجهزة)",
+      "motionModel": "soma-rp-v1.1",
+      "textFile": "text-q4_k_m",
+      "files": ["soma-rp", "text-q4_k_m", "tokenizer", "llama-licence", "llama-notice", "soma-rp-notice"],
+      "minRamGiB": 7.5, "recommendedRamGiB": 16,
+      "minVramGiB": 6, "recommendedVramGiB": 8,
+      "autoNeedsGpu": false,
+      "qualityEn": "Text encoder quantised to 4 bits (Q4_K_M, upstream: \"preferred low-bit experiment\"). Smallest and fastest; prompts may be followed less precisely. Runs on the CPU.",
+      "qualityAr": "مُرمِّز النص مضغوط إلى 4 بت (Q4_K_M، ويصفه المصدر بأنه «التجربة المفضلة منخفضة البت»). الأصغر والأسرع، وقد يتبع الوصف بدقة أقل. يعمل على المعالج."
+    },
+    {
+      "id": "standard",
+      "nameEn": "Standard (recommended quality)",
+      "nameAr": "قياسي (الجودة الموصى بها)",
+      "motionModel": "soma-rp-v1.1",
+      "textFile": "text-q8_0",
+      "files": ["soma-rp", "text-q8_0", "tokenizer", "llama-licence", "llama-notice", "soma-rp-notice"],
+      "minRamGiB": 12, "recommendedRamGiB": 16,
+      "minVramGiB": 8, "recommendedVramGiB": 12,
+      "autoNeedsGpu": true,
+      "qualityEn": "Text encoder Q8_0, the variant kimodo.cpp recommends and uses by default. Best balance; fastest on a graphics card with 12 GB or more.",
+      "qualityAr": "مُرمِّز النص Q8_0، وهو الذي يوصي به kimodo.cpp ويستخدمه افتراضيًا. أفضل توازن، والأسرع على بطاقة رسوميات بذاكرة 12 GB أو أكثر."
+    },
+    {
+      "id": "reference",
+      "nameEn": "Reference (strong PCs)",
+      "nameAr": "مرجعي (للأجهزة القوية)",
+      "motionModel": "soma-rp-v1.1",
+      "textFile": "text-bf16",
+      "files": ["soma-rp", "text-bf16", "tokenizer", "llama-licence", "llama-notice", "soma-rp-notice"],
+      "minRamGiB": 20, "recommendedRamGiB": 32,
+      "minVramGiB": 16, "recommendedVramGiB": 20,
+      "autoNeedsGpu": true,
+      "qualityEn": "Unquantised BF16 text encoder (upstream: \"reference\"). Largest download; only for PCs with 32 GB RAM and a 20 GB+ graphics card.",
+      "qualityAr": "مُرمِّز النص BF16 بلا ضغط (يصفه المصدر بـ«المرجعي»). أكبر تنزيل، فقط لأجهزة بذاكرة 32 GB وبطاقة رسوميات 20 GB أو أكثر."
+    }
+  ],
+  "runner": {
+    "bundled": "tools/kimodo",
+    "executableWindows": "kimodo-runner.exe",
+    "executableLinux": "kimodo-runner",
+    "releaseAssetWindows": "https://github.com/mr-kateba/blazma-Animation/releases/download/v{version}/kimodo-runner-{version}-win64.zip",
+    "releaseAssetLinux": "https://github.com/mr-kateba/blazma-Animation/releases/download/v{version}/kimodo-runner-{version}-linux-x64.tar.gz",
+    "downloadable": false,
+    "noteEn": "kimodo-runner ships inside the app (tools/kimodo). It is not downloaded: the GitHub repository is private, so its release assets need a GitHub login.",
+    "noteAr": "يأتي kimodo-runner داخل البرنامج (tools/kimodo) ولا يُنزَّل: المستودع خاص على GitHub، فملفات إصداراته تحتاج تسجيل دخول."
+  },
+  "memoryNote": "RAM/VRAM figures are estimates from the file sizes (weights + ~1 GiB working memory), not measurements (docs/AI_INTEGRATION.md R4)."
+}

@@ -500,6 +500,19 @@ public static class AICommands
             S.Of(S.Bool("probe", "Also start kimodo-runner briefly and ask it for its own diagnostics (only in headless mode; can take seconds).", false)),
             a => new ListMotionProviders(jobs, (bool?)a["probe"] ?? false)));
 
+        r.Register(new("ai.hardware",
+            "This PC's hardware for local AI (offline, read-only): OS, CPU threads, RAM, graphics cards (name, vendor, VRAM, integrated or discrete; Windows from the registry, " +
+            "Linux from sysfs, NVIDIA VRAM from nvidia-smi when installed), the best GPU, and which Kimodo package (light / standard / reference) and device fit it.",
+            CommandEffect.ReadOnly, S.Of(),
+            _ => new AiHardware()));
+
+        r.Register(new("ai.models",
+            "The downloadable Kimodo model packages (tiers) with download size, licences, RAM/VRAM needs (estimates), whether each fits this PC, the recommended one, " +
+            "and whether it is installed in the configured models folder. Read-only. Downloading is NOT available to agents: only the user can start it, " +
+            "from Settings → AI after seeing the size and licences (DECISIONS D43).",
+            CommandEffect.ReadOnly, S.Of(),
+            _ => new AiModels(jobs)));
+
         r.Register(new("motion.generate",
             "Start generating a motion from a text prompt for a character. Runs in the background and returns a jobId; it does not change the project. " +
             "Poll motion.job_status, then call motion.job_apply to add the result as a DRAFT clip (undoable), review it, and keep it with clip.accept_draft (or remove it with clip.delete). " +
@@ -586,18 +599,108 @@ public static class AICommands
         return new ProviderDiagnostics(info, details, d.Hardware, d.Warnings.Select(w => R(w) ?? "").ToList());
     }
 
+    internal static JsonObject DescribeGpu(GpuInfo g) => new()
+    {
+        ["name"] = g.Name, ["vendor"] = g.Vendor, ["vramBytes"] = g.VramBytes, ["source"] = g.Source, ["integrated"] = g.Integrated,
+    };
+
+    internal static JsonObject DescribeRecommendation(ModelRecommendation r) => new()
+    {
+        ["tier"] = r.TierId, ["device"] = r.Device, ["gpu"] = r.Gpu?.Name, ["reasonEn"] = r.ReasonEn, ["reasonAr"] = r.ReasonAr,
+        ["tiers"] = new JsonArray(r.Tiers.Select(t => (JsonNode?)new JsonObject
+        {
+            ["id"] = t.TierId, ["fits"] = t.Fits, ["gpuFits"] = t.GpuFits, ["device"] = t.Device, ["reasonEn"] = t.ReasonEn, ["reasonAr"] = t.ReasonAr,
+        }).ToArray()),
+    };
+
     internal static JsonObject DescribeHardware(HardwareReport h) => new()
     {
         ["os"] = h.Os,
         ["architecture"] = h.Architecture,
         ["logicalCpus"] = h.LogicalCpus,
         ["totalRamBytes"] = h.TotalRamBytes,
-        ["gpus"] = new JsonArray(h.Gpus.Select(g => (JsonNode?)new JsonObject
-        {
-            ["name"] = g.Name, ["vendor"] = g.Vendor, ["vramBytes"] = g.VramBytes, ["source"] = g.Source,
-        }).ToArray()),
+        ["gpus"] = new JsonArray(h.Gpus.Select(g => (JsonNode?)DescribeGpu(g)).ToArray()),
+        ["bestGpu"] = h.BestGpu is { } b ? DescribeGpu(b) : null,
         ["notes"] = new JsonArray(h.Notes.Select(s => (JsonNode?)s).ToArray()),
     };
+}
+
+public sealed class AiHardware : ICommand
+{
+    public string Id => "ai.hardware";
+    public CommandEffect Effect => CommandEffect.ReadOnly;
+    public string Label => "AI hardware";
+
+    public CommandOutcome Execute(Project project)
+    {
+        var hw = HardwareProbe.Probe();
+        var rec = HardwareAdvisor.Recommend(hw, ModelCatalog.Default);
+        var data = AICommands.DescribeHardware(hw);
+        data["recommendation"] = AICommands.DescribeRecommendation(rec);
+        return new CommandOutcome(Array.Empty<Change>(), data, Array.Empty<Diagnostic>());
+    }
+
+    public IReadOnlyList<Change> Undo(Project project) => Array.Empty<Change>();
+}
+
+public sealed class AiModels(MotionJobService jobs) : IOriginAwareCommand
+{
+    public string Id => "ai.models";
+    public CommandEffect Effect => CommandEffect.ReadOnly;
+    public string Label => "AI models";
+    public CommandOrigin? Origin { get; set; }
+
+    public CommandOutcome Execute(Project project)
+    {
+        var catalog = ModelCatalog.Default;
+        var rec = HardwareAdvisor.Recommend(HardwareProbe.Probe(), catalog);
+        var configured = jobs.Kimodo?.Settings.ModelDirectory;
+        var dir = configured ?? ModelCatalog.DefaultModelsDirectory();
+        var agent = Origin is { Source: not CommandSource.Ui };
+        var tiers = new JsonArray();
+        foreach (var t in catalog.Tiers)
+        {
+            var st = ModelCatalog.State(t, dir);
+            var fit = rec.Tiers.First(f => f.TierId == t.Id);
+            tiers.Add(new JsonObject
+            {
+                ["id"] = t.Id, ["nameEn"] = t.NameEn, ["nameAr"] = t.NameAr,
+                ["motionModel"] = t.MotionModel, ["textModel"] = t.TextFile.FileName,
+                ["downloadBytes"] = t.TotalBytes,
+                ["minRamGiB"] = t.MinRamGiB, ["recommendedRamGiB"] = t.RecommendedRamGiB,
+                ["minVramGiB"] = t.MinVramGiB, ["recommendedVramGiB"] = t.RecommendedVramGiB,
+                ["qualityEn"] = t.QualityEn, ["qualityAr"] = t.QualityAr,
+                ["licences"] = new JsonArray(t.LicenceIds.Select(id => (JsonNode?)DescribeLicence(catalog.Licences[id])).ToArray()),
+                ["files"] = new JsonArray(t.Files.Select(f => (JsonNode?)new JsonObject
+                {
+                    ["name"] = f.FileName, ["bytes"] = f.Size, ["sha256"] = f.Sha256, ["url"] = f.Url.ToString(),
+                }).ToArray()),
+                ["fits"] = fit.Fits, ["gpuFits"] = fit.GpuFits, ["device"] = fit.Device, ["fitEn"] = fit.ReasonEn, ["fitAr"] = fit.ReasonAr,
+                ["recommended"] = t.Id == rec.TierId,
+                ["installed"] = st.Installed, ["bytesMissing"] = st.BytesMissing,
+            });
+        }
+        return new CommandOutcome(Array.Empty<Change>(), new JsonObject
+        {
+            ["tiers"] = tiers,
+            ["recommendation"] = AICommands.DescribeRecommendation(rec),
+            // Agents do not see absolute paths (they reveal the account name).
+            ["modelsDirectory"] = agent ? null : dir,
+            ["modelsDirectoryConfigured"] = configured is not null,
+            ["runner"] = new JsonObject
+            {
+                ["bundledFolder"] = catalog.Runner.BundledFolder, ["downloadable"] = catalog.Runner.Downloadable,
+                ["noteEn"] = catalog.Runner.NoteEn, ["noteAr"] = catalog.Runner.NoteAr,
+            },
+            ["downloadAvailableToAgents"] = false,
+            ["memoryNote"] = catalog.MemoryNote,
+            ["verified"] = catalog.Verified,
+        }, Array.Empty<Diagnostic>());
+    }
+
+    static JsonObject DescribeLicence(ModelLicence l) => new() { ["id"] = l.Id, ["name"] = l.Name, ["url"] = l.Url, ["summaryEn"] = l.SummaryEn, ["summaryAr"] = l.SummaryAr };
+
+    public IReadOnlyList<Change> Undo(Project project) => Array.Empty<Change>();
 }
 
 public sealed class ListMotionProviders(MotionJobService jobs, bool probe) : IOriginAwareCommand

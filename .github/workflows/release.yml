@@ -12,9 +12,14 @@ on:
         description: "Create/update the GitHub Release and upload the artifacts"
         type: boolean
         default: false
+      kimodo_runner_run_id:
+        description: "Optional: id of a successful 'kimodo-runner (optional)' run whose artifacts are bundled into tools/kimodo (empty = no runner)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
+  actions: read   # gh run download of the kimodo-runner artifacts
 
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
@@ -60,6 +65,20 @@ jobs:
           dir=~/.local/share/godot/export_templates/${GODOT_VERSION}.stable.mono
           mkdir -p "$dir"
           unzip -q -j -o Godot_v${GODOT_VERSION}-stable_mono_export_templates.tpz 'templates/version.txt' 'templates/windows_*x86_64*' 'templates/linux_*x86_64*' -d "$dir"
+
+      - name: Get the kimodo-runner build (optional; never model weights)
+        if: ${{ inputs.kimodo_runner_run_id != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.kimodo_runner_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "kimodo_runner_run_id must be a number"; exit 1; }
+          mkdir -p build/cache
+          # Vulkan build preferred, CPU build otherwise (scripts/build-release.sh picks these folders up and checks SHA256SUMS.txt).
+          gh run download "$RUN_ID" -n kimodo-runner-windows-x64-vulkan -D build/cache/kimodo-runner-win64 \
+            || gh run download "$RUN_ID" -n kimodo-runner-windows-x64-cpu -D build/cache/kimodo-runner-win64
+          gh run download "$RUN_ID" -n kimodo-runner-linux-x64-cpu -D build/cache/kimodo-runner-linux-x64 || echo "no Linux runner in run $RUN_ID"
 
       - name: Build release (tests, exports, tools, zip, installer, tar.gz, AppImage, checksums)
         run: scripts/build-release.sh "${{ inputs.version }}"

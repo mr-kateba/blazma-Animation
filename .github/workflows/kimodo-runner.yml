@@ -1,7 +1,8 @@
 name: kimodo-runner (optional)
 
 # Builds the optional kimodo-runner (ai/kimodo) that Blazma starts as a separate process for local
-# text-to-motion. Manual only, not part of releases yet. It fetches kimodo.cpp at the pinned commit
+# text-to-motion. Manual only. Its artifacts are bundled into a release by passing this run's id to the
+# Release workflow (input kimodo_runner_run_id) → tools/kimodo in the app zip/installer. It fetches kimodo.cpp at the pinned commit
 # (with its pinned GGML submodule) and nlohmann/json by SHA-256 at configure time. No model weights
 # are downloaded or bundled.
 #

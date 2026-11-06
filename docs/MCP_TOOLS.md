@@ -77,6 +77,8 @@ No arguments.
 
 | Tool | Effect | Summary |
 |---|---|---|
+| [`ai_hardware`](#ai_hardware) | readonly | This PC's hardware for local AI (offline, read-only): OS, CPU threads, RAM, graphics cards (name, vendor, VRAM, integrated or discrete; Windows from the registry, Linux from sysfs, NVIDIA VRAM from nvidia-smi when installed), the best GPU, and which Kimodo package (light / standard / reference) and device fit it. |
+| [`ai_models`](#ai_models) | readonly | The downloadable Kimodo model packages (tiers) with download size, licences, RAM/VRAM needs (estimates), whether each fits this PC, the recommended one, and whether it is installed in the configured models folder. Read-only. Downloading is NOT available to agents: only the user can start it, from Settings → AI after seeing the size and licences (DECISIONS D43). |
 | [`anim_evaluate`](#anim_evaluate) | readonly | The pose a clip produces at a frame (does not change anything). Returns per-bone rotation/position and the pose JSON. |
 | [`anim_pose_from_frame`](#anim_pose_from_frame) | mutating | Set the character's working pose to what the clip gives at a frame (undoable). |
 | [`animation_export`](#animation_export) | readonly | Export a clip as a .glb animation (glTF 2.0 binary) plus a '<name>.blazma.json' sidecar (fps, loop, markers, events, root motion, bone map). The built-in mannequin gets a new file with a simple mesh; an imported character's original file is kept and the animation is appended. Writes files outside the project (the project itself is not changed); agents may only create new files. The written file is re-read and validated. |
@@ -178,6 +180,22 @@ No arguments.
 | [`template_list`](#template_list) | readonly | List clip templates: built-in ones (idle, walk/run cycles, jump, wave, attack swing) and the project's own (saved with template.save_clip). |
 | [`template_save_clip`](#template_save_clip) | mutating | Save a clip as a template in the project's library (with a snapshot of its rig, so it can be applied to other characters later). Returns templateId. |
 | [`track_set_flags`](#track_set_flags) | mutating | Lock/unlock and/or mute/unmute a track (at least one flag). |
+
+### `ai_hardware`
+
+This PC's hardware for local AI (offline, read-only): OS, CPU threads, RAM, graphics cards (name, vendor, VRAM, integrated or discrete; Windows from the registry, Linux from sysfs, NVIDIA VRAM from nvidia-smi when installed), the best GPU, and which Kimodo package (light / standard / reference) and device fit it.
+
+Effect: **readonly**. Command id: `ai.hardware`.
+
+No arguments.
+
+### `ai_models`
+
+The downloadable Kimodo model packages (tiers) with download size, licences, RAM/VRAM needs (estimates), whether each fits this PC, the recommended one, and whether it is installed in the configured models folder. Read-only. Downloading is NOT available to agents: only the user can start it, from Settings → AI after seeing the size and licences (DECISIONS D43).
+
+Effect: **readonly**. Command id: `ai.models`.
+
+No arguments.
 
 ### `anim_evaluate`
 

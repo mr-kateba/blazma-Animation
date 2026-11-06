@@ -106,7 +106,7 @@ public interface IMotionGenerationProvider {
 
 **البناء**: C++23، CMake 3.25+، Ninja. GGML وحدة فرعية مثبّتة (`ggml` عند `8c63e709`، الإصدار 0.20.2). Vulkan اختياري (`KIMODO_ENABLE_VULKAN`، افتراضيًا ON إن وُجدت الترويسات) مع CPU كاحتياط. لم يُذكر CUDA.
 
-**الأوزان** (لا تُنزَّل تلقائيًا أبدًا): منشورة على Hugging Face تحت منظمة `LocalAI-io`. أسماء الملفات: `kimodo-soma-rp-v1.1-f32.gguf`، `kimodo-soma-seed-v1.1-f32.gguf` (ومثلها لـG1)، ومُرمِّز النص `Llama-3-Kimodo-Q8_0.gguf` (الافتراضي) أو `Q6_K` / `Q5_K` / `Q4_K` / `Q4_K_M` / `BF16`، وكلها تشترك في `tokenizer.gguf`.
+**الأوزان** (لا تُنزَّل تلقائيًا أبدًا، بل فقط بضغطة المستخدم — §5.1): منشورة على Hugging Face تحت منظمة `LocalAI-io`. أسماء الملفات: `kimodo-soma-rp-v1.1-f32.gguf`، `kimodo-soma-seed-v1.1-f32.gguf` (ومثلها لـG1)، ومُرمِّز النص `Llama-3-Kimodo-Q8_0.gguf` (الافتراضي) أو `Q6_K` / `Q5_K` / `Q4_K` / `Q4_K_M` / `BF16`، وكلها تشترك في `tokenizer.gguf`.
 
 **الذاكرة**: العرض التجريبي يُبقي مُرمِّز Q8 كاملًا في VRAM بسقف 10 GiB على بطاقة 16 GiB. المكتبة افتراضيًا تنفّذ 8 طبقات في كل دفعة (`KIMODO_TEXT_LAYER_CHUNK` من 1 إلى 32) ويمكن فرض سقف بـ`KIMODO_TEXT_RESIDENT_LIMIT_MIB`. **لم نقِس الأداء ولا الذاكرة بعد، ولا يُعتمد أي رقم قبل القياس (R4).**
 
@@ -164,14 +164,55 @@ public interface IMotionGenerationProvider {
 ### تثبيت Kimodo يدويًا (المستخدم)
 
 1. **بناء الـrunner**: من جذر المستودع: `cmake -S ai/kimodo -B ai/kimodo/build -G Ninja -DCMAKE_BUILD_TYPE=Release` (أضف `-DKIMODO_RUNNER_VULKAN=OFF` إذا لم يكن Vulkan SDK مثبّتًا) ثم `cmake --build ai/kimodo/build --target kimodo-runner`. الناتج في `ai/kimodo/build/bin/` مع مكتبات GGML بجانبه. على Windows: Visual Studio 2022 (MSVC) أو workflow ‏`kimodo-runner (optional)` اليدوي في GitHub Actions. يحتاج البناء إلى الإنترنت لجلب kimodo.cpp وGGML وnlohmann/json بالإصدارات المثبّتة.
-2. **تنزيل الأوزان بنفسك** (Blazma لا ينزّل شيئًا): اقرأ بطاقات النماذج وتراخيصها أولًا، ثم نزّل من Hugging Face ‏`LocalAI-io/Kimodo-SOMA-RP-v1.1-GGML` الملف `models/kimodo-soma-rp-v1.1-f32.gguf`، ومن `LocalAI-io/Llama-3-Kimodo-GGML` الملفين `Llama-3-Kimodo-Q8_0.gguf` و`tokenizer.gguf` (أو استخدم `scripts/download_gguf_weights.sh` من kimodo.cpp). ضعها في مجلد واحد (أو في مجلد فرعي `models`).
+2. **تنزيل الأوزان**: الأسهل من داخل البرنامج (§5.1). أو يدويًا: اقرأ بطاقات النماذج وتراخيصها أولًا، ثم نزّل من Hugging Face ‏`LocalAI-io/Kimodo-SOMA-RP-v1.1-GGML` الملف `models/kimodo-soma-rp-v1.1-f32.gguf`، ومن `LocalAI-io/Llama-3-Kimodo-GGML` الملفين `Llama-3-Kimodo-Q8_0.gguf` و`tokenizer.gguf` (أو استخدم `scripts/download_gguf_weights.sh` من kimodo.cpp). ضعها في مجلد واحد (أو في مجلد فرعي `models`).
 3. اضبط `BLAZMA_KIMODO_RUNNER` (مسار مطلق) و`BLAZMA_KIMODO_MODELS` (أو من إعدادات التطبيق عندما تتوفر واجهتها)، ثم تحقق بـ`blazma-anim exec <file> motion.providers --arg probe=true`.
 
 الأوزان والمجلدات `build` لا تُرفع إلى Git أبدًا (`.gitignore` يتجاهل `*.gguf` و`ai/kimodo/build*/`).
 
+### 5.1 تنزيل النموذج بضغطة واحدة (D43)
+
+**ما هو موجود فعلًا على Hugging Face** (تحقّقنا عبر واجهة `huggingface.co/api` في 2026-11-06؛ الأحجام والـSHA-256 من بيانات LFS ومن `MANIFEST.json` في كل مستودع، والروابط مثبّتة بالـcommit):
+
+| المستودع (commit) | الملفات | الحجم |
+|---|---|---:|
+| `LocalAI-io/Kimodo-SOMA-RP-v1.1-GGML` (`65f8b8ab`) | `models/kimodo-soma-rp-v1.1-f32.gguf` — **F32 فقط، لا نسخ مضغوطة** | 1.13 GB |
+| `LocalAI-io/Kimodo-SOMA-SEED-v1.1-GGML` (`4d88f95f`) | `models/kimodo-soma-seed-v1.1-f32.gguf` (غير مستخدم في الحزم حاليًا) | 1.13 GB |
+| `LocalAI-io/Llama-3-Kimodo-GGML` (`f583f3ee`) | `Q4_K` 4.39، `Q4_K_M` 5.06، `Q5_K` 5.33، `Q6_K` 6.32، **`Q8_0` 8.14 (الموصى به)**، `BF16` 15.18، و`tokenizer.gguf` 7.3 MB مشترك، و`LICENSE-META-LLAMA-3.txt` و`NOTICE` | — |
+
+ومستودعات G1 وSMPL-X موجودة أيضًا لكنها غير مدعومة (D7). الضغط إذن في **مُرمِّز النص فقط**، فالحزم تختلف فيه:
+
+| الحزمة | مُرمِّز النص | التنزيل | الذاكرة (أدنى / موصى) | VRAM للبطاقة (أدنى / موصى) | لمن |
+|---|---|---:|---|---|---|
+| `light` خفيف | `Q4_K_M` («تجربة منخفضة البت المفضّلة» عند المصدر) | 6.2 GB | 7.5 / 16 GB | 6 / 8 GB | الأجهزة الضعيفة، المعالج |
+| `standard` قياسي | `Q8_0` (افتراضي kimodo.cpp) | 9.3 GB | 12 / 16 GB | 8 / 12 GB | بطاقة رسوميات 12 GB+ |
+| `reference` مرجعي | `BF16` | 16.3 GB | 20 / 32 GB | 16 / 20 GB | الأجهزة القوية جدًا |
+
+كل حزمة = نموذج الحركة `soma-rp-v1.1` + مُرمِّز النص + `tokenizer.gguf` + ملفات الترخيص (`LICENSE-META-LLAMA-3.txt`، `NOTICE-Llama-3-Kimodo.txt`، `NOTICE-Kimodo-SOMA.txt`)، في مجلد واحد. **أرقام الذاكرة تقديرية** (حجم الأوزان + نحو 1 GiB) وليست قياسًا (R4)، لذلك تبقى كل الحزم قابلة للاختيار.
+
+**التراخيص** (تُعرض قبل التنزيل ويجب قبولها): نموذج SOMA تحت **NVIDIA Open Model License** (الاستخدام التجاري مسموح، والتحويل إلى GGUF لا يمنح حقوقًا إضافية)؛ مُرمِّز النص مبني على Meta Llama 3 تحت **Meta Llama 3 Community License** ("Built with Meta Llama 3"، مع محوّلات LLM2Vec بترخيص MIT). الروابط في `ModelCatalog.json`.
+
+**كشف العتاد** (`HardwareProbe`): Windows من مفتاح فئة محوّلات العرض في السجل `HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\NNNN` (`DriverDesc`، `ProviderName`، `MatchingDeviceId` للمصنّع، والذاكرة من `HardwareInformation.qwMemorySize` ثم `HardwareInformation.MemorySize` كـDWORD أو binary)، مع تخطي «Microsoft Basic Display/Render» والمحوّلات البعيدة/الافتراضية (`root\`، `swd\`). Linux من `/sys/class/drm` و`/proc/driver/nvidia`. وإن وُجد `nvidia-smi` في `PATH` يُشغَّل مرة واحدة (مهلة 5 ث) للحصول على اسم وVRAM دقيقين لبطاقات NVIDIA. «أفضل بطاقة» = المنفصلة قبل غير المعروفة قبل المدمجة، ثم الأكبر ذاكرة. (سابقًا لم يكن هناك كشف على Windows إطلاقًا، وهذا سبب «البرنامج لا يرى كرت الشاشة».)
+
+**الاقتراح** (`HardwareAdvisor.Recommend`): أكبر حزمة تتوفر لها الذاكرة الموصى بها، وإن كانت تحتاج بطاقة (`standard`، `reference`) فبطاقة منفصلة بالـVRAM الموصى به؛ وإلا `light`. الجهاز `auto` (Vulkan إن وُجد في الـrunner وإلا CPU) حين تكفي البطاقة، وإلا `cpu`. السبب بالعربية والإنجليزية، وكل حزمة معلَّمة بـ`fits`/`gpuFits`.
+
+**المنزِّل** (`ModelDownloader`):
+- يبدأ **فقط** عند ضغط المستخدم بعد عرض `Plan` (الحجم، المساحة الحرة، التراخيص، الملفات المتعارضة)، و`DownloadAsync` يرفض (`licence_not_accepted`) إن لم تُمرَّر معرّفات التراخيص المقبولة.
+- HTTPS فقط إلى `huggingface.co`، وإعادة التوجيه تُتبع يدويًا (≤ 10) وفقط إلى HTTPS على `*.huggingface.co` أو `*.hf.co` (مثل `cas-bridge.xethub.hf.co` و`us.aws.cdn.hf.co` التي يعيد إليها HF ملفات Xet فعليًا)؛ غير ذلك `redirect_refused`.
+- الاستئناف: `<file>.part` + ‏`Range`؛ يُعاد حساب SHA-256 للجزء الموجود، وإن تجاهل الخادم الـRange يبدأ من الصفر. الإلغاء يُبقي الـ`.part`.
+- فحص المساحة قبل البدء (`disk_full`)، ثم SHA-256 بعد التنزيل (`hash_mismatch` يحذف الملف)، ثم `File.Move` ذري. الملف الموجود والصحيح يُتخطى دون تنزيل، والموجود المختلف لا يُستبدل إلا بخيار `ReplaceMismatchedFiles` بعد سؤال المستخدم (`file_conflict`).
+- أحداث `Progress`: المرحلة (Checking/Downloading/Verifying/Completed)، الملف ورقمه، البايتات المنجزة/الكلية للحزمة، السرعة (متوسط آخر 5 ث) والوقت المتبقي، بحد أقصى ~5 مرات/ث، على خيط التنزيل (الواجهة تنقلها إلى الخيط الرئيسي).
+- المجلد الافتراضي `ModelCatalog.DefaultModelsDirectory()`: ‏`%LOCALAPPDATA%\BlazmaAnimation\models` على Windows (غير متجوّل لأنها GBs)، و`$XDG_DATA_HOME/BlazmaAnimation/models` أو `~/.local/share/...` على Linux. في الوضع المحمول تمرّر الواجهة `userdata/models`.
+- بعد النجاح: `ModelInstallResult.ApplyTo(settings)` يضبط المجلد ونموذج الحركة واسم ملف مُرمِّز النص والجهاز. (إعدادات التطبيق الحالية تحفظ المجلد والجهاز؛ يلزم حفظ `TextModel` أيضًا حتى لا يُختار ملف آخر موجود في المجلد نفسه — الأفضلية Q8_0 ثم Q6_K…)
+
+**الـrunner لا يُنزَّل**: المستودع `mr-kateba/blazma-Animation` خاص، وروابط ملفات إصداراته (`github.com/.../releases/download/v<ver>/...`) تعطي 404 بلا تسجيل دخول (تحققنا). لذلك يُضمَّن `kimodo-runner` داخل البرنامج في `tools/kimodo/` (zip والمثبّت وtar.gz/AppImage): `scripts/build-release.sh` يأخذه من `KIMODO_RUNNER_WIN`/`KIMODO_RUNNER_LINUX` أو `build/cache/kimodo-runner-win64` و`build/cache/kimodo-runner-linux-x64` (مجلد أو zip من مخرجات workflow ‏`kimodo-runner (optional)`)، يتحقق من `SHA256SUMS.txt`، ويرفض أي `.gguf`، وينشر أيضًا `kimodo-runner-<ver>-win64.zip` و`-linux-x64.tar.gz`. في GitHub: شغّل workflow الـrunner يدويًا ثم Release مع `kimodo_runner_run_id`. التطبيق يجده بـ`ModelCatalog.Default.FindBundledRunner(appDir)`. تراخيصه (kimodo.cpp Apache-2.0، GGML MIT، nlohmann/json MIT) في `THIRD_PARTY_NOTICES.md`.
+
+**للوكلاء**: `ai.hardware` و`ai.models` للقراءة فقط (العتاد، الحزم، ما يناسب الجهاز، ما هو مثبّت؛ دون مسارات مطلقة). **لا أمر تنزيل للوكلاء**: التنزيل GBs على حساب المستخدم وقرار قبول تراخيص طرف ثالث، فهو قرار المستخدم وحده (D43).
+
+**واجهة النواة للـUI**: `ModelCatalog.Default` (`Tiers`، `Licences`، `Runner`، `State(tier, dir)`، `DefaultModelsDirectory()`، `FindBundledRunner`)، `HardwareProbe.Probe(refresh)` و`HardwareReport.BestGpu`، `HardwareAdvisor.Recommend(hw, catalog)`، `new ModelDownloader()` ← `Plan(tier, dir)` ← `DownloadAsync(tier, dir, acceptedLicenceIds, device, ct)` مع الحدث `Progress` و`ModelDownloadException.Code`.
+
 ### خطة الدمج (الحالة)
 1. ✅ `kimodo-runner` (C++ يغلّف واجهة C) كعملية منفصلة بـJSON-RPC عبر stdio — مبني على Linux، وWindows عبر workflow غير مُجرَّب.
-2. ✅ المستخدم يحدد المسارات يدويًا. **لا تنزيل تلقائي.**
+2. ✅ المستخدم يحدد المسارات يدويًا، أو ينزّل حزمة بضغطة واحدة من الإعدادات (§5.1، D43). **لا تنزيل تلقائي ولا في الخلفية.**
 3. ✅ SOMA ‏(30 مفصلًا) ← هيكل Blazma القياسي عبر `SomaSkeleton.ToStandard` المختبر على الـMannequin وعلى RiggedFigure وCesiumMan.
 4. ✅ الناتج مفاتيح خطية قابلة للتحرير مع اختزال بسماحية، ويُحفظ Prompt وSeed والإعدادات في `Metadata`.
 5. ✅ اختبار القبول (بالمزوّد الإجرائي): توليد ← مسودة ← قبول ← تعديل مفتاح ← تصدير GLB ← تحقق (`Acceptance_TextToMotion_Keys_Edit_Export`). يبقى تكراره بأوزان Kimodo حقيقية على جهاز المستخدم.
