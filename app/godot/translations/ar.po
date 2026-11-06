@@ -181,8 +181,8 @@ msgstr "حُفظ تلقائيًا {0}"
 msgid "Not saved to a file yet"
 msgstr "لم يُحفظ في ملف بعد"
 
-msgid "Orbit: middle or right mouse drag  ·  Pan: Shift + drag  ·  Zoom: wheel  ·  Frame: F"
-msgstr "تدوير: اسحب بزر الفأرة الأوسط أو الأيمن  ·  تحريك: Shift + سحب  ·  تقريب: العجلة  ·  إظهار الشخصية: F"
+msgid "Orbit: middle drag or Alt + left drag  ·  Fly: hold right mouse + W A S D Q E  ·  Pan: Shift + drag  ·  Zoom: wheel  ·  Frame: F, all: Home"
+msgstr "تدوير: السحب بالزر الأوسط أو Alt + الأيسر  ·  طيران: اضغط الأيمن مع W A S D Q E  ·  تحريك: Shift + سحب  ·  تقريب: العجلة  ·  إظهار: F، الكل: Home"
 
 msgid "Cancel"
 msgstr "إلغاء"
@@ -3406,3 +3406,57 @@ msgstr "هذه الهجمة تتحرك بطريقة لا يستطيع الاخت
 
 msgid "This project was made with an older version and was repaired while opening:"
 msgstr "أُنشئ هذا المشروع بإصدار أقدم وأُصلح أثناء الفتح:"
+
+msgid "View"
+msgstr "العرض"
+
+msgid "Camera views, framing, projection and camera speed."
+msgstr "زوايا الكاميرا والتأطير والإسقاط وسرعة الكاميرا."
+
+msgid "Front view"
+msgstr "عرض أمامي"
+
+msgid "Side view"
+msgstr "عرض جانبي"
+
+msgid "Top view"
+msgstr "عرض علوي"
+
+msgid "Perspective / Orthographic"
+msgstr "منظوري / متعامد"
+
+msgid "Frame selection"
+msgstr "إظهار المحدد"
+
+msgid "Reset camera"
+msgstr "إعادة ضبط الكاميرا"
+
+msgid "Camera speed"
+msgstr "سرعة الكاميرا"
+
+msgid "Camera Settings…"
+msgstr "إعدادات الكاميرا…"
+
+msgid "Camera Settings"
+msgstr "إعدادات الكاميرا"
+
+msgid "Fly speed"
+msgstr "سرعة الطيران"
+
+msgid "Field of view"
+msgstr "مجال الرؤية"
+
+msgid "Invert vertical look"
+msgstr "عكس النظر العمودي"
+
+msgid "Orbit around the selected bone"
+msgstr "التدوير حول العظمة المحددة"
+
+msgid "Hold the right mouse button in the viewport to fly: W A S D move, Q and E go down and up, Shift is faster, Ctrl is slower, the wheel changes the speed."
+msgstr "اضغط زر الفأرة الأيمن في نافذة العرض للطيران: W A S D للحركة، Q للنزول وE للصعود، Shift أسرع، Ctrl أبطأ، والعجلة تغيّر السرعة."
+
+msgid "Orthographic"
+msgstr "متعامد"
+
+msgid "Perspective"
+msgstr "منظوري"

@@ -252,8 +252,8 @@ public partial class SelfTest : Node
             var st = _w.Stage;
             var center = st.GetGlobalRect().GetCenter() + new Vector2(0, 60);
             var yaw0 = st.Yaw; var dist0 = st.Distance; var tgt0 = st.Target;
-            GetViewport().PushInput(new InputEventMouseMotion { Position = center, GlobalPosition = center, Relative = new Vector2(40, 10), ButtonMask = MouseButtonMask.Right }, false);
-            if (Mathf.IsEqualApprox(st.Yaw, yaw0)) return "RMB drag did not orbit";
+            GetViewport().PushInput(new InputEventMouseMotion { Position = center, GlobalPosition = center, Relative = new Vector2(40, 10), ButtonMask = MouseButtonMask.Middle }, false);
+            if (Mathf.IsEqualApprox(st.Yaw, yaw0)) return "MMB drag did not orbit";
             var yaw1 = st.Yaw;
             GetViewport().PushInput(new InputEventMouseMotion { Position = center, GlobalPosition = center, Relative = new Vector2(30, 0), ButtonMask = MouseButtonMask.Middle, ShiftPressed = true }, false);
             if (st.Target.IsEqualApprox(tgt0)) return "Shift+MMB did not pan";
@@ -262,7 +262,12 @@ public partial class SelfTest : Node
             if (st.Distance >= dist0) return "wheel did not zoom in";
             st.GrabFocus();
             GetViewport().PushInput(new InputEventKey { Keycode = Godot.Key.Home, PhysicalKeycode = Godot.Key.Home, Pressed = true }, false);
-            return Mathf.IsEqualApprox(st.Yaw, ViewportView.DefaultYaw) && Mathf.IsEqualApprox(st.Distance, ViewportView.DefaultDistance) && st.Target.IsEqualApprox(ViewportView.DefaultTarget) ? null : "Home did not reset the view";
+            // Home frames every character (an empty stage resets the view).
+            string? err = null;
+            if (_w.Overlay.AllBounds() is { } all) { if (st.Target.DistanceTo(all.GetCenter()) > 1e-3f) err = "Home did not frame all"; }
+            else if (!(Mathf.IsEqualApprox(st.Yaw, ViewportView.DefaultYaw) && Mathf.IsEqualApprox(st.Distance, ViewportView.DefaultDistance) && st.Target.IsEqualApprox(ViewportView.DefaultTarget))) err = "Home did not reset the view";
+            st.ResetView(); // later scenarios start from the default camera
+            return err;
         });
 
         _w.SelectClip(walk);
@@ -320,6 +325,14 @@ public partial class SelfTest : Node
         await Settle();
         await ShotMenu(1, "en-dark-menu-edit");
 
+        if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_CAM") == "1")
+        {
+            // Development shortcut: only the camera scenario.
+            await RunCamera();
+            Finish();
+            return;
+        }
+
         if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_P9") == "1")
         {
             // Development shortcut: only the Phase 9 scenario (it starts from a new project).
@@ -359,6 +372,9 @@ public partial class SelfTest : Node
 
         // Phase 9: combat tools (phases, events, hitboxes, hurtboxes, hit test, reactions, combos).
         await RunPhase9();
+
+        // Viewport camera: fly mode, framing, numpad views, camera settings.
+        await RunCamera();
 
         // Restore the user's settings.
         App.SetLanguage(backup.Language); App.SetTheme(backup.Theme); App.SetAdvancedMode(backup.AdvancedMode);

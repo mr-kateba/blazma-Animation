@@ -38,6 +38,7 @@ public partial class MainWindow
             "<path d='M2 12c3-8 6 2 9-6 1-2 3-2 3-2'/><circle cx='13.5' cy='4' r='1.4'/>", on => App.SetShowTrail(on));
         OnionButton = ViewToggle("Onion skin", "Show ghosts of the pose a few frames before and after the current frame.",
             "<circle cx='6' cy='8' r='4'/><circle cx='10.5' cy='8' r='4'/>", on => App.SetShowOnion(on));
+        AddCameraToolbar(row);
         row.AddChild(TrailButton);
         row.AddChild(OnionButton);
         AddPhysicsToolbar(row);

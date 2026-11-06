@@ -1,10 +1,12 @@
+using Blazma.UI.App;
 using Godot;
 
 namespace Blazma.UI.Views;
 
 /// <summary>
 /// The 3D stage: own World3D, ground grid, soft light and an orbit camera.
-/// Mouse: MMB or RMB drag = orbit, Shift+MMB (or Shift+RMB) = pan, wheel = zoom, F = frame character, Home = reset.
+/// Mouse: MMB drag or Alt + LMB drag = orbit, Shift + that = pan, wheel = zoom. Hold RMB = fly (mouse look, W A S D Q E, Shift fast, Ctrl slow,
+/// wheel = speed). F / numpad . = frame selection, Home = frame all, numpad 1 / 3 / 7 = front / side / top (Ctrl = opposite), numpad 5 = ortho.
 /// Always left-to-right, even when the rest of the UI is mirrored for Arabic.
 /// </summary>
 public partial class ViewportView : SubViewportContainer
@@ -21,6 +23,17 @@ public partial class ViewportView : SubViewportContainer
 
     float _yaw = DefaultYaw, _pitch = DefaultPitch, _distance = DefaultDistance;
     Vector3 _target = DefaultTarget;
+
+    static AppSettings Cfg => AppController.Instance.Settings;
+    bool _flying, _ortho;
+    readonly HashSet<Key> _flyKeys = new();
+    Input.MouseModeEnum _prevMouseMode = Input.MouseModeEnum.Visible;
+
+    /// <summary>Right mouse button held: mouse-look and keyboard flight are active.</summary>
+    public bool Flying => _flying;
+    public bool IsOrtho => _ortho;
+    /// <summary>Short text for the on-screen camera notice (fly speed, projection).</summary>
+    public event Action<string>? Notice;
 
     public Camera3D Camera => _cam;
     /// <summary>Root of the stage's own 3D world (characters are added here).</summary>
@@ -71,7 +84,7 @@ public partial class ViewportView : SubViewportContainer
         _grid.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
         _vp.AddChild(_grid);
 
-        ApplyCamera();
+        ApplyCameraSettings();
         MouseEntered += () => { if (!HasFocus() && GetViewport().GuiGetFocusOwner() is not LineEdit) GrabFocus(); };
     }
 
@@ -136,7 +149,146 @@ public partial class ViewportView : SubViewportContainer
     public void ResetView()
     {
         _yaw = DefaultYaw; _pitch = DefaultPitch; _distance = DefaultDistance; _target = DefaultTarget;
+        _ortho = false;
         ApplyCamera();
+    }
+
+    /// <summary>Apply FOV from the settings (30-100 degrees).</summary>
+    public void ApplyCameraSettings()
+    {
+        _cam.Fov = Mathf.Clamp(Cfg.CameraFov, 30f, 100f);
+        ApplyCamera();
+    }
+
+    /// <summary>Look at <paramref name="pivot"/> from where the camera is now; orbiting continues around it.</summary>
+    public void SetPivot(Vector3 pivot)
+    {
+        var pos = _cam.Position;
+        var d = pos - pivot;
+        if (d.Length() < 0.05f) return;
+        _distance = Mathf.Clamp(d.Length(), 0.6f, 120f);
+        var n = d.Normalized();
+        _pitch = Mathf.Clamp(-Mathf.RadToDeg(Mathf.Asin(n.Y)), -89.9f, 89.9f);
+        _yaw = Mathf.RadToDeg(Mathf.Atan2(n.X, n.Z));
+        _target = pivot;
+        ApplyCamera();
+    }
+
+    /// <summary>Numpad views: yaw/pitch of the camera around the target. 0 = front (looks toward -Z), 1 = right side, 2 = top.</summary>
+    public void SetView(int view, bool opposite = false)
+    {
+        (_yaw, _pitch) = view switch { 0 => (0f, 0f), 1 => (90f, 0f), _ => (0f, -89.9f) };
+        if (opposite) { _yaw = view == 2 ? 0f : _yaw + 180f; _pitch = view == 2 ? 89.9f : 0f; }
+        ApplyCamera();
+    }
+
+    public void ToggleOrtho()
+    {
+        _ortho = !_ortho;
+        ApplyCamera();
+        Notice?.Invoke(_ortho ? "Orthographic" : "Perspective");
+    }
+
+    /// <summary>Forward direction of the camera.</summary>
+    public Vector3 Forward => -_cam.GlobalBasis.Z;
+
+    /// <summary>Frame the whole scene (Home) or reset when it is empty; F / numpad . frame the selected bone, else the character.</summary>
+    public void FrameAll()
+    {
+        if (Tools?.AllBounds() is { } box) Frame(box); else ResetView();
+    }
+
+    public void FrameFocus()
+    {
+        if (Tools?.SelectionPoint() is { } p) Frame(new Aabb(p - Vector3.One * 0.45f, Vector3.One * 0.9f));
+        else if (Tools is null || !Tools.FrameSelection()) ResetView();
+    }
+
+    // ---- fly mode ------------------------------------------------------------------------------
+
+    void BeginFly()
+    {
+        if (_flying) return;
+        _flying = true;
+        _ortho = false;
+        _flyKeys.Clear();
+        _prevMouseMode = Input.MouseMode;
+        Input.MouseMode = Input.MouseModeEnum.Captured;
+        ApplyCamera();
+        Notice?.Invoke("SPEED");
+    }
+
+    void EndFly()
+    {
+        if (!_flying) return;
+        _flying = false;
+        _flyKeys.Clear();
+        Input.MouseMode = _prevMouseMode;
+        Cfg.Save();
+        ApplyCamera();
+    }
+
+    public override void _Notification(int what)
+    {
+        if (what == NotificationApplicationFocusOut || what == NotificationExitTree) EndFly();
+    }
+
+    /// <summary>Mouse look: rotate the camera in place (the orbit pivot keeps its distance in front of it).</summary>
+    void Look(float dx, float dy)
+    {
+        var pos = _cam.Position;
+        var sign = Cfg.CameraInvertY ? -1f : 1f;
+        _yaw -= dx * 0.15f;
+        _pitch = Mathf.Clamp(_pitch - dy * 0.15f * sign, -89f, 89f);
+        var yaw = Mathf.DegToRad(_yaw);
+        var pitch = Mathf.DegToRad(_pitch);
+        var dir = new Vector3(Mathf.Cos(pitch) * Mathf.Sin(yaw), -Mathf.Sin(pitch), Mathf.Cos(pitch) * Mathf.Cos(yaw));
+        _target = pos - dir * _distance;
+        ApplyCamera();
+    }
+
+    public override void _Process(double delta)
+    {
+        if (!_flying) return;
+        var move = Vector3.Zero;
+        if (_flyKeys.Contains(Key.W)) move += Forward;
+        if (_flyKeys.Contains(Key.S)) move -= Forward;
+        if (_flyKeys.Contains(Key.D)) move += _cam.GlobalBasis.X;
+        if (_flyKeys.Contains(Key.A)) move -= _cam.GlobalBasis.X;
+        if (_flyKeys.Contains(Key.E)) move += Vector3.Up;
+        if (_flyKeys.Contains(Key.Q)) move -= Vector3.Up;
+        if (move == Vector3.Zero) return;
+        var speed = Cfg.CameraFlySpeed * (_flyKeys.Contains(Key.Shift) ? 3f : 1f) * (_flyKeys.Contains(Key.Ctrl) ? 0.25f : 1f);
+        _target += move.Normalized() * speed * (float)delta;
+        ApplyCamera();
+    }
+
+    /// <summary>While flying every event is taken here, before shortcuts and text fields see it.</summary>
+    public override void _Input(InputEvent e)
+    {
+        if (!_flying) return;
+        switch (e)
+        {
+            case InputEventMouseMotion mm:
+                Look(mm.Relative.X, mm.Relative.Y);
+                GetViewport().SetInputAsHandled();
+                break;
+            case InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: false }:
+                EndFly();
+                GetViewport().SetInputAsHandled();
+                break;
+            case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelUp or MouseButton.WheelDown } mb:
+                var steps = mb.Factor > 0 ? mb.Factor : 1;
+                Cfg.CameraFlySpeed = Mathf.Clamp(Cfg.CameraFlySpeed * Mathf.Pow(1.2f, mb.ButtonIndex == MouseButton.WheelUp ? steps : -steps), 0.5f, 40f);
+                Notice?.Invoke("SPEED");
+                GetViewport().SetInputAsHandled();
+                break;
+            case InputEventKey k:
+                var key = k.Keycode != Key.None ? k.Keycode : k.PhysicalKeycode;
+                if (k.Pressed) _flyKeys.Add(key); else _flyKeys.Remove(key);
+                GetViewport().SetInputAsHandled();
+                break;
+        }
     }
 
     /// <summary>Move the camera so that <paramref name="box"/> fills the view, keeping the current orbit angles.</summary>
@@ -176,6 +328,17 @@ public partial class ViewportView : SubViewportContainer
         var dir = new Vector3(Mathf.Cos(pitch) * Mathf.Sin(yaw), -Mathf.Sin(pitch), Mathf.Cos(pitch) * Mathf.Cos(yaw));
         _cam.Position = _target + dir * _distance;
         _cam.LookAt(_target, Vector3.Up);
+        if (_ortho)
+        {
+            _cam.Projection = Camera3D.ProjectionType.Orthogonal;
+            _cam.Size = 2f * _distance * Mathf.Tan(Mathf.DegToRad(_cam.Fov) * 0.5f);
+        }
+        else _cam.Projection = Camera3D.ProjectionType.Perspective;
+    }
+
+    void PivotFromSelection()
+    {
+        if (Cfg.CameraOrbitSelection && Tools?.SelectionPoint() is { } p) SetPivot(p);
     }
 
     public override void _GuiInput(InputEvent e)
@@ -185,24 +348,34 @@ public partial class ViewportView : SubViewportContainer
         if (Tools is not null && Tools.HandleInput(e)) { AcceptEvent(); return; }
         switch (e)
         {
+            case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Right }:
+                BeginFly();
+                AcceptEvent();
+                break;
             case InputEventMouseButton { Pressed: true } mb:
                 if (mb.ButtonIndex == MouseButton.WheelUp) Zoom(mb.Factor > 0 ? mb.Factor : 1);
                 else if (mb.ButtonIndex == MouseButton.WheelDown) Zoom(-(mb.Factor > 0 ? mb.Factor : 1));
+                else if (mb.ButtonIndex == MouseButton.Middle || (mb.ButtonIndex == MouseButton.Left && mb.AltPressed)) PivotFromSelection();
                 GrabFocus();
                 break;
             case InputEventMouseMotion mm:
-                var orbitOrPan = (mm.ButtonMask & (MouseButtonMask.Middle | MouseButtonMask.Right)) != 0;
+                var orbitOrPan = (mm.ButtonMask & MouseButtonMask.Middle) != 0 || ((mm.ButtonMask & MouseButtonMask.Left) != 0 && mm.AltPressed);
                 if (!orbitOrPan) break;
                 if (mm.ShiftPressed) Pan(mm.Relative.X, mm.Relative.Y);
                 else Orbit(mm.Relative.X, mm.Relative.Y);
                 AcceptEvent();
                 break;
-            case InputEventKey { Pressed: true, Echo: false, Keycode: Key.F, CtrlPressed: false, AltPressed: false, ShiftPressed: false }:
-                if (Tools is null || !Tools.FrameSelection()) ResetView();
+            case InputEventKey { Pressed: true, Echo: false, CtrlPressed: false, AltPressed: false, ShiftPressed: false, Keycode: Key.F or Key.KpPeriod }:
+                FrameFocus();
                 AcceptEvent();
                 break;
-            case InputEventKey { Pressed: true, Echo: false, Keycode: Key.Home, CtrlPressed: false, AltPressed: false }:
-                ResetView();
+            case InputEventKey { Pressed: true, Echo: false, AltPressed: false, Keycode: Key.Home }:
+                FrameAll();
+                AcceptEvent();
+                break;
+            case InputEventKey { Pressed: true, Echo: false, AltPressed: false, Keycode: Key.Kp1 or Key.Kp3 or Key.Kp7 or Key.Kp5 } k:
+                if (k.Keycode == Key.Kp5) ToggleOrtho();
+                else SetView(k.Keycode == Key.Kp1 ? 0 : k.Keycode == Key.Kp3 ? 1 : 2, k.CtrlPressed);
                 AcceptEvent();
                 break;
         }
@@ -215,6 +388,10 @@ public interface IStageInput
     bool HandleInput(InputEvent e);
     /// <summary>F: frame the selected character. Returns false if there is none (the view is reset instead).</summary>
     bool FrameSelection();
+    /// <summary>World position of the selected bone, if any.</summary>
+    Vector3? SelectionPoint();
+    /// <summary>Bounds of every character.</summary>
+    Aabb? AllBounds();
 }
 
 /// <summary>Small X/Y/Z orientation readout drawn in a corner of the stage.</summary>

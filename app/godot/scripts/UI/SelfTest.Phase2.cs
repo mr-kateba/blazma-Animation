@@ -343,6 +343,7 @@ public partial class SelfTest
         {
             _w.UnpinAll();
             var anyPinned = Ch().Pose.Controls.Values.Any(c => c.Pinned);
+            _w.Selection.ClearItem(); // with a bone selected F frames that bone
             _w.Stage.GrabFocus();
             _w.Stage.Orbit(30, 0); _w.Stage.Zoom(3);
             var d0 = _w.Stage.Distance;

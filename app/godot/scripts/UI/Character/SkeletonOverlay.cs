@@ -75,6 +75,7 @@ public partial class SkeletonOverlay : Control, IStageInput
     /// <summary>World-space size of one screen pixel at the depth of <paramref name="world"/>.</summary>
     public float WorldPerPixel(Vector3 world)
     {
+        if (Cam.Projection == Camera3D.ProjectionType.Orthogonal) return Cam.Size / Mathf.Max(Size.Y, 1f);
         var depth = Mathf.Max((world - Cam.GlobalPosition).Dot(-Cam.GlobalBasis.Z), 0.05f);
         return 2f * depth * Mathf.Tan(Mathf.DegToRad(Cam.Fov) * 0.5f) / Mathf.Max(Size.Y, 1f);
     }
@@ -92,7 +93,7 @@ public partial class SkeletonOverlay : Control, IStageInput
     // ---- picking --------------------------------------------------------------------------------------------------------
 
     /// <summary>Nearest joint or control within <see cref="PickRadius"/> pixels of <paramref name="screen"/>.</summary>
-    public PickResult? PickAt(Vector2 screen)
+    public PickResult? PickAt(Vector2 screen, bool bonesOnly = false)
     {
         var found = new List<PickResult>();
         foreach (var view in ShownViews())
@@ -104,7 +105,7 @@ public partial class SkeletonOverlay : Control, IStageInput
                 if (d <= PickRadius) found.Add(new PickResult(view.CharacterId, view.Rig.Bones[i].Id.ToString(), null, d));
             }
             var controls = view.Rig.Controls;
-            for (var i = 0; i < controls.Count && i < view.ControlPositions.Length; i++)
+            for (var i = 0; !bonesOnly && i < controls.Count && i < view.ControlPositions.Length; i++)
             {
                 if (!Project(view.ControlPositions[i], out var s)) continue;
                 var d = s.DistanceTo(screen);
@@ -115,6 +116,7 @@ public partial class SkeletonOverlay : Control, IStageInput
         found.Sort((a, b) => a.Distance.CompareTo(b.Distance));
         // Clicking the same spot again cycles to the next candidate (a hand joint and its IK box coincide at rest).
         var best = found[0];
+        if (bonesOnly) return best;
         var isSelected = best.CharacterId == Sel.CharacterId && (best.BoneId is not null ? best.BoneId == Sel.BoneId : best.ControlId == Sel.ControlId);
         if (isSelected)
             foreach (var other in found.Skip(1))
@@ -149,6 +151,31 @@ public partial class SkeletonOverlay : Control, IStageInput
         return true;
     }
 
+    /// <summary>World position of the selected bone's joint (camera focus / orbit pivot), if a bone is selected.</summary>
+    public Vector3? SelectionPoint()
+    {
+        if (Sel.BoneId is not { } bid || Layer.View(Sel.CharacterId) is not { } view) return null;
+        var idx = view.Rig.Bones.FindIndex(b => b.Id.ToString() == bid);
+        return idx >= 0 && idx < view.Joints.Length ? view.Joints[idx] : null;
+    }
+
+    /// <summary>World position of a bone's joint.</summary>
+    public Vector3? JointPosition(string characterId, string boneId)
+    {
+        if (Layer.View(characterId) is not { } view) return null;
+        var idx = view.Rig.Bones.FindIndex(b => b.Id.ToString() == boneId);
+        return idx >= 0 && idx < view.Joints.Length ? view.Joints[idx] : null;
+    }
+
+    /// <summary>Union of every character's bounds (Home).</summary>
+    public Aabb? AllBounds()
+    {
+        Aabb? all = null;
+        foreach (var id in Layer.Views.Keys)
+            if (Layer.Bounds(id) is { } b) all = all is { } a ? a.Merge(b) : b;
+        return all;
+    }
+
     public bool HandleInput(InputEvent e)
     {
         switch (e)
@@ -163,12 +190,15 @@ public partial class SkeletonOverlay : Control, IStageInput
                 _mouse = mb.Position;
                 if (mb.Pressed)
                 {
-                    if (mb.ShiftPressed) return false;
+                    if (mb.ShiftPressed || mb.AltPressed) return false; // Alt + left drag orbits
+                    // Double-click on a joint: orbit around it afterwards (a repeated click on overlapping joint + IK box still cycles).
+                    Vector3? dblPivot = mb.DoubleClick && PickAt(mb.Position) is { BoneId: not null } dbl ? JointPosition(dbl.CharacterId, dbl.BoneId) : null;
                     if (Gizmo.TryBegin(mb.Position)) return true;
                     if (PropGizmo.TryBegin(mb.Position)) return true;
                     var pick = PickAt(mb.Position);
                     if (pick is null && PickProp(mb.Position) is { } prop) { Sel.SelectProp(prop); return true; }
                     ApplyPick(pick);
+                    if (dblPivot is { } pv) Stage.SetPivot(pv);
                     return true;
                 }
                 if (Gizmo.Dragging) { Gizmo.End(true); return true; }

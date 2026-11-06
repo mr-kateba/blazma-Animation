@@ -189,7 +189,7 @@ public partial class MainWindow : Control
         Gizmo.OffsetLeft = 10; Gizmo.OffsetBottom = -8; Gizmo.OffsetTop = -84; Gizmo.OffsetRight = 86;
         _center.AddChild(Gizmo);
 
-        _hint = W.Label("Orbit: middle or right mouse drag  ·  Pan: Shift + drag  ·  Zoom: wheel  ·  Frame: F", "MonoFaint");
+        _hint = W.Label("Orbit: middle drag or Alt + left drag  ·  Fly: hold right mouse + W A S D Q E  ·  Pan: Shift + drag  ·  Zoom: wheel  ·  Frame: F, all: Home", "MonoFaint");
         _hint.MouseFilter = MouseFilterEnum.Ignore;
         _hint.SetAnchorsPreset(LayoutPreset.BottomRight);
         _hint.GrowHorizontal = GrowDirection.Begin;
@@ -430,6 +430,7 @@ public partial class MainWindow : Control
         BuildViewSettingsMenu();
         BuildAgentMenu();
         BuildMotionSettingsMenu();
+        BuildCameraSettingsMenu();
     }
 
     void OnMenu(int id)
@@ -451,6 +452,7 @@ public partial class MainWindow : Control
             case >= MGenMotion and <= MDiscardDraft: OnMotionMenu(id); break;
             case MAgentAllow: App.SetAllowAgents(!App.Settings.AllowAgents); break;
             case MAgentFolders: ShowAgentFolders(); break;
+            case MCameraSettings: CameraDlg.Sync(); CameraDlg.PopupCentered(); break;
             case MClearRecent: App.Settings.RecentFiles.Clear(); App.Settings.Save(); break;
             case >= MAddMannequin and <= MPinSelected: OnRiggingMenu(id); break;
             case >= MPhysShow and <= MPhysSecondary: OnPhysicsMenu(id); break;
@@ -576,6 +578,7 @@ public partial class MainWindow : Control
         BuildPhysicsDialogs();
         BuildMotionDialogs();
         BuildPhase8Dialogs();
+        BuildCameraDialogs();
         BuildPhase9Dialogs();
     }
 
@@ -867,6 +870,7 @@ public partial class MainWindow : Control
         _palette = BlazmaTheme.PaletteFor(s.Theme);
         Theme = BlazmaTheme.For(s.Theme);
         LayoutDirection = App.IsRtl ? LayoutDirectionEnum.Rtl : LayoutDirectionEnum.Ltr;
+        OnCameraSettingsChanged();
 
         _frame.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {

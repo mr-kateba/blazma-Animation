@@ -33,6 +33,11 @@ public sealed class AppSettings
     public bool ShowCombat { get; set; }
     /// <summary>Phase 9: the Combat panel is open.</summary>
     public bool CombatPanel { get; set; }
+    /// <summary>Viewport camera: fly speed in m/s (0.5-40), inverted vertical look, orbit around the selected bone, vertical field of view in degrees (30-100).</summary>
+    public float CameraFlySpeed { get; set; } = 4f;
+    public bool CameraInvertY { get; set; }
+    public bool CameraOrbitSelection { get; set; }
+    public float CameraFov { get; set; } = 45f;
     public List<string> RecentFiles { get; } = new();
     /// <summary>Folder of the last animation export (Phase 4).</summary>
     public string LastExportDir { get; set; } = "";
@@ -74,6 +79,10 @@ public sealed class AppSettings
         PropsPanel = (bool)cfg.GetValue("ui", "props_panel", PropsPanel);
         ShowCombat = (bool)cfg.GetValue("ui", "show_combat", ShowCombat);
         CombatPanel = (bool)cfg.GetValue("ui", "combat_panel", CombatPanel);
+        CameraFlySpeed = Math.Clamp((float)(double)cfg.GetValue("camera", "fly_speed", (double)CameraFlySpeed), 0.5f, 40f);
+        CameraInvertY = (bool)cfg.GetValue("camera", "invert_y", CameraInvertY);
+        CameraOrbitSelection = (bool)cfg.GetValue("camera", "orbit_selection", CameraOrbitSelection);
+        CameraFov = Math.Clamp((float)(double)cfg.GetValue("camera", "fov", (double)CameraFov), 30f, 100f);
         AutosaveMinutes = Math.Clamp((int)cfg.GetValue("files", "autosave_minutes", AutosaveMinutes), 0, 60);
         RecentFiles.Clear();
         RecentFiles.AddRange(((string[])cfg.GetValue("files", "recent", Array.Empty<string>())).Take(MaxRecent));
@@ -109,6 +118,10 @@ public sealed class AppSettings
         cfg.SetValue("ui", "props_panel", PropsPanel);
         cfg.SetValue("ui", "show_combat", ShowCombat);
         cfg.SetValue("ui", "combat_panel", CombatPanel);
+        cfg.SetValue("camera", "fly_speed", (double)CameraFlySpeed);
+        cfg.SetValue("camera", "invert_y", CameraInvertY);
+        cfg.SetValue("camera", "orbit_selection", CameraOrbitSelection);
+        cfg.SetValue("camera", "fov", (double)CameraFov);
         cfg.SetValue("files", "autosave_minutes", AutosaveMinutes);
         cfg.SetValue("files", "recent", RecentFiles.ToArray());
         cfg.SetValue("files", "last_export_dir", LastExportDir);

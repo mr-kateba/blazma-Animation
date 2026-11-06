@@ -356,6 +356,17 @@ public partial class AppController : Node
         SettingsChanged?.Invoke();
     }
 
+    /// <summary>Viewport camera preferences (clamped): fly speed 0.5-40 m/s, FOV 30-100 degrees.</summary>
+    public void SetCamera(float flySpeed, bool invertY, bool orbitSelection, float fov)
+    {
+        Settings.CameraFlySpeed = Math.Clamp(flySpeed, 0.5f, 40f);
+        Settings.CameraInvertY = invertY;
+        Settings.CameraOrbitSelection = orbitSelection;
+        Settings.CameraFov = Math.Clamp(fov, 30f, 100f);
+        Settings.Save();
+        SettingsChanged?.Invoke();
+    }
+
     public void SetShowTrail(bool show)
     {
         Settings.ShowTrail = show;
