@@ -38,6 +38,16 @@ for d in Blazma.UI Blazma.Core GodotSharp; do isa "Mono/.Net assembly" "$W/data_
 # A runner was staged for this release (its own zip is published): then the app zip must carry it in tools/kimodo.
 if [ -f "$D/kimodo-runner-$V-win64.zip" ]; then
   [ -s "$W/tools/kimodo/kimodo-runner.exe" ] && ok "tools/kimodo/kimodo-runner.exe present (runner staged)" || bad "runner staged but tools/kimodo/kimodo-runner.exe missing"
+  # Run-time GGML backends next to the runner (DECISIONS D44): CPU variants and Vulkan always, CUDA with its runtime DLLs.
+  for f in kimodo.dll ggml.dll ggml-base.dll ggml-cpu-x64.dll ggml-cpu-haswell.dll ggml-vulkan.dll; do
+    [ -s "$W/tools/kimodo/$f" ] && ok "tools/kimodo/$f present" || bad "tools/kimodo/$f missing (multi-backend runner)"
+  done
+  if [ -f "$W/tools/kimodo/ggml-cuda.dll" ]; then
+    for f in cudart64_12.dll cublas64_12.dll cublasLt64_12.dll NVIDIA_CUDA_NOTICE.txt; do
+      [ -s "$W/tools/kimodo/$f" ] && ok "CUDA: tools/kimodo/$f present" || bad "ggml-cuda.dll shipped without tools/kimodo/$f"
+    done
+  else echo "  NOTE  no ggml-cuda.dll in tools/kimodo: NVIDIA cards use Vulkan"; fi
+  [ -s "$W/legal/NVIDIA_CUDA_NOTICE.txt" ] && [ -s "$W/legal/SPIRV_HEADERS_LICENSE.txt" ] && ok "CUDA and SPIRV-Headers notices in legal/" || bad "legal/NVIDIA_CUDA_NOTICE.txt or SPIRV_HEADERS_LICENSE.txt missing"
 else echo "  NOTE  no Windows kimodo-runner staged for $V (tools/kimodo not expected)"; fi
 
 echo "== Windows installer (structural)"
@@ -52,6 +62,7 @@ if command -v 7z >/dev/null; then
   grep -q "LICENSE.txt" "$T/setup-list.txt" && ok "installer payload lists LICENSE.txt" || bad "installer payload lacks LICENSE.txt"
   if [ -f "$D/kimodo-runner-$V-win64.zip" ]; then
     grep -q "kimodo-runner.exe" "$T/setup-list.txt" && ok "installer payload has tools/kimodo/kimodo-runner.exe" || bad "runner staged but missing from the installer"
+    grep -q "ggml-vulkan.dll" "$T/setup-list.txt" && grep -q "ggml-cpu-x64.dll" "$T/setup-list.txt" && ok "installer payload has the GGML backends" || bad "installer payload lacks ggml-vulkan.dll / ggml-cpu-*.dll"
   fi
 else
   echo "  SKIP  7z not installed: installer payload not listed (portable.txt absence and runner not checked; apt-get install -y p7zip-full)"
@@ -67,6 +78,7 @@ grep -q 'type="application/x-blazanim"' "$L/blazma-animation-mime.xml" && ok "sh
 [ -s "$L/LICENSE.txt" ] && [ -s "$L/legal/GODOT_COPYRIGHT.txt" ] && ok "licence files in the tarball" || bad "licence files missing from the tarball"
 if [ -f "$D/kimodo-runner-$V-linux-x64.tar.gz" ]; then
   [ -x "$L/tools/kimodo/kimodo-runner" ] && ok "tools/kimodo/kimodo-runner present (runner staged)" || bad "runner staged but tools/kimodo/kimodo-runner missing"
+  ls "$L/tools/kimodo/" | grep -q '^libggml-cpu-x64\.so' && ls "$L/tools/kimodo/" | grep -q '^libggml-vulkan\.so' && ok "Linux GGML backends present" || bad "Linux runner lacks libggml-cpu-*/libggml-vulkan"
 fi
 timeout 90 "$L/BlazmaAnimation.x86_64" --headless --quit-after 60 >"$T/launch.log" 2>&1; RC=$?
 [ $RC -eq 0 ] && ok "headless launch exits cleanly (rc 0)" || { bad "headless launch rc=$RC"; tail -5 "$T/launch.log"; }

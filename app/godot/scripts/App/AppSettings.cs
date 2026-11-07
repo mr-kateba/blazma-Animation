@@ -52,8 +52,10 @@ public sealed class AppSettings
     /// <summary>Phase 7: where the user installed kimodo-runner and the model files (empty = not set; the BLAZMA_KIMODO_* environment variables still apply). Nothing is downloaded by the app.</summary>
     public string KimodoRunner { get; set; } = "";
     public string KimodoModels { get; set; } = "";
-    /// <summary>auto | cpu | vulkan</summary>
+    /// <summary>auto | gpu | cpu | hybrid (<see cref="Blazma.AI.KimodoSettings.Device"/>).</summary>
     public string KimodoDevice { get; set; } = "auto";
+    /// <summary>GGML name of the graphics card to use ("CUDA0", "Vulkan1"); empty = the best one.</summary>
+    public string KimodoGpu { get; set; } = "";
     /// <summary>Text encoder file chosen by the model installer (empty = pick the best one found in the folder).</summary>
     public string KimodoTextModel { get; set; } = "";
     /// <summary>Longest a single Kimodo generation may take (0 = the default of 15 minutes).</summary>
@@ -96,7 +98,11 @@ public sealed class AppSettings
         KimodoRunner = (string)cfg.GetValue("ai", "kimodo_runner", KimodoRunner);
         KimodoModels = (string)cfg.GetValue("ai", "kimodo_models", KimodoModels);
         KimodoTextModel = (string)cfg.GetValue("ai", "kimodo_text_model", KimodoTextModel);
-        KimodoDevice = (string)cfg.GetValue("ai", "kimodo_device", KimodoDevice) is var dev && (dev == "cpu" || dev == "vulkan") ? dev : "auto";
+        KimodoDevice = Blazma.AI.KimodoSettings.NormalizeDevice((string)cfg.GetValue("ai", "kimodo_device", KimodoDevice)) is var dev && Blazma.AI.KimodoSettings.DeviceModes.Contains(dev) ? dev : "auto";
+        // 0.10 and earlier stored "cpu" whenever the model installer could not read the card's memory, which kept Kimodo off a
+        // perfectly good graphics card. Settings saved before the device modes existed go back to Automatic once (DECISIONS D44).
+        if (!cfg.HasSectionKey("ai", "kimodo_device_modes") && KimodoDevice == "cpu") KimodoDevice = "auto";
+        KimodoGpu = (string)cfg.GetValue("ai", "kimodo_gpu", KimodoGpu);
         KimodoTimeoutSeconds = Math.Clamp((int)cfg.GetValue("ai", "kimodo_timeout_seconds", KimodoTimeoutSeconds), 0, 24 * 3600);
         if (cfg.HasSection("layout"))
             foreach (var key in cfg.GetSectionKeys("layout"))
@@ -134,6 +140,8 @@ public sealed class AppSettings
         cfg.SetValue("ai", "kimodo_runner", KimodoRunner);
         cfg.SetValue("ai", "kimodo_models", KimodoModels);
         cfg.SetValue("ai", "kimodo_device", KimodoDevice);
+        cfg.SetValue("ai", "kimodo_device_modes", true);
+        cfg.SetValue("ai", "kimodo_gpu", KimodoGpu);
         cfg.SetValue("ai", "kimodo_text_model", KimodoTextModel);
         cfg.SetValue("ai", "kimodo_timeout_seconds", KimodoTimeoutSeconds);
         foreach (var (k, v) in Layout) cfg.SetValue("layout", k, v);

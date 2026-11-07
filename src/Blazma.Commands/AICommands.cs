@@ -502,9 +502,10 @@ public static class AICommands
 
         r.Register(new("ai.hardware",
             "This PC's hardware for local AI (offline, read-only): OS, CPU threads, RAM, graphics cards (name, vendor, VRAM, integrated or discrete; Windows from the registry, " +
-            "Linux from sysfs, NVIDIA VRAM from nvidia-smi when installed), the best GPU, and which Kimodo package (light / standard / reference) and device fit it.",
+            "Linux from sysfs, NVIDIA VRAM from nvidia-smi when installed), the best GPU, and which Kimodo package (light / standard / reference) and device fit it. " +
+            "kimodoDevices: the devices kimodo-runner itself listed when it last started (CUDA / Vulkan graphics cards and the CPU; null until it has run), and where the last generation ran.",
             CommandEffect.ReadOnly, S.Of(),
-            _ => new AiHardware()));
+            _ => new AiHardware(jobs)));
 
         r.Register(new("ai.models",
             "The downloadable Kimodo model packages (tiers) with download size, licences, RAM/VRAM needs (estimates), whether each fits this PC, the recommended one, " +
@@ -599,6 +600,16 @@ public static class AICommands
         return new ProviderDiagnostics(info, details, d.Hardware, d.Warnings.Select(w => R(w) ?? "").ToList());
     }
 
+    /// <summary>The runner's device list (null until it has started) and the last generation's devices, for motion.providers / ai.hardware.</summary>
+    internal static void AddKimodoDevices(JsonObject o, KimodoProvider? k)
+    {
+        var s = k?.Settings;
+        o["kimodoDevices"] = k?.RunnerDevices is { } list ? new JsonArray(list.Select(d => (JsonNode?)d.ToJson()).ToArray()) : null;
+        o["kimodoDeviceMode"] = s?.Device;
+        o["kimodoGpuDevice"] = s?.GpuDevice;
+        o["kimodoLastDevice"] = k?.LastDeviceUse?.ToJson();
+    }
+
     internal static JsonObject DescribeGpu(GpuInfo g) => new()
     {
         ["name"] = g.Name, ["vendor"] = g.Vendor, ["vramBytes"] = g.VramBytes, ["source"] = g.Source, ["integrated"] = g.Integrated,
@@ -625,7 +636,7 @@ public static class AICommands
     };
 }
 
-public sealed class AiHardware : ICommand
+public sealed class AiHardware(MotionJobService jobs) : ICommand
 {
     public string Id => "ai.hardware";
     public CommandEffect Effect => CommandEffect.ReadOnly;
@@ -637,6 +648,7 @@ public sealed class AiHardware : ICommand
         var rec = HardwareAdvisor.Recommend(hw, ModelCatalog.Default);
         var data = AICommands.DescribeHardware(hw);
         data["recommendation"] = AICommands.DescribeRecommendation(rec);
+        AICommands.AddKimodoDevices(data, jobs.Kimodo);
         return new CommandOutcome(Array.Empty<Change>(), data, Array.Empty<Diagnostic>());
     }
 
@@ -725,7 +737,9 @@ public sealed class ListMotionProviders(MotionJobService jobs, bool probe) : IOr
             var d = p.DiagnoseAsync(doProbe, cts.Token).GetAwaiter().GetResult();
             if (agent && p is KimodoProvider k) d = AICommands.HidePaths(d, k.Settings.KnownPaths());
             hw = d.Hardware;
-            list.Add(AICommands.DescribeProvider(d));
+            var entry = AICommands.DescribeProvider(d);
+            if (p is KimodoProvider kp) AICommands.AddKimodoDevices(entry, kp);
+            list.Add(entry);
         }
         string? def = jobs.FindProvider(KimodoProvider.ProviderId)?.Describe() is { Available: true } ? KimodoProvider.ProviderId : null;
         return new CommandOutcome(Array.Empty<Change>(), new JsonObject
@@ -889,6 +903,10 @@ public sealed class ApplyMotionJob(MotionJobService jobs, string jobId, string? 
             ["clipId"] = _clipId.ToString(),
             ["name"] = _clip.Name,
             ["isDraft"] = true,
+            // Where Kimodo ran (null for other providers): mode gpu | hybrid | cpu and a readable summary.
+            ["device"] = _clip.Metadata.GetValueOrDefault("kimodo.device"),
+            ["motionDevice"] = _clip.Metadata.GetValueOrDefault("kimodo.motionDevice"),
+            ["generatedOn"] = _clip.Metadata.GetValueOrDefault("kimodo.generatedOn"),
             ["durationFrames"] = _clip.DurationFrames,
             ["fps"] = _clip.Fps.ToString(),
             ["trackCount"] = _clip.Tracks.Count,

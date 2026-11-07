@@ -75,10 +75,12 @@ jobs:
           set -euo pipefail
           [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "kimodo_runner_run_id must be a number"; exit 1; }
           mkdir -p build/cache
-          # Vulkan build preferred, CPU build otherwise (scripts/build-release.sh picks these folders up and checks SHA256SUMS.txt).
-          gh run download "$RUN_ID" -n kimodo-runner-windows-x64-vulkan -D build/cache/kimodo-runner-win64 \
-            || gh run download "$RUN_ID" -n kimodo-runner-windows-x64-cpu -D build/cache/kimodo-runner-win64
-          gh run download "$RUN_ID" -n kimodo-runner-linux-x64-cpu -D build/cache/kimodo-runner-linux-x64 || echo "no Linux runner in run $RUN_ID"
+          # One multi-backend runner (CPU variants + Vulkan, DECISIONS D44) plus, when built, the CUDA backend and its runtime DLLs
+          # in the same folder (scripts/build-release.sh picks these folders up and checks every SHA256SUMS*.txt).
+          gh run download "$RUN_ID" -n kimodo-runner-windows-x64 -D build/cache/kimodo-runner-win64
+          gh run download "$RUN_ID" -n kimodo-runner-windows-x64-cuda -D build/cache/kimodo-runner-win64 || echo "no CUDA backend in run $RUN_ID (NVIDIA cards use Vulkan)"
+          gh run download "$RUN_ID" -n kimodo-runner-linux-x64 -D build/cache/kimodo-runner-linux-x64 || echo "no Linux runner in run $RUN_ID"
+          ls -la build/cache/kimodo-runner-win64
 
       - name: Build release (tests, exports, tools, zip, installer, tar.gz, AppImage, checksums)
         run: scripts/build-release.sh "${{ inputs.version }}"

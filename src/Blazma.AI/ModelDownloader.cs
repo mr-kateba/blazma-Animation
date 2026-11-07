@@ -130,13 +130,14 @@ public sealed class ModelDownloader : IDisposable
     // ------------------------------------------------------------------ download
 
     /// <param name="acceptedLicences">Licence ids the user accepted in the dialog; every licence of the tier must be in it.</param>
-    /// <param name="device">Device to configure afterwards: auto | cpu | vulkan (usually the advisor's choice).</param>
+    /// <param name="device">Device to configure afterwards: auto | gpu | cpu | hybrid (usually the advisor's choice; "vulkan" = gpu).</param>
     public async Task<ModelInstallResult> DownloadAsync(ModelTier tier, string modelsDirectory, IEnumerable<string> acceptedLicences,
         string device = "auto", CancellationToken ct = default)
     {
         var missing = tier.LicenceIds.Except(acceptedLicences, StringComparer.Ordinal).ToList();
         if (missing.Count > 0) throw new ModelDownloadException("licence_not_accepted", "The user has not accepted: " + string.Join(", ", missing) + ".");
-        if (device is not ("auto" or "cpu" or "vulkan")) throw new ArgumentException("device must be auto, cpu or vulkan", nameof(device));
+        device = KimodoSettings.NormalizeDevice(device);
+        if (!KimodoSettings.DeviceModes.Contains(device)) throw new ArgumentException("device must be auto, gpu, cpu or hybrid", nameof(device));
         if (Interlocked.Exchange(ref _busy, 1) != 0) throw new ModelDownloadException("busy", "A download is already running.");
         try
         {

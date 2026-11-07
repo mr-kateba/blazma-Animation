@@ -17,6 +17,7 @@ public sealed record KimodoSettings
     public const string ModelEnv = "BLAZMA_KIMODO_MODEL";
     public const string TextModelEnv = "BLAZMA_KIMODO_TEXT_MODEL";
     public const string DeviceEnv = "BLAZMA_KIMODO_DEVICE";
+    public const string GpuEnv = "BLAZMA_KIMODO_GPU";
     public const string TimeoutEnv = "BLAZMA_KIMODO_TIMEOUT_SECONDS";
 
     /// <summary>Released SOMA checkpoints (30-joint body skeleton) and their file names in the LocalAI-io GGUF repos.
@@ -51,9 +52,31 @@ public sealed record KimodoSettings
     /// <summary>Text encoder file name or absolute path; null picks the first of <see cref="TextModels"/> found.</summary>
     public string? TextModel { get; init; }
 
-    /// <summary>auto | cpu | vulkan. kimodo.cpp chooses the backend from KIMODO_BACKEND (cpu forces CPU);
-    /// the runner sets it before loading. "vulkan" fails when the runner was built without Vulkan.</summary>
-    public string Device { get; init; } = "auto";
+    /// <summary>Where Kimodo runs (DECISIONS D44, docs/AI_INTEGRATION.md §5.1):
+    /// <c>auto</c> = graphics card first (CUDA, then Vulkan), falling back to graphics card + processor, then the processor;
+    /// <c>gpu</c> = graphics card only (CUDA, then Vulkan; fails rather than use the processor);
+    /// <c>cpu</c> = processor only; <c>hybrid</c> = text encoder on the processor, motion model on the graphics card
+    /// (for cards with too little memory for the text encoder). The 0.10 value "vulkan" is read as <c>gpu</c>.</summary>
+    public string Device
+    {
+        get => _device;
+        init => _device = NormalizeDevice(value);
+    }
+    readonly string _device = "auto";
+
+    /// <summary>The device modes <see cref="Device"/> accepts.</summary>
+    public static readonly IReadOnlyList<string> DeviceModes = new[] { "auto", "gpu", "cpu", "hybrid" };
+
+    /// <summary>Lower-cases and maps the old "vulkan" value to "gpu"; unknown values are kept (and reported by <see cref="MissingReason"/>).</summary>
+    public static string NormalizeDevice(string? value)
+    {
+        var d = (value ?? "").Trim().ToLowerInvariant();
+        return d switch { "" => "auto", "vulkan" => "gpu", _ => d };
+    }
+
+    /// <summary>Optional GGML device name of the graphics card to use ("CUDA0", "Vulkan1", as kimodo-runner lists them);
+    /// null = the best one (CUDA before Vulkan, discrete before integrated).</summary>
+    public string? GpuDevice { get; init; }
 
     /// <summary>CPU threads (0 = runtime default); passed to kimodo.cpp as KIMODO_THREADS.</summary>
     public int Threads { get; init; }
@@ -82,7 +105,8 @@ public sealed record KimodoSettings
             TextModel = Env(TextModelEnv),
         };
         if (Env(ModelEnv) is { } m) s = s with { Model = m };
-        if (Env(DeviceEnv) is { } d) s = s with { Device = d.ToLowerInvariant() };
+        if (Env(DeviceEnv) is { } d) s = s with { Device = d };
+        if (Env(GpuEnv) is { } g) s = s with { GpuDevice = g };
         if (Env(TimeoutEnv) is { } t && double.TryParse(t, NumberStyles.Float, CultureInfo.InvariantCulture, out var sec) && sec > 0)
             s = s with { GenerateTimeout = TimeSpan.FromSeconds(Math.Min(sec, 24 * 3600)) };
         return s;
@@ -169,7 +193,8 @@ public sealed record KimodoSettings
         if (ResolveMotionModel() is null) return $"'{MotionModels[Model]}' was not found in '{ModelDirectory}' (or its 'models' folder).";
         if (ResolveTextModel() is not { } text) return $"No Kimodo text encoder ({string.Join(", ", TextModels.Take(2))}, …) was found in '{ModelDirectory}'.";
         if (!HasTokenizer(text)) return $"'{TokenizerFile}' must be next to '{Path.GetFileName(text)}'.";
-        if (Device is not ("auto" or "cpu" or "vulkan")) return $"Device must be auto, cpu or vulkan (got '{Device}').";
+        if (!DeviceModes.Contains(Device)) return $"Device must be auto, gpu, cpu or hybrid (got '{Device}').";
+        if (GpuDevice is { Length: > 64 }) return "The graphics card name is too long (expected a name such as CUDA0 or Vulkan0).";
         return null;
     }
 }

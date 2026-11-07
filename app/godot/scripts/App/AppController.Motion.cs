@@ -88,6 +88,7 @@ public partial class AppController
         if (Settings.KimodoModels.Length > 0) s = s with { ModelDirectory = Settings.KimodoModels };
         if (Settings.KimodoTextModel.Length > 0) s = s with { TextModel = Settings.KimodoTextModel };
         if (Settings.KimodoDevice != "auto") s = s with { Device = Settings.KimodoDevice };
+        if (Settings.KimodoGpu.Length > 0) s = s with { GpuDevice = Settings.KimodoGpu };
         if (Settings.KimodoTimeoutSeconds > 0) s = s with { GenerateTimeout = TimeSpan.FromSeconds(Settings.KimodoTimeoutSeconds) };
         return s;
     }
@@ -97,13 +98,14 @@ public partial class AppController
         if (Kimodo is { } k) k.Settings = EffectiveKimodoSettings(); // restarts the runner
     }
 
-    public void SetKimodoSettings(string runner, string models, string device, int timeoutSeconds)
+    public void SetKimodoSettings(string runner, string models, string device, int timeoutSeconds, string? gpu = null)
     {
+        if (gpu is not null) Settings.KimodoGpu = gpu.Trim();
         Settings.KimodoRunner = runner.Trim();
         // A text encoder chosen by the installer belongs to its folder: another folder means "find the best file there".
         if (!string.Equals(Settings.KimodoModels, models.Trim(), StringComparison.Ordinal)) Settings.KimodoTextModel = "";
         Settings.KimodoModels = models.Trim();
-        Settings.KimodoDevice = device is "cpu" or "vulkan" ? device : "auto";
+        Settings.KimodoDevice = KimodoSettings.NormalizeDevice(device) is var d && KimodoSettings.DeviceModes.Contains(d) ? d : "auto";
         Settings.KimodoTimeoutSeconds = Math.Clamp(timeoutSeconds, 0, 24 * 3600);
         Settings.Save();
         ApplyKimodoSettings();
@@ -118,7 +120,7 @@ public partial class AppController
         var s = r.ApplyTo(new KimodoSettings());
         Settings.KimodoModels = s.ModelDirectory ?? "";
         Settings.KimodoTextModel = s.TextModel ?? "";
-        Settings.KimodoDevice = s.Device is "cpu" or "vulkan" ? s.Device : "auto";
+        Settings.KimodoDevice = KimodoSettings.DeviceModes.Contains(s.Device) ? s.Device : "auto";
         if (Settings.KimodoRunner.Length == 0 && bundledRunner is not null) Settings.KimodoRunner = bundledRunner;
         Settings.Save();
         ApplyKimodoSettings();

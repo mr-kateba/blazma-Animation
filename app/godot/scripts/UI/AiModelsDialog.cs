@@ -93,7 +93,7 @@ public partial class AiModelsDialog : AcceptDialog
     public int RunsDone { get; private set; }
     public ModelInstallResult? LastInstall { get; private set; }
     public bool LastCancelled { get; private set; }
-    public string SelectedDevice => DeviceBox.Selected == 1 ? "cpu" : "auto";
+    public string SelectedDevice => AiText.DeviceModes[Math.Clamp(DeviceBox.Selected, 0, AiText.DeviceModes.Length - 1)];
 
     public AiModelsDialog(MainWindow host)
     {
@@ -158,9 +158,7 @@ public partial class AiModelsDialog : AcceptDialog
         var dev = new HBoxContainer();
         dev.AddThemeConstantOverride("separation", 10);
         dev.AddChild(W.Label("Run on", "Dim"));
-        DeviceBox.AddItem("Auto (graphics card if possible)", 0);
-        DeviceBox.AddItem("CPU only", 1);
-        DeviceBox.TooltipText = "Auto uses the graphics card when the runner can and falls back to the CPU. Choose CPU if generation crashes on your card.";
+        AiText.AddDeviceItems(DeviceBox);
         dev.AddChild(DeviceBox);
         _listView.AddChild(dev);
         var note = W.Label("Files come from Hugging Face over a secure connection and are checked after download. Nothing you make leaves your computer.", "Faint");
@@ -281,7 +279,7 @@ public partial class AiModelsDialog : AcceptDialog
         _hwOther.Text = string.Format(CultureInfo.InvariantCulture, Tr("Memory (RAM): {0}   Processor: {1} cores"), L(FormatSize(hw.TotalRamBytes)), L(hw.LogicalCpus.ToString(CultureInfo.InvariantCulture)));
         _hwNote.Text = hw.Notes.Count > 0 ? string.Join("\n", hw.Notes) : "";
         _rec = HardwareAdvisor.Recommend(hw, Catalog);
-        if (!_deviceTouched) DeviceBox.Select(_rec.Device == "cpu" ? 1 : 0);
+        if (!_deviceTouched) DeviceBox.Select(AiText.DeviceIndex(_rec.Device));
         _recommendLine.Text = (Arabic ? _rec.ReasonAr : _rec.ReasonEn);
         RefreshCards();
     }

@@ -192,7 +192,7 @@ public partial class SelfTest
         if (!OperatingSystem.IsWindows()) System.IO.File.SetUnixFileMode(slow, (System.IO.UnixFileMode)0b111_101_101);
         set.RunnerEdit.Text = slow;
         set.ModelsEdit.Text = modelsDir;
-        set.DeviceBox.Select(1);
+        set.DeviceBox.Select(2); // Processor only
         set.TimeoutBox.Value = 5;
         var frames0 = Engine.GetProcessFrames();
         var t0 = Godot.Time.GetTicksMsec();

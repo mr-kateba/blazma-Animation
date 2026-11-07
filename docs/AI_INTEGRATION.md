@@ -93,7 +93,7 @@ public interface IMotionGenerationProvider {
 - `kimodo_abi_version`، `kimodo_model_load(motion_gguf, text_gguf, text_adapter_gguf, options, err, len)`، `kimodo_model_free`، `kimodo_model_last_error`، `kimodo_generate(model, prompt, options, err, len)` (نص UTF-8)، `kimodo_generate_embedding` (متجه 4096 قيمة F32)، `kimodo_motion_free/frames/joints`، `kimodo_motion_local_rotations_xyzw` ‏(`[T,J,4]`) و`kimodo_motion_root_positions` ‏(`[T,3]`).
 - `kimodo_generation_options`: ‏`seed`، `frames` (من 1 إلى 10000)، `diffusion_steps` (من 1 إلى 1000)، `text_cfg_weight`، `constraint_cfg_weight`. أداة `kmd-generate` تستخدم 2.0 و2.0، والعرض التجريبي يستخدم 100 خطوة افتراضيًا.
 - **`text_adapter_gguf` يجب أن يكون NULL** ("separate text adapters are unsupported"). معامل النص هو ملف GGUF واحد بجانبه `tokenizer.gguf`، أو مجلد المكونات القديم.
-- **`kimodo_runtime_options` (الخيوط والجهاز) يُتحقق من حجمه فقط ولا يُستخدم** في هذه النسخة. الجهاز يُختار من متغير البيئة `KIMODO_BACKEND` (`cpu` يفرض المعالج، وإلا Vulkan إن وُجد ثم CPU)، والخيوط من `KIMODO_THREADS`. لذلك يضبطهما `kimodo-runner` قبل التحميل.
+- **`kimodo_runtime_options` (الخيوط والجهاز) يُتحقق من حجمه فقط ولا يُستخدم** في هذه النسخة. الجهاز يُختار من متغير البيئة `KIMODO_BACKEND` (`cpu` يفرض المعالج، وإلا Vulkan إن وُجد ثم CPU)، والخيوط من `KIMODO_THREADS`. لذلك يضبطهما `kimodo-runner` قبل التحميل. (منذ 0.11 يختار ترقيعنا الجهاز لكل مكوّن: §5.2.)
 - **لا يوجد callback للتقدّم ولا إلغاء**: `kimodo_generate` استدعاء حاجب. لذلك يرسل الـrunner مراحل فقط (تحميل، توليد، إرسال)، والإلغاء = إنهاء العملية.
 - الواجهة **لا تُرجع** أسماء المفاصل ولا الآباء ولا وضعية الراحة. وREADME يقول "query the joint count from the result rather than assuming a fixed skeleton".
 
@@ -125,9 +125,9 @@ public interface IMotionGenerationProvider {
 
 | الطريقة | الاتجاه | المعاملات | النتيجة |
 |---|---|---|---|
-| `hello` | طلب | `{protocol: 1, client}` | `{protocol, runner, version, kimodoAbi, skeletons, ggml, vulkanCompiled}` |
-| `diagnose` | طلب | `{motionModel?, textModel?, device?}` | `{ggml, vulkanCompiled, kimodoAbi, motionModelExists, textModelExists, modelLoaded, warnings}` |
-| `generate` | طلب | `{prompt, frames, seed, steps, motionModel, textModel, device: auto\|cpu\|vulkan, threads}` | `{fps: 30, frames, joints: 30, skeleton: {key: "soma30", up: "+Y", forward: "+Z", names, parents, offsets}, rotations: [x,y,z,w,…] (T·J·4), rootPositions: [x,y,z,…] (T·3), model, textModel, steps, seed, runner, warnings}` |
+| `hello` | طلب | `{protocol: 1, client}` | `{protocol, runner, version, kimodoAbi, skeletons, ggml, vulkanCompiled, backends, devices, deviceModes}` |
+| `diagnose` | طلب | `{motionModel?, textModel?}` | `{ggml, vulkanCompiled, kimodoAbi, motionModelExists, textModelExists, modelLoaded, backends, devices, deviceModes, warnings}` |
+| `generate` | طلب | `{prompt, frames, seed, steps, motionModel, textModel, device: auto\|gpu\|cpu\|hybrid, gpu?, threads}` | `{fps: 30, frames, joints: 30, skeleton: {key: "soma30", up: "+Y", forward: "+Z", names, parents, offsets}, rotations: [x,y,z,w,…] (T·J·4), rootPositions: [x,y,z,…] (T·3), model, textModel, steps, seed, runner, warnings, device: {mode, text, motion}}` |
 | `progress` | إشعار من الـrunner | `{id, stage: load_model\|generate\|decode, fraction, message?}` | — |
 | `cancel` | إشعار إلى الـrunner | `{id}` | أثناء التوليد يخرج الـrunner فورًا (`std::_Exit`)، وBlazma ينهي العملية أيضًا |
 | `shutdown` | إشعار إلى الـrunner | `{}` | تخرج العملية (يُرسل عند الخمول) |
@@ -156,7 +156,8 @@ public interface IMotionGenerationProvider {
 | مجلد النماذج (ويُبحث أيضًا في مجلده الفرعي `models`) | `BLAZMA_KIMODO_MODELS` | — |
 | النموذج | `BLAZMA_KIMODO_MODEL` | `soma-rp-v1.1` (أو `soma-seed-v1.1`؛ G1 وSMPL-X غير مدعومين) |
 | مُرمِّز النص (اسم ملف أو مسار) | `BLAZMA_KIMODO_TEXT_MODEL` | أول الموجود: Q8_0، Q6_K، Q5_K، Q4_K_M، Q4_K، BF16 |
-| الجهاز | `BLAZMA_KIMODO_DEVICE` | `auto` (`cpu` يفرض المعالج، `vulkan` يفشل إن بُني الـrunner بدونه) |
+| الجهاز | `BLAZMA_KIMODO_DEVICE` | `auto` (البطاقة أولًا مع انتقال تلقائي)، `gpu` (البطاقة فقط)، `cpu` (المعالج فقط)، `hybrid` (البطاقة + المعالج)؛ `vulkan` القديمة = `gpu` (§5.2) |
+| بطاقة بعينها | `BLAZMA_KIMODO_GPU` | — (أفضل بطاقة)؛ اسم GGML كما يسرده الـrunner: `CUDA0`، `Vulkan1` |
 | مهلة التوليد بالثواني | `BLAZMA_KIMODO_TIMEOUT_SECONDS` | 900 |
 
 التطبيق يمرّر إعداداته عبر `MotionJobService.Kimodo.Settings = new KimodoSettings {…}`. **الوكلاء لا يستطيعون تغيير هذه الإعدادات** لأنها تحدد ملفًا تنفيذيًا (D28).
@@ -168,6 +169,33 @@ public interface IMotionGenerationProvider {
 3. اضبط `BLAZMA_KIMODO_RUNNER` (مسار مطلق) و`BLAZMA_KIMODO_MODELS` (أو من إعدادات التطبيق عندما تتوفر واجهتها)، ثم تحقق بـ`blazma-anim exec <file> motion.providers --arg probe=true`.
 
 الأوزان والمجلدات `build` لا تُرفع إلى Git أبدًا (`.gitignore` يتجاهل `*.gguf` و`ai/kimodo/build*/`).
+
+### 5.2 الأجهزة: بطاقة الرسوميات، المعالج، أو كلاهما (D44)
+
+**ما يدعمه kimodo.cpp نفسه (الـcommit `5679ff1`)**: مكوّنان، كل منهما على **واجهة GGML خلفية واحدة** يختارها بنفسه: مُرمِّز النص (Llama-3 بحجم 8B، يُحمَّل في `kimodo_model_load`) ونموذج الحركة (يُحمَّل عند أول توليد). الاختيار في الكود الأصلي استدعاءات مباشرة: `ggml_backend_vk_init(0)` إن بُني مع Vulkan ووُجد جهاز، وإلا `ggml_backend_cpu_init()`، و`KIMODO_BACKEND=cpu` يفرض المعالج لكليهما. **لا CUDA، ولا `ggml_backend_dev`/سجل الأجهزة، ولا `ggml_backend_sched`** (لا تقسيم للرسم بين جهازين، ولا رجوع للمعالج في العمليات غير المدعومة)، وCMake يفرض `GGML_BACKEND_DL=OFF`. `kimodo_runtime_options.device` لا يُستخدم.
+
+**ما أضفناه (ترقيع صغير في `ai/kimodo/patches/`، يُطبَّق وقت الـconfigure على نسخة البناء، والمصدر الأصلي لا يُمس)**: الدالتان السابقتان تُستبدلان باختيار من سجل أجهزة GGML (`kimodo_backend_select.hpp`): `KIMODO_TEXT_DEVICE` و`KIMODO_MOTION_DEVICE` تسمّيان جهازًا بعينه (`CUDA0`، `Vulkan0`، `CPU`)؛ إن لم يوجد أو فشل تهيئته يفشل التحميل برسالة (والقرار لـBlazma)؛ وبدونهما السلوك الأصلي «البطاقة أولًا» (CUDA ثم أي بطاقة منفصلة ثم المدمجة ثم المعالج). وCMake لا يفرض `GGML_BACKEND_DL` ولا يربط مكتبات الواجهات مباشرة. هذا كل التغيير.
+
+**البناء**: runner واحد بـ`GGML_BACKEND_DL=ON` و`GGML_CPU_ALL_VARIANTS=ON` (x64): بجانب `kimodo-runner.exe` توجد `ggml-cpu-<variant>.dll` (من SSE4.2 إلى AVX-512؛ يُحمَّل أفضلها للمعالج)، `ggml-vulkan.dll` (أي بطاقة لها تعريف Vulkan: NVIDIA وAMD وIntel)، و`ggml-cuda.dll` مع `cudart64_12.dll` و`cublas64_12.dll` و`cublasLt64_12.dll` (CUDA 12.4، تُعاد توزيعها بموجب EULA الخاصة بـNVIDIA، `legal/NVIDIA_CUDA_NOTICE.txt`). `ggml_backend_load_all()` يحمّل ما يعمل منها: بلا تعريف NVIDIA (`nvcuda.dll`) لا يُحمَّل CUDA، وبلا محمّل Vulkan (`vulkan-1.dll`، يأتي مع تعريف البطاقة) لا يُحمَّل Vulkan، والمعالج يعمل دائمًا. بناء Vulkan على Windows كان يفشل عند `find_package(SPIRV-Headers)`؛ تُجلب الآن KhronosGroup/SPIRV-Headers مثبّتة بالـcommit `09913f08` (وسم `vulkan-sdk-1.4.309.0`) عبر `FetchContent … OVERRIDE_FIND_PACKAGE`. لا ملفات CUDA على Linux (Vulkan + المعالج فقط).
+
+**الأوضاع** (`device` في `generate`، و`KimodoSettings.Device`):
+
+| الوضع | في الواجهة | مُرمِّز النص | نموذج الحركة |
+|---|---|---|---|
+| `auto` | تلقائي (البطاقة أولًا) | البطاقة | البطاقة — ثم الانتقال أدناه |
+| `gpu` | بطاقة الرسوميات فقط | البطاقة | البطاقة؛ يفشل `device_unavailable` بلا بطاقة |
+| `cpu` | المعالج فقط | المعالج | المعالج |
+| `hybrid` | بطاقة الرسوميات + المعالج | المعالج | البطاقة — لبطاقات ذاكرتها لا تكفي مُرمِّز النص؛ خطوات الانتشار المتكررة على البطاقة |
+
+`gpu` اختياري: اسم الجهاز (يُرفض إن لم يكن بطاقة موجودة). الـrunner يعيد في `device` الأجهزة التي استُخدمت فعلًا (`{mode, text: {name, description, type, backend, memoryTotal, memoryFree}, motion: {…}}`)، و`hello`/`diagnose` يسردان `devices` بالشكل نفسه و`backends` المحمّلة — مثل `llama.cpp --list-devices`.
+
+**الانتقال التلقائي في C# (`KimodoDevicePlanner`)** — الفكرة نفسها في Blazma AI (الأحدث أولًا ثم الأقدم ثم المعالج): Auto = `gpu` على أول جهاز CUDA، ثم `gpu` على أول جهاز Vulkan (قد تكون البطاقة نفسها)، ثم المدمجة إن لم توجد منفصلة، ثم `hybrid` على أفضل بطاقة، ثم `cpu`. «البطاقة فقط» = محاولات البطاقة فقط، و«البطاقة + المعالج» = `hybrid` على كل بطاقة. الانتقال إلى المحاولة التالية عند: `device_unavailable`، `model_load_failed` (مثل نفاد ذاكرة البطاقة عند التحميل)، `generation_failed`، `runner_crashed` (انهيار داخل تعريف البطاقة: يُبدأ runner جديد)، `invalid_motion`، `internal_error`. **لا انتقال** عند الإلغاء أو انتهاء المهلة أو مدخلات خاطئة أو ملفات ناقصة. كل انتقال يُسجَّل ويضيف تحذيرًا أول النتيجة: «Generated on … after N failed attempt(s): Kimodo could not run on … [code]: … — trying … instead.» (يُعرض بالعربية في الواجهة)، وتقدّم بمرحلة `fallback`. بيانات المقطع: `kimodo.device`، `kimodo.generatedOn`، `kimodo.motionDevice`، `kimodo.textDevice`؛ و`motion.job_apply` يعيد `device`/`motionDevice`/`generatedOn`.
+
+**الواجهات البرمجية**: `KimodoProvider.RunnerDevices` (من آخر `hello`)، `ProbeDevicesAsync`، `LastDeviceUse`؛ و`motion.providers` و`ai.hardware` يضيفان `kimodoDevices` و`kimodoDeviceMode` و`kimodoGpuDevice` و`kimodoLastDevice`. runner أقدم (0.2، بلا `devices`) يعمل كما كان: `auto`/`cpu`/`vulkan`، و`hybrid` يُرفض بطلب التحديث.
+
+**المقترح (`HardwareAdvisor`)**: `auto` حين تكفي البطاقة **أو حين لا تُقرأ ذاكرة بطاقة منفصلة** (كان يضع `cpu` هنا فيبقى Kimodo على المعالج رغم وجود بطاقة جيدة — سبب البطء المُبلَّغ عنه)، و`hybrid` لبطاقة منفصلة ذاكرتها أقل من حد الحزمة، و`cpu` بلا بطاقة منفصلة. الإعداد `cpu` المحفوظ قبل 0.11 يعود `auto` مرة واحدة.
+
+**ما تحقق منه CI** (لا بطاقة رسوميات على أجهزته): البناء على Windows (MSVC، Vulkan SDK 1.4.309.0، وCUDA 12.4 في وظيفة منفصلة) وLinux (GCC 13، Vulkan)؛ تحميل `ggml-cpu-*` و`ggml-vulkan` فعليًا، وأن اعتماديات `ggml-cuda.dll` كلها مشحونة عدا `nvcuda.dll` (من التعريف)؛ `diagnose` يسرد المعالج، ومع lavapipe ‏(Vulkan برمجي على Linux) يسرد `Vulkan0`، و`hybrid` يضع الحركة على `Vulkan0` والنص على المعالج؛ `gpu`/`hybrid` بلا بطاقة → `device_unavailable`؛ المسارات غير ASCII. **غير متحقق منه**: توليد حقيقي على بطاقة NVIDIA/AMD/Intel (CUDA أو Vulkan)، دعم عمليات kimodo كلها في CUDA، والأداء والذاكرة — يجب أن يجرّبه المستخدم.
 
 ### 5.1 تنزيل النموذج بضغطة واحدة (D43)
 

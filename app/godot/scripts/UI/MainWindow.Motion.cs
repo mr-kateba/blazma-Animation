@@ -7,7 +7,7 @@ using Godot;
 namespace Blazma.UI.Views;
 
 /// <summary>What the last automatic "job ready, add it" step did (kept for the status text and tests).</summary>
-public sealed record MotionApplyInfo(string JobId, string ClipId, string ClipName, IReadOnlyList<string> Warnings);
+public sealed record MotionApplyInfo(string JobId, string ClipId, string ClipName, IReadOnlyList<string> Warnings, string? GeneratedOn = null);
 
 /// <summary>
 /// Phase 7 part of the shell: the Generate motion dialog and AI settings, the menu entries, applying finished jobs on the main thread
@@ -136,8 +136,9 @@ public partial class MainWindow
         SelectClip(clipId);
         App.GoToStart();
         App.Play();
-        LastMotionApply = new MotionApplyInfo(jobId, clipId, name, warnings);
-        GenerateDlg.ShowApplied(jobId, name, warnings);
+        var generatedOn = AiText.GeneratedOn((string?)r.Data["device"], (string?)r.Data["motionDevice"]);
+        LastMotionApply = new MotionApplyInfo(jobId, clipId, name, warnings, generatedOn);
+        GenerateDlg.ShowApplied(jobId, name, warnings, generatedOn);
         if (warnings.Count > 0) _toast.NotifyFormat("Draft added: {0} ({1} notes)", _palette.Ok, name, warnings.Count.ToString(CultureInfo.InvariantCulture));
         else _toast.NotifyFormat("Draft added: {0}", _palette.Ok, name);
         return clipId;

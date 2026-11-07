@@ -12,12 +12,17 @@ namespace Blazma.UI.Views;
 /// </summary>
 public partial class AiSettingsDialog : ConfirmationDialog
 {
-    static readonly string[] Devices = { "auto", "cpu", "vulkan" };
-
     readonly MainWindow _host;
     public LineEdit RunnerEdit { get; } = new() { AutoTranslateMode = AutoTranslateModeEnum.Disabled, TextDirection = Control.TextDirection.Ltr, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, ThemeTypeVariation = "MonoEdit", PlaceholderText = "kimodo-runner" };
     public LineEdit ModelsEdit { get; } = new() { AutoTranslateMode = AutoTranslateModeEnum.Disabled, TextDirection = Control.TextDirection.Ltr, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, ThemeTypeVariation = "MonoEdit", PlaceholderText = "…/kimodo-models" };
     public OptionButton DeviceBox { get; } = new() { FitToLongestItem = false, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+    /// <summary>"Best available" + the graphics cards kimodo-runner listed (after a Check or a generation).</summary>
+    public OptionButton GpuBox { get; } = new() { FitToLongestItem = false, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+    readonly List<string> _gpuNames = new() { "" };
+    readonly Label _devicesLine = W.Label("", "Dim", false);
+    readonly Label _lastUsedLine = W.Label("", "Dim", false);
+    public string DevicesText => _devicesLine.Text;
+    public string LastUsedText => _lastUsedLine.Text;
     public SpinBox TimeoutBox { get; } = new UnitSpinBox() { MinValue = 1, MaxValue = 600, Step = 1, Value = 15, Rounded = true };
     public Button CheckButton { get; } = new() { Text = "Check", FocusMode = Control.FocusModeEnum.None };
     public Button LogToggle { get; } = new() { Flat = true, FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
@@ -82,11 +87,10 @@ public partial class AiSettingsDialog : ConfirmationDialog
         root.AddChild(grid);
         Row(grid, "Kimodo runner", PathRow(RunnerEdit, _browseRunner));
         Row(grid, "Models folder", PathRow(ModelsEdit, _browseModels));
-        DeviceBox.AddItem("Automatic", 0);
-        DeviceBox.AddItem("CPU only", 1);
-        DeviceBox.AddItem("GPU (Vulkan)", 2);
-        DeviceBox.TooltipText = "Automatic uses the GPU when the runner supports it and falls back to the CPU.";
+        AiText.AddDeviceItems(DeviceBox);
         Row(grid, "Device", DeviceBox);
+        GpuBox.TooltipText = "Which graphics card to use. The list shows what kimodo-runner found; press Check to fill it.";
+        Row(grid, "Graphics card", GpuBox);
         TimeoutBox.LocalizeNumeralSystem = false;
         TimeoutBox.GetLineEdit().LocalizeNumeralSystem = false;
         TimeoutBox.GetLineEdit().TextDirection = Control.TextDirection.Ltr;
@@ -110,6 +114,10 @@ public partial class AiSettingsDialog : ConfirmationDialog
         Wrap(_gpuLine); _gpuLine.TextDirection = Control.TextDirection.Auto;
         root.AddChild(_hardware);
         root.AddChild(_gpuLine);
+        Wrap(_devicesLine); _devicesLine.TextDirection = Control.TextDirection.Auto;
+        Wrap(_lastUsedLine); _lastUsedLine.TextDirection = Control.TextDirection.Auto;
+        root.AddChild(_devicesLine);
+        root.AddChild(_lastUsedLine);
         root.AddChild(_notes);
 
         root.AddChild(new HSeparator());
@@ -196,7 +204,8 @@ public partial class AiSettingsDialog : ConfirmationDialog
         var s = App.Settings;
         RunnerEdit.Text = s.KimodoRunner.Length > 0 ? s.KimodoRunner : eff.RunnerPath ?? "";
         ModelsEdit.Text = s.KimodoModels.Length > 0 ? s.KimodoModels : eff.ModelDirectory ?? "";
-        DeviceBox.Select(Math.Max(0, Array.IndexOf(Devices, eff.Device)));
+        DeviceBox.Select(AiText.DeviceIndex(eff.Device));
+        FillGpus(eff.GpuDevice);
         _openTimeoutSeconds = (int)eff.GenerateTimeout.TotalSeconds;
         TimeoutBox.Value = Math.Clamp(Math.Round(_openTimeoutSeconds / 60.0), 1, 600);
         _logOpen = false;
@@ -212,7 +221,8 @@ public partial class AiSettingsDialog : ConfirmationDialog
         var minutes = (int)TimeoutBox.Value;
         // Leave the time limit alone when the user did not change it (it may come from the environment).
         var seconds = minutes == (int)Math.Round(_openTimeoutSeconds / 60.0) ? App.Settings.KimodoTimeoutSeconds : minutes * 60;
-        App.SetKimodoSettings(RunnerEdit.Text, ModelsEdit.Text, Devices[Math.Clamp(DeviceBox.Selected, 0, 2)], seconds);
+        var gpu = _gpuNames[Math.Clamp(GpuBox.Selected, 0, _gpuNames.Count - 1)];
+        App.SetKimodoSettings(RunnerEdit.Text, ModelsEdit.Text, AiText.DeviceModes[Math.Clamp(DeviceBox.Selected, 0, AiText.DeviceModes.Length - 1)], seconds, gpu);
         RefreshStatic();
     }
 
@@ -231,6 +241,34 @@ public partial class AiSettingsDialog : ConfirmationDialog
         ShowFiles(s, k.Describe());
         var hw = HardwareProbe.Probe();
         ShowHardware(hw, Array.Empty<string>());
+    }
+
+    /// <summary>The graphics card list and the runner's device lines; keeps <paramref name="selected"/> even before the runner was asked.</summary>
+    void FillGpus(string? selected)
+    {
+        var devices = App.Kimodo?.RunnerDevices;
+        GpuBox.Clear();
+        _gpuNames.Clear();
+        GpuBox.AddItem(Tr("Best available"));
+        _gpuNames.Add("");
+        foreach (var d in KimodoDevicePlanner.RankGpus(devices ?? Array.Empty<KimodoDevice>()))
+        {
+            GpuBox.AddItem($"{d.Label} [{d.Name}]");
+            _gpuNames.Add(d.Name);
+        }
+        if (selected is { Length: > 0 } && !_gpuNames.Contains(selected, StringComparer.OrdinalIgnoreCase))
+        {
+            GpuBox.AddItem(selected);
+            _gpuNames.Add(selected);
+        }
+        var i = _gpuNames.FindIndex(n => string.Equals(n, selected ?? "", StringComparison.OrdinalIgnoreCase));
+        GpuBox.Select(Math.Max(0, i));
+        _devicesLine.Text = devices is null
+            ? Tr("Devices kimodo-runner can use: press Check to ask it.")
+            : Tr("Devices kimodo-runner can use:") + "\n" + AiText.Devices(devices)
+              + (devices.Any(d => d.IsGpu) ? "" : "\n" + Tr("No graphics card is usable by Kimodo (no CUDA or Vulkan device): it will run on the processor. Updating the graphics driver usually fixes this."));
+        var last = App.Kimodo?.LastDeviceUse;
+        _lastUsedLine.Text = last is null ? "" : AiText.GeneratedOn(last.Mode, last.Motion?.Label) ?? "";
     }
 
     void ShowFiles(KimodoSettings s, ProviderInfo info)
@@ -297,7 +335,7 @@ public partial class AiSettingsDialog : ConfirmationDialog
             _notes.Text = string.Format(CultureInfo.InvariantCulture, Tr("The check failed: {0}"), r.Error ?? "");
             return;
         }
-        if (App.Kimodo is { } k) ShowFiles(k.Settings, d.Info);
+        if (App.Kimodo is { } k) { ShowFiles(k.Settings, d.Info); FillGpus(k.Settings.GpuDevice); }
         ShowHardware(d.Hardware, d.Warnings);
         var lines = new List<string>();
         foreach (var w in d.Warnings)
@@ -305,7 +343,8 @@ public partial class AiSettingsDialog : ConfirmationDialog
         if (d.Info.UnavailableReason is { } why) lines.Insert(0, AiText.Reason(why));
         else if (lines.Count == 0) lines.Add(Tr("Everything needed for Kimodo was found and the runner answered."));
         foreach (var kv in d.Details)
-            if (kv.Key.StartsWith("runner.", StringComparison.Ordinal) && kv.Value is { Length: > 0 }) lines.Add($"{kv.Key[7..]}: {kv.Value}");
+            if (kv.Key.StartsWith("runner.", StringComparison.Ordinal) && kv.Key is not ("runner.devices" or "runner.deviceModes") && kv.Value is { Length: > 0 })
+                lines.Add($"{kv.Key[7..]}: {kv.Value}");
         _notes.Text = string.Join("\n", lines);
     }
 

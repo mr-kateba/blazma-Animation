@@ -6,7 +6,9 @@ namespace Blazma.AI;
 /// the tier's minimum VRAM (then the GPU is used, otherwise the CPU).</summary>
 public sealed record TierFit(string TierId, bool Fits, bool GpuFits, string Device, string ReasonEn, string ReasonAr);
 
-/// <summary>The suggested tier and device (<c>auto</c> = Vulkan GPU if the runner has it, else CPU; <c>cpu</c> = force the CPU).</summary>
+/// <summary>The suggested tier and device (<see cref="KimodoSettings.Device"/>): <c>auto</c> = graphics card first with automatic
+/// fallback; <c>hybrid</c> = a discrete card with too little memory for the text encoder (it runs on the processor, the motion
+/// model on the card); <c>cpu</c> = no discrete graphics card was detected.</summary>
 public sealed record ModelRecommendation(string TierId, string Device, GpuInfo? Gpu, string ReasonEn, string ReasonAr, IReadOnlyList<TierFit> Tiers);
 
 /// <summary>Picks a Kimodo package for the machine: weak PCs (little RAM, no discrete GPU) get the light tier on the CPU, strong
@@ -54,7 +56,10 @@ public static class HardwareAdvisor
         var fits = ram is null || ram >= t.MinRamGiB;
         // The GPU path needs Vulkan from a real driver: a discrete card (or one we cannot classify) with the tier's minimum VRAM.
         var gpuFits = vram >= t.MinVramGiB && gpu?.Vendor is "NVIDIA" or "AMD" or "Intel";
-        var device = gpuFits ? "auto" : "cpu";
+        // A discrete card whose memory could not be read (common: the registry has no size for some drivers) still gets
+        // "auto": the runner sees the real card and Blazma falls back by itself if it does not fit.
+        var discrete = gpu is { Integrated: not true, Vendor: "NVIDIA" or "AMD" or "Intel" };
+        var device = gpuFits || (discrete && vram is null) ? "auto" : discrete ? "hybrid" : "cpu";
         string en, ar;
         if (!fits)
         {

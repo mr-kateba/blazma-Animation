@@ -3747,3 +3747,48 @@ msgstr "ربط العظام تلقائيًا"
 
 msgid "The disk is full. Free some space or choose another drive."
 msgstr "القرص ممتلئ. أفرغ بعض المساحة أو اختر قرصًا آخر."
+
+msgid "Automatic (GPU first)"
+msgstr "تلقائي (بطاقة الرسوميات أولًا)"
+
+msgid "Graphics card only"
+msgstr "بطاقة الرسوميات فقط"
+
+msgid "Processor only"
+msgstr "المعالج فقط"
+
+msgid "Graphics card + processor"
+msgstr "بطاقة الرسوميات + المعالج"
+
+msgid "Automatic tries the graphics card first (CUDA, then Vulkan), then the graphics card with the text encoder on the processor, then the processor alone. \"Graphics card + processor\" helps when the card has too little memory."
+msgstr "التلقائي يجرّب بطاقة الرسوميات أولًا (CUDA ثم Vulkan)، ثم بطاقة الرسوميات مع تشغيل مُرمِّز النص على المعالج، ثم المعالج وحده. خيار «بطاقة الرسوميات + المعالج» يفيد حين تكون ذاكرة البطاقة صغيرة."
+
+msgid "Graphics card"
+msgstr "بطاقة الرسوميات"
+
+msgid "Which graphics card to use. The list shows what kimodo-runner found; press Check to fill it."
+msgstr "أي بطاقة رسوميات تُستخدم. القائمة تعرض ما وجده kimodo-runner؛ اضغط «فحص» لملئها."
+
+msgid "Best available"
+msgstr "الأفضل المتاح"
+
+msgid "Devices kimodo-runner can use: press Check to ask it."
+msgstr "الأجهزة التي يستطيع kimodo-runner استخدامها: اضغط «فحص» لسؤاله."
+
+msgid "Devices kimodo-runner can use:"
+msgstr "الأجهزة التي يستطيع kimodo-runner استخدامها:"
+
+msgid "No graphics card is usable by Kimodo (no CUDA or Vulkan device): it will run on the processor. Updating the graphics driver usually fixes this."
+msgstr "لا توجد بطاقة رسوميات يستطيع Kimodo استخدامها (لا جهاز CUDA ولا Vulkan): سيعمل على المعالج. تحديث تعريف بطاقة الرسوميات يحل هذا عادةً."
+
+msgid "Generated on: {0}"
+msgstr "وُلِّدت على: {0}"
+
+msgid "Generated on: {0} + the processor (text encoder)"
+msgstr "وُلِّدت على: {0} + المعالج (مُرمِّز النص)"
+
+msgid "Generated on: the processor (CPU)"
+msgstr "وُلِّدت على: المعالج (CPU)"
+
+msgid "The graphics card path failed, so Kimodo fell back to another device. Details: {0}"
+msgstr "فشل التشغيل على بطاقة الرسوميات، فانتقل Kimodo تلقائيًا إلى جهاز آخر. التفاصيل: {0}"

@@ -19,6 +19,35 @@ public static partial class AiText
     public const string KimodoId = KimodoProvider.ProviderId;
     public const string ProceduralId = ProceduralMotionProvider.ProviderId;
 
+    /// <summary>The Kimodo device modes in the order the device lists show them (<see cref="KimodoSettings.DeviceModes"/>).</summary>
+    public static readonly string[] DeviceModes = { "auto", "gpu", "cpu", "hybrid" };
+
+    /// <summary>Fills a device list with the four modes (the item text is translated by the control).</summary>
+    public static void AddDeviceItems(OptionButton box)
+    {
+        box.AddItem("Automatic (GPU first)", 0);
+        box.AddItem("Graphics card only", 1);
+        box.AddItem("Processor only", 2);
+        box.AddItem("Graphics card + processor", 3);
+        box.TooltipText = "Automatic tries the graphics card first (CUDA, then Vulkan), then the graphics card with the text encoder on the processor, then the processor alone. \"Graphics card + processor\" helps when the card has too little memory.";
+    }
+
+    public static int DeviceIndex(string mode) => Math.Max(0, Array.IndexOf(DeviceModes, KimodoSettings.NormalizeDevice(mode)));
+
+    /// <summary>"Generated on: …" from the device a generation ran on (mode gpu | hybrid | cpu and the motion model's device).</summary>
+    public static string? GeneratedOn(string? mode, string? motionDevice) => mode switch
+    {
+        null or "" => null,
+        "gpu" when motionDevice is { Length: > 0 } => string.Format(CultureInfo.InvariantCulture, T("Generated on: {0}"), Ltr(motionDevice)),
+        "hybrid" when motionDevice is { Length: > 0 } => string.Format(CultureInfo.InvariantCulture, T("Generated on: {0} + the processor (text encoder)"), Ltr(motionDevice)),
+        "cpu" => T("Generated on: the processor (CPU)"),
+        _ => motionDevice is { Length: > 0 } ? string.Format(CultureInfo.InvariantCulture, T("Generated on: {0}"), Ltr(motionDevice)) : null,
+    };
+
+    /// <summary>One line per device kimodo-runner listed: "NVIDIA GeForce RTX 4070 (CUDA, 12 GB)".</summary>
+    public static string Devices(IReadOnlyList<KimodoDevice> devices) =>
+        string.Join("\n", devices.Select(d => "• " + Ltr(d.MemoryTotalBytes > 0 && d.IsGpu ? $"{d.Label}, {Bytes(d.MemoryTotalBytes)}" : d.Label)));
+
     public static string Keywords => string.Join(", ", ProceduralMotionProvider.SupportedKeywords);
 
     /// <summary>Why Kimodo cannot be used, in the user's language.</summary>
@@ -92,6 +121,8 @@ public static partial class AiText
             return T("Constraints were ignored: Kimodo does not support them yet.");
         if (w.StartsWith("Loop: this motion starts and ends", StringComparison.Ordinal))
             return T("Loop: this motion starts and ends in the same standing pose.");
+        if (w.StartsWith("Generated on ", StringComparison.Ordinal) && w.Contains("failed attempt", StringComparison.Ordinal))
+            return string.Format(CultureInfo.InvariantCulture, T("The graphics card path failed, so Kimodo fell back to another device. Details: {0}"), Ltr(w));
         if (w.StartsWith("Procedural motion (not AI)", StringComparison.Ordinal))
             return T("Procedural motion (not AI): a simple keyword cycle for testing and demos.");
         if (UnmappedRx().Match(w) is { Success: true } m)

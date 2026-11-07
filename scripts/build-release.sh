@@ -11,7 +11,8 @@
 #                  AppImage GitHub releases and checked against $APPIMAGETOOL_SHA256; a mismatch stops the build)
 #   SKIP_TESTS=1   same as --skip-tests
 #   KIMODO_RUNNER_WIN / KIMODO_RUNNER_LINUX   optional: folder (or .zip) with a kimodo-runner build (the artifacts of the manual
-#                  `kimodo-runner` workflow: kimodo-runner[.exe], GGML libraries, SHA256SUMS.txt). Default: build/cache/kimodo-runner-win64
+#                  `kimodo-runner` workflow: kimodo-runner[.exe], kimodo + GGML libraries incl. the run-time backends ggml-cpu-*,
+#                  ggml-vulkan and optionally ggml-cuda + CUDA runtime DLLs + NVIDIA_CUDA_NOTICE.txt, SHA256SUMS*.txt). Default: build/cache/kimodo-runner-win64
 #                  and build/cache/kimodo-runner-linux-x64 when present. Bundled into tools/kimodo/ (the app finds it there: the repo
 #                  is private, so its release assets can't be downloaded anonymously) and also published as kimodo-runner-<version>-*.zip/.tar.gz.
 #                  Missing = the release has no runner (Kimodo then needs a runner the user builds; docs/AI_INTEGRATION.md §5).
@@ -114,10 +115,18 @@ stage_runner() { # source (dir or zip), exe name, dest-dir → copies runner + l
   if [ -f "$src" ] && [[ "$src" == *.zip ]]; then tmp="$WORK/runner-unzip-$exe"; rm -rf "$tmp"; mkdir -p "$tmp"; unzip -q "$src" -d "$tmp"; src="$tmp"; fi
   local dir; dir="$(dirname "$(find "$src" -type f -name "$exe" | head -1)")"
   [ -f "$dir/$exe" ] || die "kimodo-runner: no $exe in $1"
-  if [ -f "$dir/SHA256SUMS.txt" ]; then (cd "$dir" && sha256sum -c --quiet SHA256SUMS.txt) || die "kimodo-runner: checksum mismatch in $1"; fi
+  local sums; for sums in "$dir"/SHA256SUMS*.txt; do
+    [ -f "$sums" ] || continue
+    (cd "$dir" && sha256sum -c --quiet "$(basename "$sums")") || die "kimodo-runner: checksum mismatch ($(basename "$sums")) in $1"
+  done
   find "$dir" -maxdepth 1 -type f -name '*.gguf' | grep -q . && die "kimodo-runner: $1 contains model weights — never bundle them"
   mkdir -p "$dst"
-  find "$dir" -maxdepth 1 \( -type f -o -type l \) \( -name "$exe" -o -name '*.dll' -o -name '*.so*' -o -name SHA256SUMS.txt \) -exec cp -P {} "$dst/" \;
+  find "$dir" -maxdepth 1 \( -type f -o -type l \) \( -name "$exe" -o -name '*.dll' -o -name '*.so*' -o -name 'SHA256SUMS*.txt' -o -name '*NOTICE*.txt' \) -exec cp -P {} "$dst/" \;
+  # One runner, run-time GGML backends (DECISIONS D44): at least the CPU backends must be there, or nothing can run.
+  find "$dst" -maxdepth 1 -name '*ggml-cpu*' | grep -q . || die "kimodo-runner: no ggml-cpu backend library in $1 (old single-backend build?)"
+  if [ -f "$dst/ggml-cuda.dll" ]; then
+    for f in cudart64_12.dll cublas64_12.dll cublasLt64_12.dll NVIDIA_CUDA_NOTICE.txt; do [ -f "$dst/$f" ] || die "kimodo-runner: ggml-cuda.dll without $f in $1"; done
+  fi
   [ "$exe" = kimodo-runner ] && chmod +x "$dst/$exe"
   echo "kimodo-runner from $1: $(ls "$dst" | tr '\n' ' ')"
 }

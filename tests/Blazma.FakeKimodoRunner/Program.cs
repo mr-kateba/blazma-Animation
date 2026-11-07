@@ -13,6 +13,10 @@ using Blazma.Core.Mathematics;
 //
 // "--host <modelDir>": instead of being a runner, act as a Blazma host: start this program as the runner through
 // KimodoProvider, begin a generation that hangs, print "runner-pid <pid>" and wait forever (the lifetime test kills it).
+//
+// Devices (like the 0.3 runner): "--fake-devices cuda,vulkan,igpu" lists CUDA0 / Vulkan0 / Vulkan1 (integrated) and CPU in hello
+// and answers generate with the devices used; without it hello lists none (a 0.2 runner). "--fake-fail gpu:CUDA0=oom,hybrid:Vulkan0=crash"
+// makes generate on that attempt (device[:gpu]) fail: oom → generation_failed, load → model_load_failed, crash → exit.
 
 if (args.Length >= 2 && args[0] == "--host")
 {
@@ -39,6 +43,24 @@ if (!args.Contains("--stdio"))
     Console.Error.WriteLine("usage: fake-kimodo-runner --stdio");
     return 2;
 }
+
+string? Arg(string name) { var i = Array.IndexOf(args, name); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
+var fakeDevices = Arg("--fake-devices")?.Split(',', StringSplitOptions.RemoveEmptyEntries);
+var fakeFail = (Arg("--fake-fail") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)
+    .Select(x => x.Split('=')).Where(x => x.Length == 2).ToDictionary(x => x[0], x => x[1]);
+JsonObject Dev(string name, string desc, string type, string backend) =>
+    new() { ["name"] = name, ["description"] = desc, ["type"] = type, ["backend"] = backend, ["memoryTotal"] = 8L << 30, ["memoryFree"] = 7L << 30 };
+JsonArray? DeviceList()
+{
+    if (fakeDevices is null) return null;
+    var list = new JsonArray();
+    if (fakeDevices.Contains("cuda")) list.Add(Dev("CUDA0", "NVIDIA GeForce RTX 4070", "gpu", "CUDA"));
+    if (fakeDevices.Contains("vulkan")) list.Add(Dev("Vulkan0", "NVIDIA GeForce RTX 4070", "gpu", "Vulkan"));
+    if (fakeDevices.Contains("igpu")) list.Add(Dev("Vulkan1", "Intel(R) UHD Graphics 770", "igpu", "Vulkan"));
+    list.Add(Dev("CPU", "Fake CPU", "cpu", "CPU"));
+    return list;
+}
+JsonObject? FindDev(string name) => DeviceList()?.OfType<JsonObject>().FirstOrDefault(d => (string?)d["name"] == name)?.DeepClone().AsObject();
 
 var stdout = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
 var stdin = new StreamReader(Console.OpenStandardInput(), Encoding.UTF8);
@@ -85,7 +107,9 @@ foreach (var line in queue.GetConsumingEnumerable())
     {
         case "hello":
             var proto = int.TryParse(Environment.GetEnvironmentVariable("FAKE_KIMODO_PROTOCOL"), out var pv) ? pv : 1;
-            Result(id, new JsonObject { ["protocol"] = proto, ["runner"] = "fake-kimodo-runner", ["version"] = "0.0-test", ["kimodoAbi"] = 1, ["skeletons"] = new JsonArray("soma30") });
+            var hello = new JsonObject { ["protocol"] = proto, ["runner"] = "fake-kimodo-runner", ["version"] = "0.0-test", ["kimodoAbi"] = 1, ["skeletons"] = new JsonArray("soma30") };
+            if (DeviceList() is { } devs) { hello["devices"] = devs; hello["deviceModes"] = new JsonArray("auto", "gpu", "cpu", "hybrid"); }
+            Result(id, hello);
             break;
         case "diagnose":
             if (((string?)p["motionModel"] ?? "").Contains("diagnose-fail"))
@@ -108,7 +132,26 @@ foreach (var line in queue.GetConsumingEnumerable())
             Volatile.Write(ref busy, 1);
             var prompt = (string?)p["prompt"] ?? "";
             var frames = (int?)p["frames"] ?? 30;
-            Console.Error.WriteLine($"generate '{prompt}' frames={frames} seed={p["seed"]}");
+            var device = (string?)p["device"] ?? "auto";
+            var gpuName = (string?)p["gpu"];
+            Console.Error.WriteLine($"generate '{prompt}' frames={frames} seed={p["seed"]} device={device}{(gpuName is null ? "" : ":" + gpuName)}");
+            JsonObject? used = null;
+            if (fakeDevices is not null)
+            {
+                if (device is not ("auto" or "gpu" or "cpu" or "hybrid" or "vulkan")) { Error(id, "invalid_request", "device must be auto, gpu, cpu or hybrid"); break; }
+                var g = device == "cpu" ? null : gpuName is not null ? FindDev(gpuName) : DeviceList()!.OfType<JsonObject>().FirstOrDefault(d => (string?)d["type"] is "gpu" or "igpu")?.DeepClone().AsObject();
+                if (g is null && device is "gpu" or "hybrid") { Error(id, "device_unavailable", "no usable GPU was found"); break; }
+                var mode = g is null ? "cpu" : device == "hybrid" ? "hybrid" : "gpu";
+                if (fakeFail.TryGetValue(gpuName is null ? device : $"{device}:{gpuName}", out var how))
+                {
+                    if (how == "crash") { Console.Error.WriteLine("simulated GPU crash"); Environment.Exit(3); }
+                    if (how == "load") { Error(id, "model_load_failed", "could not load the Kimodo model: text encoder: cannot allocate text component"); break; }
+                    Error(id, "generation_failed", "Kimodo generation failed: GGML motion weight allocation failed (out of device memory)");
+                    break;
+                }
+                var cpu = FindDev("CPU")!;
+                used = new JsonObject { ["mode"] = mode, ["text"] = mode == "gpu" ? g!.DeepClone() : cpu.DeepClone(), ["motion"] = mode == "cpu" ? cpu : g };
+            }
             Progress(id, "load_model", 0.1);
             if (prompt.Contains("crash-now"))
             {
@@ -167,6 +210,7 @@ foreach (var line in queue.GetConsumingEnumerable())
                 ["model"] = (string?)p["motionModel"], ["textModel"] = (string?)p["textModel"], ["steps"] = p["steps"]?.DeepClone(),
                 ["runner"] = "fake-kimodo-runner 0.0-test",
                 ["warnings"] = new JsonArray("fake motion"),
+                ["device"] = used,
             });
             break;
         }

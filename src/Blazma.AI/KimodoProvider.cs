@@ -22,6 +22,8 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
     RunnerProcess? _runner;
     Timer? _idleTimer;
     JsonObject? _hello;
+    IReadOnlyList<KimodoDevice>? _devices;
+    KimodoDeviceUse? _lastUse;
     bool _disposed;
     long _epoch; // bumped whenever the runner is stopped on purpose: a runner started before that is never kept
     readonly EventHandler _onProcessExit;
@@ -56,6 +58,31 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
 
     public IReadOnlyList<string> RecentLog() { lock (_log) return _log.ToArray(); }
 
+    /// <summary>The devices the runner listed when it last started (null: not started yet, or a runner older than 0.3).</summary>
+    public IReadOnlyList<KimodoDevice>? RunnerDevices { get { lock (_sync) return _devices; } }
+
+    /// <summary>Where the last successful generation ran (null before the first one).</summary>
+    public KimodoDeviceUse? LastDeviceUse { get { lock (_sync) return _lastUse; } }
+
+    /// <summary>Starts the runner if needed and returns its devices (CUDA / Vulkan graphics cards and the processor). When a
+    /// generation is running the runner is not disturbed: the list from its start is returned. Null for an old runner.</summary>
+    public async Task<IReadOnlyList<KimodoDevice>?> ProbeDevicesAsync(CancellationToken ct)
+    {
+        var s = Settings;
+        if (s.ResolveRunner() is null) throw new MotionGenerationException("provider_unavailable", s.MissingReason() ?? "kimodo-runner not found.");
+        if (!_gate.Wait(0)) return RunnerDevices;
+        try
+        {
+            await EnsureRunnerAsync(s, ct).ConfigureAwait(false);
+            return RunnerDevices;
+        }
+        finally
+        {
+            _gate.Release();
+            ScheduleIdleStop();
+        }
+    }
+
     public ProviderInfo Describe()
     {
         var s = Settings;
@@ -67,7 +94,7 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
             new[]
             {
                 "Generates the 30 SOMA body joints only: fingers and face are not animated (R5).",
-                "Runs locally on CPU or Vulkan; the first request loads the models and can take a while. Memory needs depend on the text encoder quantisation (not measured by Blazma yet, R4).",
+                "Runs locally on the graphics card (CUDA or Vulkan) or the processor; Automatic tries the graphics card first and falls back to graphics card + processor, then the processor. The first request loads the models and can take a while. Memory needs depend on the text encoder quantisation (not measured by Blazma yet, R4).",
                 "Constraints are not supported by kimodo.cpp yet.",
             });
     }
@@ -91,6 +118,8 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
             ["textModelFound"] = (text is not null).ToString().ToLowerInvariant(),
             ["tokenizerFound"] = (text is not null && KimodoSettings.HasTokenizer(text)).ToString().ToLowerInvariant(),
             ["device"] = s.Device,
+            ["gpuDevice"] = s.GpuDevice,
+            ["lastDevice"] = LastDeviceUse?.Summary,
             ["diffusionSteps"] = s.DiffusionSteps.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ["runnerRunning"] = RunnerRunning.ToString().ToLowerInvariant(),
             ["settingsFrom"] = $"{KimodoSettings.RunnerEnv}, {KimodoSettings.ModelsEnv} or the app settings",
@@ -116,7 +145,7 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
                 probed = await EnsureRunnerAsync(s, ct).ConfigureAwait(false);
                 var d = await probed.CallAsync("diagnose", new JsonObject
                 {
-                    ["motionModel"] = motion, ["textModel"] = text, ["device"] = s.Device,
+                    ["motionModel"] = motion, ["textModel"] = text,
                 }, null, s.DiagnoseTimeout, ct).ConfigureAwait(false);
                 JsonObject? hello;
                 lock (_sync) hello = _hello?.DeepClone().AsObject();
@@ -155,36 +184,44 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
             CancelIdleStop();
             progress?.Report(new GenerationProgress("start", 0.02, "starting kimodo-runner"));
             var runner = await EnsureRunnerAsync(s, ct).ConfigureAwait(false);
-            var p = new JsonObject
-            {
-                ["prompt"] = request.Prompt,
-                ["frames"] = frames,
-                ["seed"] = request.Seed,
-                ["steps"] = s.DiffusionSteps,
-                ["motionModel"] = s.ResolveMotionModel(),
-                ["textModel"] = s.ResolveTextModel(),
-                ["device"] = s.Device,
-                ["threads"] = s.Threads,
-            };
+            var attempts = KimodoDevicePlanner.Plan(s.Device, s.GpuDevice, RunnerDevices);
+            var fallbackWarnings = new List<string>();
             JsonObject result;
-            try
+            KimodoAttempt attempt;
+            for (var i = 0; ; i++)
             {
-                result = await runner.CallAsync("generate", p, n => progress?.Report(new GenerationProgress(
-                    (string?)n["stage"] ?? "generate",
-                    Math.Clamp(n["fraction"] is JsonValue f && f.TryGetValue<double>(out var x) ? x : 0, 0, 1),
-                    (string?)n["message"])), s.GenerateTimeout, ct).ConfigureAwait(false);
-            }
-            catch (MotionGenerationException e) when (e.Code is "runner_crashed" or "runner_timeout" or "message_too_large" or "protocol_error" or "runner_stopped")
-            {
-                StopRunner(runner, e.Code);
-                throw;
-            }
-            catch (OperationCanceledException)
-            {
-                StopRunner(runner, "cancelled");
-                throw;
+                attempt = attempts[i];
+                try
+                {
+                    if (i > 0) runner = await EnsureRunnerAsync(s, ct).ConfigureAwait(false); // a crash on the previous device ended it
+                    result = await GenerateOnceAsync(runner, s, request, frames, attempt, progress, ct).ConfigureAwait(false);
+                    break;
+                }
+                catch (MotionGenerationException e) when (i + 1 < attempts.Count && KimodoDevicePlanner.ShouldFallBack(e.Code))
+                {
+                    var what = DescribeAttempt(attempt);
+                    var next = DescribeAttempt(attempts[i + 1]);
+                    var w = $"Kimodo could not run on {what} [{e.Code}]: {e.Message} — trying {next} instead.";
+                    fallbackWarnings.Add(w);
+                    Write(w);
+                    progress?.Report(new GenerationProgress("fallback", 0.05, $"{what} failed; trying {next}"));
+                }
             }
             var motion = Parse(result, request);
+            var use = KimodoDeviceUse.FromResult(result) ?? new KimodoDeviceUse(attempt.Device, null, null);
+            lock (_sync) _lastUse = use;
+            var meta = new Dictionary<string, string>(motion.Metadata)
+            {
+                ["kimodo.device"] = use.Mode,
+                ["kimodo.generatedOn"] = use.Summary,
+            };
+            if (use.Motion is { } md) meta["kimodo.motionDevice"] = md.Label;
+            if (use.Text is { } td) meta["kimodo.textDevice"] = td.Label;
+            var warnings = motion.Warnings.ToList();
+            if (fallbackWarnings.Count > 0)
+                warnings.Insert(0, $"Generated on {use.Summary} after {fallbackWarnings.Count} failed attempt(s): {string.Join(" ", fallbackWarnings)}");
+            motion = motion with { Metadata = meta, Warnings = warnings };
+            Write($"generated on {use.Summary}");
             progress?.Report(new GenerationProgress("done", 1));
             return motion;
         }
@@ -193,6 +230,55 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
             _gate.Release();
             ScheduleIdleStop();
         }
+    }
+
+    string DescribeAttempt(KimodoAttempt a)
+    {
+        var gpu = a.Gpu is { } name ? RunnerDevices?.FirstOrDefault(d => d.Name == name)?.Label ?? name : null;
+        return a.Device switch
+        {
+            "gpu" => $"the graphics card {gpu ?? "(best available)"}",
+            "hybrid" => $"graphics card + processor ({gpu ?? "best graphics card"}, text encoder on the processor)",
+            "cpu" => "the processor",
+            "vulkan" => "the graphics card (Vulkan)",
+            _ => "the automatically chosen device",
+        };
+    }
+
+    async Task<JsonObject> GenerateOnceAsync(RunnerProcess runner, KimodoSettings s, MotionRequest request, int frames, KimodoAttempt attempt,
+        IProgress<GenerationProgress>? progress, CancellationToken ct)
+    {
+        var p = new JsonObject
+        {
+            ["prompt"] = request.Prompt,
+            ["frames"] = frames,
+            ["seed"] = request.Seed,
+            ["steps"] = s.DiffusionSteps,
+            ["motionModel"] = s.ResolveMotionModel(),
+            ["textModel"] = s.ResolveTextModel(),
+            ["device"] = attempt.Device,
+            ["threads"] = s.Threads,
+        };
+        if (attempt.Gpu is { } gpu) p["gpu"] = gpu;
+        JsonObject result;
+        try
+        {
+            result = await runner.CallAsync("generate", p, n => progress?.Report(new GenerationProgress(
+                (string?)n["stage"] ?? "generate",
+                Math.Clamp(n["fraction"] is JsonValue f && f.TryGetValue<double>(out var x) ? x : 0, 0, 1),
+                (string?)n["message"])), s.GenerateTimeout, ct).ConfigureAwait(false);
+        }
+        catch (MotionGenerationException e) when (e.Code is "runner_crashed" or "runner_timeout" or "message_too_large" or "protocol_error" or "runner_stopped")
+        {
+            StopRunner(runner, e.Code);
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            StopRunner(runner, "cancelled");
+            throw;
+        }
+        return result;
     }
 
     async Task<RunnerProcess> EnsureRunnerAsync(KimodoSettings s, CancellationToken ct)
@@ -220,6 +306,7 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
                 if (_disposed || _epoch != epoch)
                     throw new MotionGenerationException("runner_stopped", _disposed ? "The Kimodo provider was shut down." : "kimodo-runner was stopped while it was starting (the settings changed).");
                 _hello = hello;
+                _devices = KimodoDevice.ListFrom(hello);
                 _runner = runner;
             }
             return runner;

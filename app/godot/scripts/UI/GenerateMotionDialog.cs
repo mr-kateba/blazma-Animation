@@ -353,7 +353,7 @@ public partial class GenerateMotionDialog : ConfirmationDialog
     }
 
     /// <summary>The main window added the finished job to the project: say so, with the warnings.</summary>
-    public void ShowApplied(string jobId, string clipName, IEnumerable<string> warnings)
+    public void ShowApplied(string jobId, string clipName, IEnumerable<string> warnings, string? generatedOn = null)
     {
         if (jobId != _jobId) return;
         _progress.Visible = false;
@@ -361,6 +361,7 @@ public partial class GenerateMotionDialog : ConfirmationDialog
         _status.Text = Tr("Done. The motion was added as a draft and is playing.");
         _status.AddThemeColorOverride("font_color", _host.Palette.Ok);
         var lines = new List<string> { string.Format(CultureInfo.InvariantCulture, Tr("Draft clip: {0}"), clipName) };
+        if (generatedOn is not null) lines.Add(generatedOn);
         lines.AddRange(warnings.Select(AiText.Warning));
         lines.Add(Tr("Accept it to keep it, or discard it. Ctrl+Z undoes either."));
         _details.Text = string.Join("\n", lines);
