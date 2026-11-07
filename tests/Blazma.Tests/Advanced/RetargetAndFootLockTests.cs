@@ -125,7 +125,9 @@ public class RetargetAndFootLockTests
         Assert.Equal(rig.Id, clip.Skeleton);
         Assert.InRange((double)r.Data["scale"]!, 0.4, 0.9);
 
-        // Feet locked: every contact span holds its anchor within 1 cm (maxAnchorError is measured on the edited clip).
+        // Feet locked: every locked foot reaches its planned IK target within 1 cm (maxAnchorError is measured on the edited clip),
+        // and the sole points touching the ground stay put. The walk rolls heel → toe, so the ankle itself moves during a contact
+        // (the old crude cycle kept it still, and this test used to pin the ankle to one anchor).
         var lockData = r.Data["footLock"]!;
         var spans = lockData["spans"]!.AsArray();
         Assert.True(spans.Count >= 4, $"{spans.Count} spans");
@@ -133,13 +135,8 @@ public class RetargetAndFootLockTests
         foreach (var span in spans)
         {
             var side = (string)span!["side"]! == "left" ? Side.Left : Side.Right;
-            var foot = P8.Bone(rig, H.Foot(side));
-            var anchor = span["anchor"]!.AsArray().Select(x => (double)x!).ToArray();
-            for (var f = (long)span["startFrame"]!; f <= (long)span["endFrame"]!; f++)
-            {
-                var p = P8.Model(rig, clip, f)[foot].Translation;
-                Assert.True((p - new Vec3(anchor[0], anchor[1], anchor[2])).Length() <= 0.01, $"{side} frame {f}");
-            }
+            var drift = GaitMetrics.ContactDrift(clip, rig, side, (long)span["startFrame"]!, (long)span["endFrame"]!);
+            Assert.True(drift <= 0.01, $"{side} contact {span["startFrame"]}–{span["endFrame"]} drifts {drift:0.000} m");
         }
         // Outside the locked legs, mapped bones still point like the source (within 1°).
         var src = P8.RigOf(s, man);

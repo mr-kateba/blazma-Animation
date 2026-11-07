@@ -35,7 +35,7 @@ public static class RetargetCommands
 
         r.Register(new("clip.foot_lock",
             "Lock feet during ground contacts: detects contacts, then keys the leg IK targets pinned on one anchor per contact (with knee poles from the motion) and eases on/off over blendFrames. " +
-            "Frames outside contact ± blendFrames keep exactly their original pose. Undoable. Returns spans, maxAnchorError (m) and maxUntouchedChange.",
+            "Frames outside contact ± blendFrames keep exactly their original pose. Undoable. Returns spans, maxAnchorError (m: largest distance of a locked foot from its planned IK target) and maxUntouchedChange.",
             CommandEffect.Mutating,
             ContactSchema(S.Int("blendFrames", "Frames to ease onto/off each anchor (default 3).", false)),
             a => new FootLockClip(S.Id(a, "clipId"), S.OptId(a, "characterId"), Options(a), Frame(a, "startFrame"), Frame(a, "endFrame"))));
@@ -171,7 +171,7 @@ internal static class FootLockWriter
             var after = ev.Model(ClipEvaluator.Evaluate(clip, rig, t));
             if (anchors.TryGetValue(f, out var list))
                 foreach (var x in list)
-                    maxAnchor = Math.Max(maxAnchor, (after[feet.Feet[x.Foot].FootBone].Translation - x.Anchor).Length());
+                    maxAnchor = Math.Max(maxAnchor, (after[feet.Feet[x.Foot].FootBone].Translation - x.Target.Translation).Length());
             if (planned.Contains(f)) continue;
             var before = ev.Model(ClipEvaluator.Evaluate(original, rig, t));
             for (var b = 0; b < after.Length; b++) maxUntouched = Math.Max(maxUntouched, (after[b].Translation - before[b].Translation).Length());

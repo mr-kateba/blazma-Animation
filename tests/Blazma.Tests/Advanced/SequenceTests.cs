@@ -77,7 +77,9 @@ public class SequenceTests
         var accWalk = MaxJointAcceleration(m, 2, start - 4);
         Assert.True(accTransition <= 1.1 * Math.Max(accRun, accWalk), $"transition {accTransition:0.0000} vs walk {accWalk:0.0000} / run {accRun:0.0000} m/frame²");
         var rootAcc = Enumerable.Range((int)start - 1, 14).Max(f => (m[f + 1][rm].Translation - m[f][rm].Translation * 2 + m[f - 1][rm].Translation).Length());
-        Assert.True(rootAcc < 0.02, $"root acceleration {rootAcc:0.0000} m/frame²");
+        // The run cycle is ≈3.2 m/s and the walk ≈1.25 m/s (was 2.5 / 1.2 with the old crude cycles), so the 10-frame blend changes
+        // the speed by ≈1.9 m/s: ≈0.01 m/frame² for an ideal smoothstep, plus the root smoothing of each cycle.
+        Assert.True(rootAcc < 0.03, $"root acceleration {rootAcc:0.0000} m/frame²");
 
         // Bake (with foot lock): the baked clip plays like the sequence; the support foot does not slide in the transition.
         var bake = P8.Ok(s, "sequence.bake", new { sequenceId = seq, footLock = true }).Data!;
@@ -86,20 +88,16 @@ public class SequenceTests
         Assert.Equal(ev.LastFrame, clip.DurationFrames);
         Assert.Contains(clip.Markers, x => x.Name == "Run cycle" && x.Time == Flicks.FromFrame(start, clip.Fps));
         var rig = ev.Rig;
-        // Every foot contact that overlaps the transition stays planted (horizontal drift ≤ 1 cm).
+        // Every foot contact that overlaps the transition stays planted: the sole points touching the ground drift ≤ 1 cm (the
+        // cycles roll heel → toe, so the ankle itself moves during a contact).
         var inTransition = bake["footLock"]!["spans"]!.AsArray()
             .Where(x => (long)x!["endFrame"]! >= start && (long)x["startFrame"]! <= start + 10).ToList();
         Assert.NotEmpty(inTransition);
         foreach (var span in inTransition)
         {
-            var foot = P8.Bone(rig, H.Foot((string)span!["side"]! == "left" ? Side.Left : Side.Right));
-            var first = P8.Model(rig, clip, (long)span["startFrame"]!)[foot].Translation;
-            for (var f = (long)span["startFrame"]!; f <= (long)span["endFrame"]!; f++)
-            {
-                var p = P8.Model(rig, clip, f)[foot].Translation;
-                var drift = Math.Sqrt(Math.Pow(p.X - first.X, 2) + Math.Pow(p.Z - first.Z, 2));
-                Assert.True(drift <= 0.01, $"{span["side"]} foot drifts {drift:0.000} m at frame {f}");
-            }
+            var side = (string)span!["side"]! == "left" ? Side.Left : Side.Right;
+            var drift = Blazma.Tests.AI.GaitMetrics.ContactDrift(clip, rig, side, (long)span["startFrame"]!, (long)span["endFrame"]!);
+            Assert.True(drift <= 0.01, $"{side} contact drifts {drift:0.000} m");
         }
         // Without foot lock the bake reproduces the sequence within the key-reduction tolerance.
         var plain = (string)P8.Ok(s, "sequence.bake", new { sequenceId = seq, name = "plain" }).Data!["clipId"]!;

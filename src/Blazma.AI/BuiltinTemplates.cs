@@ -43,6 +43,8 @@ public static class BuiltinTemplates
         var result = MotionRetargeter.Retarget(motion, rig, new RetargetOptions
         {
             Fps = fps, Name = name, ClipId = clipId, FootCleanup = true, ReduceKeys = true, Cyclic = template.Loop,
+            // Cubic keys within 0.05° / 0.3 mm of the dense curve: < 0.5° and < 2 mm anywhere on the body.
+            KeyInterpolation = Interpolation.Cubic, RotationToleranceDegrees = 0.05, TranslationToleranceMetres = 0.0003,
             Metadata = new Dictionary<string, string>
             {
                 ["template"] = template.Id,

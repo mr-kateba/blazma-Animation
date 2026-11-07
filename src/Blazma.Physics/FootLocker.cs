@@ -38,9 +38,12 @@ public sealed record FootLockFrame(int Foot, long Frame, double Weight, Transfor
 /// Foot locking (docs/ARCHITECTURE.md §8.2). Contacts come from the same sole model and rules as balance analysis
 /// (<see cref="FootModel"/>, <see cref="BalanceAnalyzer"/>): a foot is in contact on a frame when one of its sole points is
 /// within <see cref="FootLockOptions.ContactHeight"/> of the ground and slower than <see cref="FootLockOptions.ContactSpeed"/>.
-/// Each contact span gets one anchor: the mean model-space position of the foot (ankle) bone over the span. Inside the span
-/// the leg IK target is the anchor (with the foot's evaluated rotation); over <see cref="FootLockOptions.BlendFrames"/> on each
-/// side it eases (smoothstep) from the evaluated foot position to the anchor and back. The knee pole follows the evaluated
+/// Inside a contact span every sole point that touches the ground (within <see cref="FootLockOptions.ContactHeight"/>) is held at
+/// its mean position while it touches, and the leg IK target (ankle/foot bone origin, with the foot's evaluated rotation) is
+/// the evaluated ankle shifted by the touching points' mean offset from their anchors: a flat foot stays put, and a foot that
+/// rolls heel → ball → toe keeps rolling about planted contacts (the ankle may move, the contacts do not). The span's reported
+/// anchor is the mean IK target over the span (for a foot that does not roll: the mean ankle position). Over
+/// <see cref="FootLockOptions.BlendFrames"/> on each side the shift eases (smoothstep) in and out. The knee pole follows the evaluated
 /// knee (pole = knee + (knee − midpoint(hip, ankle))), so the bend plane does not jump. The command keys these as pinned
 /// IK targets and poles; frames outside the planned frames keep exactly their original values (KeyBake).
 /// </summary>
@@ -123,9 +126,54 @@ public static class FootLocker
             var s0 = Math.Max(firstFrame, span.Start);
             var s1 = Math.Min(lastFrame, span.End);
             if (s1 < s0) continue;
+            // Each sole point anchors where it is (mean) while it touches; the ankle is shifted by the touching points' offsets
+            // from their anchors, so a foot that rolls heel → ball → toe keeps rolling while its contacts stay put.
+            var n = (int)(s1 - s0 + 1);
+            var shift = new Vec3[n];
+            var weight = new double[n];
+            var ground = feet.RestSoleHeight;
+            foreach (var pt in foot.Points)
+            {
+                var pos = new Vec3[n];
+                var on = new bool[n];
+                for (var i = 0; i < n; i++)
+                {
+                    pos[i] = At(s0 + i).Item2[pt.Bone].TransformPoint(pt.Local);
+                    on[i] = pos[i].Y - ground <= options.ContactHeight;
+                }
+                for (var i = 0; i < n;)
+                {
+                    if (!on[i]) { i++; continue; }
+                    var e = i;
+                    while (e + 1 < n && on[e + 1]) e++;
+                    var mean = Vec3.Zero;
+                    for (var k = i; k <= e; k++) mean += pos[k];
+                    mean /= e - i + 1;
+                    for (var k = i; k <= e; k++)
+                    {
+                        // Points that just touched or are about to lift count less, so the hand-over between them is smooth.
+                        var w = Math.Min(1, (Math.Min(k - i, e - k) + 1) / 3.0);
+                        shift[k] += (mean - pos[k]) * w;
+                        weight[k] += w;
+                    }
+                    i = e + 1;
+                }
+            }
+            if (weight.All(w => w == 0))
+            {
+                // No sole point low enough (contact found by a looser rule): hold the ankle at its mean, as before.
+                var mean = Vec3.Zero;
+                for (var i = 0; i < n; i++) mean += At(s0 + i).Item2[ie].Translation;
+                mean /= n;
+                for (var i = 0; i < n; i++) { shift[i] = mean - At(s0 + i).Item2[ie].Translation; weight[i] = 1; }
+            }
+            for (var i = 0; i < n; i++) if (weight[i] > 0) shift[i] /= weight[i];
+            var touching = Enumerable.Range(0, n).Where(k => weight[k] > 0).ToList();
+            for (var i = 0; i < n; i++)
+                if (weight[i] == 0) shift[i] = shift[touching.MinBy(k => Math.Abs(k - i))]; // detection gap: nearest frame's shift
             var anchor = Vec3.Zero;
-            for (var f = s0; f <= s1; f++) anchor += At(f).Item2[ie].Translation;
-            anchor /= s1 - s0 + 1;
+            for (var i = 0; i < n; i++) anchor += At(s0 + i).Item2[ie].Translation + shift[i];
+            anchor /= n;
             // Ease lengths fitted inside the range; none at a cut edge.
             var bIn = cutStart && s0 == firstFrame ? 0 : (int)Math.Min(b, s0 - firstFrame);
             var bOut = cutEnd && s1 == lastFrame ? 0 : (int)Math.Min(b, lastFrame - s1);
@@ -134,7 +182,7 @@ public static class FootLocker
                 double w = f < s0 ? Smooth((double)(f - (s0 - bIn - 1)) / (bIn + 1)) : f > s1 ? Smooth((double)(s1 + bOut + 1 - f) / (bOut + 1)) : 1;
                 if (w <= 0) continue;
                 var (_, m) = At(f);
-                var pos = Vec3.Lerp(m[ie].Translation, anchor, w);
+                var pos = m[ie].Translation + shift[(int)(Math.Clamp(f, s0, s1) - s0)] * w;
                 var target = new Transform(pos, m[ie].Rotation.Normalized(), Vec3.One);
                 var hip = m[iu].Translation;
                 var knee = m[il].Translation;

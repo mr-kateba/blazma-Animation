@@ -53,7 +53,8 @@ public sealed class RetargetSkeleton
 /// <item><b>Rotations:</b> rest-relative world-space delta transfer per mapped bone. For source joint s and target bone b:
 /// <c>G_b(t) = Δ_s(t) · C_b · Rest_b</c> with <c>Δ_s(t) = G_s(t) · Rest_s⁻¹</c> (model-space rotations) and <c>C_b</c> the
 /// shortest rotation taking b's rest bone direction (towards its first standard child mapped on both sides) onto s's, so each
-/// bone points the same way in the world whatever the two rest poses (T/A-pose) and local bone axes are. Leaves (hand, head,
+/// bone points the same way in the world whatever the two rest poses (T/A-pose) and local bone axes are. Feet only align their
+/// heading (horizontal ankle→toe direction), so the soles stay parallel to the ground as in the source. Leaves (hand, head,
 /// toe) reuse the nearest driven ancestor's correction. Unmapped target bones keep their rest local rotation.</item>
 /// <item><b>Travel:</b> the pelvis (and the root, when both sides map one) moves by the source's model-space displacement from
 /// rest scaled by the leg-length ratio (hip-height ratio without mapped legs).</item>
@@ -127,6 +128,13 @@ public sealed class HumanoidRetargetMap
                     {
                         var dt = TargetRest[tk].Translation - TargetRest[b].Translation;
                         var ds = srcRest[sk].Translation - srcRest[PairOf[b]].Translation;
+                        if (std == H.Foot(Side.Left) || std == H.Foot(Side.Right))
+                        {
+                            // Feet stand flat in both rest poses: align only the heading, so a flat source foot gives a flat
+                            // target sole (matching the ankle→toe slope would tilt it when the ankle heights differ).
+                            dt = dt with { Y = 0 };
+                            ds = ds with { Y = 0 };
+                        }
                         if (dt.Length() > 1e-6 && ds.Length() > 1e-6) { c = Quat.FromTo(dt, ds); break; }
                     }
             if (c is null)

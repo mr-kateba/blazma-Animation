@@ -8,7 +8,7 @@ namespace Blazma.AI;
 /// SOMA skeleton, so it exercises exactly the same conversion/retarget path as Kimodo. The same prompt, duration,
 /// fps and seed always give the same motion. Unknown prompts fail with <c>unsupported_prompt</c>.
 /// </summary>
-public sealed class ProceduralMotionProvider : IMotionGenerationProvider
+public sealed partial class ProceduralMotionProvider : IMotionGenerationProvider
 {
     public const string ProviderId = "procedural";
 
@@ -83,15 +83,15 @@ public sealed class ProceduralMotionProvider : IMotionGenerationProvider
     static readonly double AnkleHeight = SomaSkeleton.RestPositions()[LFoot].Y; // ankle above the ground at rest
     static double LegLength => Thigh + Shin;
 
-    /// <summary>One pose. <see cref="Root"/>: X/Z = hips position (ignored for planted cycles), Y = height above
-    /// ground contact (0 = the lowest ankle stands on the ground; jump flight adds to it).</summary>
+    /// <summary>One pose. <see cref="Root"/>: X/Z = hips position, Y = height above ground contact (0 = the lowest ankle stands
+    /// on the ground; jump flight adds to it), unless <see cref="Absolute"/>.</summary>
     sealed class Frame
     {
         public readonly Quat[] R = Enumerable.Repeat(Quat.Identity, SomaSkeleton.Names.Count).ToArray();
         public Vec3 Root;
 
-        /// <summary>Cycles: which foot supports the body (the one whose thigh moves backwards).</summary>
-        public bool? LeftStance;
+        /// <summary><see cref="Root"/> is the final hips position (gait cycles and idle place their feet themselves).</summary>
+        public bool Absolute;
     }
 
     /// <summary>Ankle positions relative to the hips joint (FK of the SOMA rest offsets with the frame's rotations).</summary>
@@ -124,37 +124,35 @@ public sealed class ProceduralMotionProvider : IMotionGenerationProvider
 
         var rot = new Quat[n * SomaSkeleton.Names.Count];
         var root = new Vec3[n];
-        var planted = kind is Kind.Walk or Kind.Run;
-        Vec3 travel = Vec3.Zero, prevStance = Vec3.Zero;
-        var prevLeft = true;
+        var gait = kind switch
+        {
+            Kind.Walk => PlanGait(WalkGait, duration, loop, phase0, vary),
+            Kind.Run => PlanGait(RunGait, duration, loop, phase0, vary),
+            _ => null,
+        };
         for (var i = 0; i < n; i++)
         {
             var t = i / fps;
             var f = new Frame();
             switch (kind)
             {
-                case Kind.Walk: Cycle(f, t, duration, loop, phase0, 0.9 * vary, 25 * vary, 55, 0.8, run: false); break;
-                case Kind.Run: Cycle(f, t, duration, loop, phase0, 1.35 * vary, 40 * vary, 95, 1.0, run: true); break;
+                case Kind.Walk or Kind.Run: GaitFrame(f, gait!, t); break;
                 case Kind.Jump: Jump(f, t / duration, vary); break;
                 case Kind.Wave: Wave(f, t, vary, phase0); break;
                 case Kind.Squat: Squat(f, t / duration, vary); break;
                 case Kind.Attack: Attack(f, t, t / duration, vary, phase0); break;
-                default: Idle(f, t, vary, phase0, loop ? duration : 0); break;
+                default: PlantedIdle(f, t, vary, phase0, loop ? duration : 0); break;
             }
-            // Stand the lowest ankle on the ground. Cycles: move the hips so the support foot does not slide
-            // (the travel speed comes from the stride, ≈1.3 m/s walking).
-            var (al, ar) = Ankles(f);
-            var leftDown = f.LeftStance ?? al.Y <= ar.Y;
-            var stance = leftDown ? al : ar;
-            var y = AnkleHeight - Math.Min(al.Y, ar.Y) + f.Root.Y;
-            if (planted)
+            if (f.Absolute)
             {
-                if (i > 0 && leftDown == prevLeft) travel -= new Vec3(stance.X - prevStance.X, 0, stance.Z - prevStance.Z);
-                prevStance = stance;
-                prevLeft = leftDown;
-                f.Root = new Vec3(travel.X + f.Root.X, y, travel.Z);
+                if (inPlace) f.Root = f.Root with { Z = 0 }; // the cycles travel at a constant speed: in place keeps bob and sway
+                Array.Copy(f.R, 0, rot, i * SomaSkeleton.Names.Count, SomaSkeleton.Names.Count);
+                root[i] = f.Root;
+                continue;
             }
-            else f.Root = f.Root with { Y = y };
+            // Stand the lowest ankle on the ground.
+            var (al, ar) = Ankles(f);
+            f.Root = f.Root with { Y = AnkleHeight - Math.Min(al.Y, ar.Y) + f.Root.Y };
             if (inPlace) f.Root = f.Root with { X = 0, Z = 0 };
             Array.Copy(f.R, 0, rot, i * SomaSkeleton.Names.Count, SomaSkeleton.Names.Count);
             root[i] = f.Root;
@@ -175,12 +173,14 @@ public sealed class ProceduralMotionProvider : IMotionGenerationProvider
     }
 
     /// <summary>Arms hanging (≈80° down from the T-pose), swung forward/back (negative = forward), elbows bent forward.</summary>
-    static void ArmsDown(Frame f, double swingL, double swingR, double elbow)
+    static void ArmsDown(Frame f, double swingL, double swingR, double elbow) => ArmsDown(f, swingL, swingR, elbow, elbow);
+
+    static void ArmsDown(Frame f, double swingL, double swingR, double elbowL, double elbowR)
     {
         f.R[LArm] = Rx(swingL) * Rz(-80);
         f.R[RArm] = Rx(swingR) * Rz(80);
-        f.R[LFore] = Ry(-elbow);
-        f.R[RFore] = Ry(elbow);
+        f.R[LFore] = Ry(-elbowL);
+        f.R[RFore] = Ry(elbowR);
     }
 
     /// <summary>Thigh/knee angles that put the ankle straight below the hip at vertical distance <paramref name="d"/>.</summary>
@@ -190,33 +190,6 @@ public sealed class ProceduralMotionProvider : IMotionGenerationProvider
         var a = -Math.Acos(Math.Clamp((Thigh * Thigh + d * d - Shin * Shin) / (2 * Thigh * d), -1, 1)) / Deg;
         var shinWorld = Math.Acos(Math.Clamp((Shin * Shin + d * d - Thigh * Thigh) / (2 * Shin * d), -1, 1)) / Deg;
         return (a, shinWorld - a);
-    }
-
-    static void Cycle(Frame f, double t, double duration, bool loop, double phase0, double freq, double thighAmp, double kneeAmp, double armAmp, bool run)
-    {
-        if (loop && duration > 0) freq = Math.Max(1, Math.Round(duration * freq)) / duration; // whole cycles
-        var phi = 2 * Math.PI * (freq * t + phase0);
-        var s = Math.Sin(phi);
-        var c = Math.Cos(phi);
-        var aL = -thighAmp * s;
-        var aR = thighAmp * s;
-        // The knee folds while the leg swings forward (left: cos > 0, right: cos < 0).
-        var kL = 5 + kneeAmp * Math.Pow(Math.Max(0, c), 1.5);
-        var kR = 5 + kneeAmp * Math.Pow(Math.Max(0, -c), 1.5);
-        if (run) { kL += 20; kR += 20; }
-        SetLeg(f, LLeg, LShin, LFoot, aL, kL);
-        SetLeg(f, RLeg, RShin, RFoot, aR, kR);
-
-        // Arms swing against the legs.
-        ArmsDown(f, -aL * armAmp, -aR * armAmp, run ? 80 : 15);
-        f.R[Hips] = Ry(6 * s);
-        f.R[Spine2] = Ry(-4 * s) * Rx(run ? 10 : 2);
-        f.R[Chest] = Ry(-3 * s);
-
-        // The lower foot stands on the ground; running adds a short flight phase.
-        var flight = run ? 0.05 * Math.Max(0, Math.Sin(2 * phi)) : 0;
-        f.Root = new Vec3(0.02 * s, flight, 0); // forward travel is added by the planting step
-        f.LeftStance = c < 0;
     }
 
     static double Smooth(double x) { x = Math.Clamp(x, 0, 1); return x * x * (3 - 2 * x); }

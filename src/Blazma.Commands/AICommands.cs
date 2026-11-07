@@ -770,6 +770,7 @@ public sealed class GenerateMotion(MotionJobService jobs, ObjectId characterId, 
             Name = clipName,
             FootCleanup = footCleanup,
             ReduceKeys = reduceKeys,
+            Cyclic = loop,
             Metadata = new Dictionary<string, string>
             {
                 ["provider"] = p.Id,

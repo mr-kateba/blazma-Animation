@@ -74,8 +74,10 @@ public class ProceduralAndRetargetTests
             var d = p[J("LeftFoot")].Z - p[J("RightFoot")].Z;
             minDiff = Math.Min(minDiff, d);
             maxDiff = Math.Max(maxDiff, d);
-            var lowest = Math.Min(p[J("LeftFoot")].Y, p[J("RightFoot")].Y);
-            Assert.InRange(lowest, ankle - 0.01, ankle + 0.01); // the support foot touches the ground
+            // The support foot touches the ground: with heel-to-toe roll that is its heel (ankle at rest height or just above
+            // while the toes are up) or its toe base (heel raised), not necessarily the lowest ankle.
+            var lowest = new[] { p[J("LeftFoot")].Y - ankle, p[J("RightFoot")].Y - ankle, p[J("LeftToeBase")].Y, p[J("RightToeBase")].Y }.Min();
+            Assert.InRange(lowest, -0.01, 0.01);
             Assert.InRange(p[0].Y, 0.85, 1.0);
         }
         Assert.True(maxDiff > 0.25 && minDiff < -0.25, $"feet alternate: {minDiff:0.00}..{maxDiff:0.00}");
