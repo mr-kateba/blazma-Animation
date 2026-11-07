@@ -76,7 +76,7 @@ public partial class MainWindow
         if (GenerateDlg.Visible) return;
         if (App.Session.Project.Characters.Count == 0)
         {
-            _toast.Notify(Tr("Add a character first, then generate motion for it."), _palette.Warn);
+            _toast.Notify("Add a character first, then generate motion for it.", _palette.Warn);
             return;
         }
         Inspector.Flush();
@@ -112,7 +112,7 @@ public partial class MainWindow
         }
         // A job an agent started: it applies it itself; just tell the user when the draft shows up.
         if (s.State == MotionJobState.Applied)
-            _toast.Notify(string.Format(CultureInfo.InvariantCulture, Tr("An AI agent added a draft clip: {0}"), s.ClipName), _palette.Ok);
+            _toast.NotifyFormat("An AI agent added a draft clip: {0}", _palette.Ok, s.ClipName);
     }
 
     /// <summary>Adds a finished job as a draft clip, selects it and starts playing it. Returns the clip id.</summary>
@@ -132,15 +132,14 @@ public partial class MainWindow
         }
         var clipId = (string)r.Data!["clipId"]!;
         var name = (string?)r.Data["name"] ?? "";
-        var warnings = r.Warnings.Select(w => w.Message).ToList();
+        var warnings = r.Warnings.Select(WarningText.Describe).ToList();
         SelectClip(clipId);
         App.GoToStart();
         App.Play();
         LastMotionApply = new MotionApplyInfo(jobId, clipId, name, warnings);
         GenerateDlg.ShowApplied(jobId, name, warnings);
-        _toast.Notify(warnings.Count > 0
-            ? string.Format(CultureInfo.InvariantCulture, Tr("Draft added: {0} ({1} notes)"), name, warnings.Count)
-            : string.Format(CultureInfo.InvariantCulture, Tr("Draft added: {0}"), name), _palette.Ok);
+        if (warnings.Count > 0) _toast.NotifyFormat("Draft added: {0} ({1} notes)", _palette.Ok, name, warnings.Count.ToString(CultureInfo.InvariantCulture));
+        else _toast.NotifyFormat("Draft added: {0}", _palette.Ok, name);
         return clipId;
     }
 
@@ -149,7 +148,7 @@ public partial class MainWindow
     public bool AcceptDraft(string clipId)
     {
         var ok = ExecuteQuiet("clip.accept_draft", new JsonObject { ["clipId"] = clipId }).Ok;
-        if (ok) _toast.Notify(Tr("Draft accepted. It is now a normal clip."), _palette.Ok);
+        if (ok) _toast.Notify("Draft accepted. It is now a normal clip.", _palette.Ok);
         return ok;
     }
 
@@ -158,7 +157,7 @@ public partial class MainWindow
     {
         if (App.Playing) App.Pause();
         var ok = DeleteClipNow(clipId);
-        if (ok) _toast.NotifyAction(Tr("Draft discarded."), _palette.Warn, Tr("Undo"), DoUndo);
+        if (ok) _toast.NotifyAction("Draft discarded.", _palette.Warn, "Undo", DoUndo);
         return ok;
     }
 }

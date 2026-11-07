@@ -21,7 +21,7 @@ public partial class GenerateMotionDialog : ConfirmationDialog
         CustomMinimumSize = new Vector2(0, 84), WrapMode = TextEdit.LineWrappingMode.Boundary, TextDirection = Control.TextDirection.Auto,
         PlaceholderText = "Describe the motion, for example: a person walks forward and waves", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
     };
-    public SpinBox Duration { get; } = new() { MinValue = MotionRequest.MinDurationSeconds, MaxValue = MotionRequest.MaxDurationSeconds, Step = 0.1, Value = 4, Suffix = "s" };
+    public SpinBox Duration { get; } = new UnitSpinBox() { MinValue = MotionRequest.MinDurationSeconds, MaxValue = MotionRequest.MaxDurationSeconds, Step = 0.1, Value = 4, UnitEn = "s" };
     public SpinBox Seed { get; } = new() { MinValue = 0, MaxValue = int.MaxValue, Step = 1, Rounded = true };
     public Button RandomSeed { get; } = new() { Text = "Random", FocusMode = Control.FocusModeEnum.None, TooltipText = "Pick a new random seed. The same prompt and seed give the same motion." };
     public OptionButton Provider { get; } = new() { FitToLongestItem = false, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };

@@ -189,7 +189,7 @@ public partial class SelfTest
         // A wrapper that waits 3 s before the runner starts answering: the window must keep running meanwhile.
         var slow = System.IO.Path.Combine(_dir, "slow-runner.sh");
         System.IO.File.WriteAllText(slow, $"#!/bin/sh\nsleep 3\nexec \"{fake}\" \"$@\"\n");
-        System.IO.File.SetUnixFileMode(slow, (System.IO.UnixFileMode)0b111_101_101);
+        if (!OperatingSystem.IsWindows()) System.IO.File.SetUnixFileMode(slow, (System.IO.UnixFileMode)0b111_101_101);
         set.RunnerEdit.Text = slow;
         set.ModelsEdit.Text = modelsDir;
         set.DeviceBox.Select(1);

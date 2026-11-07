@@ -1,6 +1,37 @@
+using Blazma.UI.App;
 using Godot;
 
 namespace Blazma.UI.Views;
+
+/// <summary>Unit suffixes: Latin in English, Arabic abbreviations (م, سم, ث, د) in Arabic. Digits stay Latin.</summary>
+public static class Unit
+{
+    static bool Ar => AppController.Instance is { IsRtl: true };
+
+    public static string Localize(string suffix) => !Ar ? suffix : suffix.Trim() switch
+    {
+        "m" => " م",
+        "cm" => " سم",
+        "m/s" => " م/ث",
+        "s" => " ث",
+        "min" => " د",
+        _ => suffix,
+    };
+
+    public static string Cm => Localize(" cm");
+    public static string M => Localize(" m");
+}
+
+/// <summary>A SpinBox whose unit suffix follows the language (the English suffix is kept and re-localized on a language change).</summary>
+public partial class UnitSpinBox : SpinBox
+{
+    string _unit = "";
+    public string UnitEn { get => _unit; set { _unit = value; Suffix = Unit.Localize(value); } }
+    public override void _Notification(int what)
+    {
+        if (what == NotificationTranslationChanged) Suffix = Unit.Localize(_unit);
+    }
+}
 
 /// <summary>Small builders shared by the Phase 8 dialogs and panels (labelled rows, numeric fields that stay left to right in Arabic).</summary>
 public static class P8
@@ -38,9 +69,9 @@ public static class P8
     /// <summary>A number box whose digits are always Latin and left to right.</summary>
     public static SpinBox Spin(double min, double max, double step, double value, string suffix = "", bool integer = false)
     {
-        var s = new SpinBox
+        var s = new UnitSpinBox
         {
-            MinValue = min, MaxValue = max, Step = step, Value = value, Suffix = suffix, Rounded = integer, CustomArrowStep = step,
+            MinValue = min, MaxValue = max, Step = step, Value = value, UnitEn = suffix, Rounded = integer, CustomArrowStep = step,
             LocalizeNumeralSystem = false, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, AutoTranslateMode = Node.AutoTranslateModeEnum.Disabled,
         };
         s.GetLineEdit().LocalizeNumeralSystem = false;

@@ -216,7 +216,7 @@ public partial class HitTestDialog : ConfirmationDialog
         LastError = null;
         var data = (JsonObject)r.Data!;
         var tested = string.Format(CultureInfo.InvariantCulture, Tr("{0} frames tested."), CombatKit.Ltr((long)CombatKit.D(data["framesTested"])));
-        var warn = r.Warnings.Count > 0 ? "\n" + string.Join("\n", r.Warnings.Take(3).Select(w => w.Code == "may_have_missed_contacts" ? Tr("This attack moves in a way the test cannot follow exactly, so a very short touch may have been missed. Try again with a slightly bigger hitbox.") : w.Message)) : "";
+        var warn = r.Warnings.Count > 0 ? "\n" + string.Join("\n", r.Warnings.Take(3).Select(WarningText.Describe)) : "";
         if (data["firstHit"] is not JsonObject first)
         {
             _status.Text = Tr("No hit. The attack never touches the defender in these frames.");

@@ -91,7 +91,7 @@ public partial class MainWindow
         if (SecondaryDlg.Visible) return;
         if (!App.Physics.TryResolve(out _, out _, out _))
         {
-            _toast.Notify(Tr("Key a clip for this character first, then add secondary motion."), _palette.Warn);
+            _toast.Notify("Key a clip for this character first, then add secondary motion.", _palette.Warn);
             return;
         }
         Inspector.Flush();

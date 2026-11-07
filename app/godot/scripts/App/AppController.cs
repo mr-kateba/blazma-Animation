@@ -50,13 +50,46 @@ public partial class AppController : Node
     public bool IsDirty => Session.IsDirty;
     public DateTimeOffset? LastAutosaveUtc => _recovery?.LastAutosaveUtc;
 
+    /// <summary>First existing *.blazanim path passed on the command line (file association: <c>BlazmaAnimation.exe "%1"</c>), or null.</summary>
+    public string? StartupProject { get; private set; }
+
+    /// <summary>Picks the first argument that names an existing project file (options starting with "-" are skipped).</summary>
+    public static string? FindStartupProject(IEnumerable<string> args)
+    {
+        foreach (var a in args)
+        {
+            if (string.IsNullOrWhiteSpace(a) || a.StartsWith('-')) continue;
+            if (!a.EndsWith(ProjectFile.Extension, StringComparison.OrdinalIgnoreCase)) continue;
+            try
+            {
+                var full = System.IO.Path.GetFullPath(a);
+                if (System.IO.File.Exists(full)) return full;
+            }
+            catch (Exception e) when (e is ArgumentException or NotSupportedException or System.IO.PathTooLongException) { }
+        }
+        return null;
+    }
+
+    /// <summary>Named mutex the installer checks to know whether the app is running. Only held, never waited on: a second window is allowed.</summary>
+    System.Threading.Mutex? _runningMutex;
+
+    void HoldRunningMutex()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        try { _runningMutex = new System.Threading.Mutex(false, "BlazmaAnimation-Running"); }
+        catch (Exception e) { GD.PushWarning($"Could not create the running-instance mutex: {e.Message}"); }
+    }
+
     public override void _EnterTree()
     {
         Instance = this;
+        StartupProject = FindStartupProject(OS.GetCmdlineArgs().Concat(OS.GetCmdlineUserArgs()));
+        HoldRunningMutex();
         Settings.Load();
+        ApplyLocale(); // before the first project is named
         Recovery = new RecoveryStore(AppPaths.Combine("recovery"));
         var log = new JsonlOpLog(AppPaths.Combine(System.IO.Path.Combine("logs", "oplog.jsonl")));
-        Session = new ProjectSession(NewDefaultProject("Untitled"), null, log);
+        Session = new ProjectSession(NewDefaultProject(Tr("Untitled")), null, log);
         Session.Changed += OnSessionChanged;
         Physics = new PhysicsAnalysis(this);
         _recovery = Recovery.BeginSession(Session.Project, null);
@@ -64,6 +97,12 @@ public partial class AppController : Node
         ApplyLocale();
         InitAgents();
         InitMotion();
+    }
+
+    public override void _ExitTree()
+    {
+        try { _runningMutex?.Dispose(); } catch (Exception) { }
+        _runningMutex = null;
     }
 
     public override void _Process(double delta)
@@ -143,11 +182,11 @@ public partial class AppController : Node
     // ---- Files -------------------------------------------------------------------------------
 
     /// <summary>Starts a fresh project. Callers must have dealt with unsaved changes first.</summary>
-    public void NewProject(string name = "Untitled")
+    public void NewProject(string? name = null)
     {
         CloseCurrent();
         // The mannequin is added before the session sees the project: a new project is ready to pose and not dirty.
-        Session.ReplaceProject(NewDefaultProject(string.IsNullOrWhiteSpace(name) ? "Untitled" : name), null);
+        Session.ReplaceProject(NewDefaultProject(string.IsNullOrWhiteSpace(name) ? Tr("Untitled") : name), null);
         _recovery = Recovery.BeginSession(Session.Project, null);
     }
 
@@ -162,7 +201,13 @@ public partial class AppController : Node
     public bool Open(string path)
     {
         if (FilePath is not null && SamePath(FilePath, path)) return true; // already open here
-        var newLock = SessionLock.TryAcquire(path);
+        SessionLock? newLock;
+        try { newLock = SessionLock.TryAcquire(path); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            ErrorRaised?.Invoke(DescribeFileError(e, opening: true));
+            return false;
+        }
         if (newLock is null)
         {
             ErrorRaised?.Invoke(Tr("This project is open in another Blazma window or tool."));
@@ -173,10 +218,10 @@ public partial class AppController : Node
         {
             project = ProjectFile.Load(path);
         }
-        catch (ProjectFormatException e)
+        catch (Exception e) when (e is ProjectFormatException or IOException or UnauthorizedAccessException)
         {
             newLock.Dispose();
-            ErrorRaised?.Invoke(DescribeLoadError(e));
+            ErrorRaised?.Invoke(DescribeFileError(e, opening: true));
             return false;
         }
 
@@ -196,13 +241,23 @@ public partial class AppController : Node
     {
         if (!path.EndsWith(ProjectFile.Extension, StringComparison.OrdinalIgnoreCase))
             path += ProjectFile.Extension;
-        path = System.IO.Path.GetFullPath(path);
+        try { path = System.IO.Path.GetFullPath(path); }
+        catch (Exception e) when (e is ArgumentException or NotSupportedException or IOException)
+        {
+            ErrorRaised?.Invoke(DescribeFileError(e, opening: false));
+            return false;
+        }
 
         var samePath = FilePath is not null && SamePath(FilePath, path);
         SessionLock? newLock = null;
         if (!samePath)
         {
-            newLock = SessionLock.TryAcquire(path);
+            try { newLock = SessionLock.TryAcquire(path); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                ErrorRaised?.Invoke(DescribeFileError(e, opening: false));
+                return false;
+            }
             if (newLock is null)
             {
                 ErrorRaised?.Invoke(Tr("That file is open in another Blazma window or tool."));
@@ -217,7 +272,7 @@ public partial class AppController : Node
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ProjectFormatException)
         {
             newLock?.Dispose();
-            ErrorRaised?.Invoke(string.Format(Tr("Could not save the project: {0}"), e.Message));
+            ErrorRaised?.Invoke(DescribeFileError(e, opening: false));
             return false;
         }
 
@@ -227,36 +282,84 @@ public partial class AppController : Node
             _lock = newLock;
         }
         Session.MarkSaved(path);
+        WaitForAutosave();
         _recovery?.MarkSaved(path, Session.Project);
         _lastAutosaveVersion = _version;
         Settings.AddRecent(path);
         return true;
     }
 
+    // ---- Autosave (off the main thread) ---------------------------------------------------------
+
+    Task? _autosaveTask;
+    /// <summary>True while an autosave is being written on the worker thread (the status bar shows "Saving…").</summary>
+    public bool IsAutosaving => _autosaveTask is { IsCompleted: false };
+
+    /// <summary>Main thread: a private copy of the project (a few tens of ms). A worker writes it while the user keeps editing.</summary>
+    ProjectSnapshot SnapshotForAutosave() => ProjectArchive.Snapshot(Session.Project);
+
+    /// <summary>Worker thread: writes the snapshot into the recovery folder (thread-safe against MarkSaved / EndCleanly).</summary>
+    static bool WriteAutosave(RecoverySession recovery, ProjectSnapshot snapshot) => recovery.AutosaveSnapshot(snapshot);
+
+    /// <summary>Starts an autosave without blocking. Never runs two writes at once (a pending request is simply skipped; the next tick retries).</summary>
     public void AutosaveNow()
     {
         _sinceAutosave = 0;
-        if (_recovery is null || !Session.IsDirty || _version == _lastAutosaveVersion) return;
-        try
-        {
-            _recovery.Autosave(Session.Project);
-            _lastAutosaveVersion = _version;
-            SessionChanged?.Invoke(new SessionChangedArgs(new[] { new Change(Change.SaveStateChanged) }, CommandOrigin.Ui));
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        if (_recovery is null || !Session.IsDirty || _version == _lastAutosaveVersion || IsAutosaving) return;
+        ProjectSnapshot snapshot;
+        try { snapshot = SnapshotForAutosave(); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ProjectFormatException)
         {
             GD.PushWarning($"Autosave failed: {e.Message}");
+            return;
         }
+        var recovery = _recovery;
+        var version = _version;
+        Task? self = null;
+        self = _autosaveTask = Task.Run(() =>
+        {
+            Exception? error = null; var written = false;
+            try { written = WriteAutosave(recovery, snapshot); }
+            catch (Exception e) { error = e; }
+            Post(() => AutosaveFinished(self!, recovery, version, written, error));
+        });
+        NotifySaveState(); // "Saving…"
     }
+
+    /// <summary>Autosave and wait for it (shutdown paths and tests only).</summary>
+    public void AutosaveNowAndWait()
+    {
+        WaitForAutosave();
+        AutosaveNow();
+        WaitForAutosave();
+        DrainPosted();
+    }
+
+    /// <summary>Blocks until a running autosave has finished; the recovery folder must not change underneath it.</summary>
+    void WaitForAutosave()
+    {
+        try { _autosaveTask?.Wait(); } catch (AggregateException) { }
+    }
+
+    void AutosaveFinished(Task task, RecoverySession recovery, ulong version, bool written, Exception? error)
+    {
+        if (ReferenceEquals(_autosaveTask, task)) _autosaveTask = null;
+        if (error is null && written && ReferenceEquals(recovery, _recovery)) _lastAutosaveVersion = Math.Max(_lastAutosaveVersion, version);
+        else if (error is not null) GD.PushWarning($"Autosave failed: {error.Message}");
+        NotifySaveState();
+    }
+
+    void NotifySaveState() =>
+        SessionChanged?.Invoke(new SessionChangedArgs(new[] { new Change(Change.SaveStateChanged) }, CommandOrigin.Ui));
 
     /// <summary>Loads a recovered project; it starts dirty so the user is asked to save it.</summary>
     public bool RestoreFrom(RecoveryCandidate candidate)
     {
         Project project;
         try { project = Recovery.Recover(candidate); }
-        catch (ProjectFormatException e)
+        catch (Exception e) when (e is ProjectFormatException or IOException or UnauthorizedAccessException)
         {
-            ErrorRaised?.Invoke(DescribeLoadError(e));
+            ErrorRaised?.Invoke(DescribeFileError(e, opening: true));
             return false;
         }
 
@@ -276,7 +379,7 @@ public partial class AppController : Node
         _lock = newLock;
         Session.ReplaceProject(project, candidate.ProjectPath, startDirty: true);
         _recovery = Recovery.BeginSession(project, candidate.ProjectPath);
-        _recovery.Autosave(project); // keep it safe until the user saves
+        try { _recovery.Autosave(project); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { GD.PushWarning($"Autosave failed: {e.Message}"); } // keep it safe until the user saves
         return true;
     }
 
@@ -291,6 +394,7 @@ public partial class AppController : Node
 
     void CloseCurrent()
     {
+        WaitForAutosave();
         _recovery?.EndCleanly();
         _recovery = null;
         _lock?.Dispose();
@@ -302,14 +406,24 @@ public partial class AppController : Node
     static bool SamePath(string a, string b) => string.Equals(System.IO.Path.GetFullPath(a), System.IO.Path.GetFullPath(b),
         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
-    string DescribeLoadError(ProjectFormatException e) => e.Code switch
+    /// <summary>Friendly text for a failed open/save. Core codes map to fixed messages; plain I/O exceptions are classified here.</summary>
+    string DescribeFileError(Exception e, bool opening)
     {
-        "not_found" => Tr("The file could not be found."),
-        "not_a_project" => Tr("This file is not a Blazma Animation project."),
-        "integrity" => Tr("The project file is damaged (integrity check failed)."),
-        "schema_too_new" => Tr("This project was saved by a newer version of Blazma Animation."),
-        _ => string.Format(Tr("The project could not be opened: {0}"), e.Message),
-    };
+        var code = FileErrors.Classify(e);
+        switch (code)
+        {
+            case "not_found": return Tr("The file could not be found.");
+            case "not_a_project": return Tr("This file is not a Blazma Animation project.");
+            case "integrity": return Tr("The project file is damaged (integrity check failed).");
+            case "schema_too_new": return Tr("This project was saved by a newer version of Blazma Animation.");
+            case "read_only_folder": return Tr("Blazma cannot write to this folder. Choose another folder or check its permissions.");
+            case "path_too_long": return Tr("The file path is too long. Choose a shorter path.");
+            case "sharing_violation": return Tr("The file is being used by another program. Close it there and try again.");
+            case "disk_full": return Tr("The disk is full. Free some space or choose another drive.");
+            case "locked_by_other": return Tr("This project is open in another Blazma window or tool.");
+        }
+        return string.Format(opening ? Tr("The project could not be opened: {0}") : Tr("Could not save the project: {0}"), e.Message);
+    }
 
     // ---- Settings ------------------------------------------------------------------------------
 

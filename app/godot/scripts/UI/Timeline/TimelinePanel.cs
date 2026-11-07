@@ -79,7 +79,7 @@ public partial class TimelinePanel : PanelContainer
         AddChild(W.Margin(root, 12, 8, 12, 10));
 
         // header: tabs, clip picker, add marker
-        var head = new HBoxContainer { LayoutDirection = LayoutDirectionEnum.Locale };
+        var head = new HBoxContainer { LayoutDirection = LayoutDirectionEnum.ApplicationLocale };
         head.AddThemeConstantOverride("separation", 10);
         Tabs = new Segmented("Timeline", "Dope Sheet", "Graph", "Clips", "Poses", "Sequence", "Combo");
         Tabs.Selected += i => SelectTab(i);

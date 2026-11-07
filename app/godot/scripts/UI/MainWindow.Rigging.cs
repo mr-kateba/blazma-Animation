@@ -291,14 +291,14 @@ public partial class MainWindow
         if (!r.Ok || r.Data?["pose"] is not JsonValue v) return;
         _poseClip = (string)v!;
         _poseClipRig = c.Rig.ToString();
-        _toast.Notify(Tr("Pose copied"), _palette.Ok);
+        _toast.Notify("Pose copied", _palette.Ok);
     }
 
     public bool PastePose()
     {
         if (SelectedCharacter is not { } c) return false;
-        if (_poseClip is null) { _toast.Notify(Tr("Nothing copied yet. Copy a pose first (Ctrl+C)."), _palette.Warn); return false; }
-        if (_poseClipRig != c.Rig.ToString()) { _toast.Notify(Tr("That pose was copied from a different rig."), _palette.Warn); return false; }
+        if (_poseClip is null) { _toast.Notify("Nothing copied yet. Copy a pose first (Ctrl+C).", _palette.Warn); return false; }
+        if (_poseClipRig != c.Rig.ToString()) { _toast.Notify("That pose was copied from a different rig.", _palette.Warn); return false; }
         return App.Execute("pose.apply", new JsonObject { ["characterId"] = c.Id.ToString(), ["poseJson"] = _poseClip }).Ok;
     }
 
@@ -318,7 +318,7 @@ public partial class MainWindow
         boneId ??= Selection.BoneId;
         var msg = Tr("This bone is driven by a pinned hand or foot. Move that target, or unpin it first.");
         if (boneId is null) { _toast.Notify(msg, _palette.Warn); return; }
-        _toast.NotifyAction(msg, _palette.Warn, Tr("Unpin"), () => UnpinDriver(boneId));
+        _toast.NotifyAction(msg, _palette.Warn, "Unpin", () => UnpinDriver(boneId));
     }
 
     // ---- pose library -------------------------------------------------------------------------------------------------------------------

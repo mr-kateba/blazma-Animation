@@ -39,7 +39,7 @@ public partial class MainWindow
         box.AddThemeConstantOverride("separation", 2);
         void Item(string text, string key, Action act)
         {
-            var r = new HBoxContainer { LayoutDirection = LayoutDirectionEnum.Locale };
+            var r = new HBoxContainer { LayoutDirection = LayoutDirectionEnum.ApplicationLocale };
             var b = new Button { Text = text, Flat = true, Alignment = HorizontalAlignment.Left, FocusMode = FocusModeEnum.None, SizeFlagsHorizontal = SizeFlags.ExpandFill };
             b.Pressed += () => { ViewPopup.Hide(); act(); Stage.GrabFocus(); };
             r.AddChild(b);
@@ -86,7 +86,7 @@ public partial class MainWindow
         _camHud.AnchorLeft = 0.5f; _camHud.AnchorRight = 0.5f; _camHud.AnchorTop = 1f; _camHud.AnchorBottom = 1f;
         _camHud.GrowHorizontal = GrowDirection.Both; _camHud.GrowVertical = GrowDirection.Begin;
         _camHud.OffsetBottom = -50;
-        _camHud.LayoutDirection = LayoutDirectionEnum.Locale;
+        _camHud.LayoutDirection = LayoutDirectionEnum.ApplicationLocale;
         _center.AddChild(_camHud);
         Stage.Notice += ShowCameraNotice;
     }

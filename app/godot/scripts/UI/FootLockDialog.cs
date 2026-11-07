@@ -202,7 +202,7 @@ public partial class FootLockDialog : ConfirmationDialog
         _status.Text = string.Format(CultureInfo.InvariantCulture, Tr("Locked {0} foot contacts."), P8.Ltr(spans.Count.ToString(CultureInfo.InvariantCulture)));
         _details.Text = Describe(spans) + "\n" + string.Format(CultureInfo.InvariantCulture, Tr("The feet stay within {0} mm of their spot. Frames outside the contacts changed by at most {1} mm."),
             P8.Ltr(P8.Num(anchor * 1000, "0.##")), P8.Ltr(P8.Num(untouched * 1000, "0.##")));
-        _host.ToastNode.Notify(Tr("Feet locked. Ctrl+Z undoes it."), _host.Palette.Ok);
+        _host.ToastNode.Notify("Feet locked. Ctrl+Z undoes it.", _host.Palette.Ok);
         App.ApplyFrameIfClean();
     }
 

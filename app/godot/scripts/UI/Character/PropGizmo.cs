@@ -262,7 +262,7 @@ public sealed class PropGizmo
         }
         Apply(_startWorld with { Translation = new Vec3(pos.X, pos.Y, pos.Z) });
         var d = pos - _startPos;
-        _label = string.Format(CultureInfo.InvariantCulture, "{0:+0.000;-0.000;0.000}  {1:+0.000;-0.000;0.000}  {2:+0.000;-0.000;0.000} m", d.X, d.Y, d.Z);
+        _label = string.Format(CultureInfo.InvariantCulture, "{0:+0.000;-0.000;0.000}  {1:+0.000;-0.000;0.000}  {2:+0.000;-0.000;0.000}" + Unit.M, d.X, d.Y, d.Z);
     }
 
     /// <summary>Send the new world placement as the prop's working value (the offset from its bone when attached).</summary>

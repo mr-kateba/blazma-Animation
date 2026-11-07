@@ -426,10 +426,10 @@ public partial class ExportDialog : ConfirmationDialog
             lines.Add(string.Format(CultureInfo.InvariantCulture, Tr("Validation: {0} problem(s)"), Num(d["validation"]?["issueCount"])));
             foreach (var i in (d["validation"]?["issues"] as JsonArray) ?? new JsonArray()) lines.Add("• " + (string?)i);
         }
-        foreach (var w in r.Warnings.Where(w => w.Code == "export")) lines.Add(Tr("Note") + ": " + w.Message);
+        foreach (var w in r.Warnings.Where(w => w.Code == "export")) lines.Add(Tr("Note") + ": " + WarningText.Describe(w));
         _details.Text = string.Join("\n", lines);
         _openFolder.Visible = true;
-        _host.ToastNode.Notify(Tr("Animation exported."), ok ? pal.Ok : pal.Warn);
+        _host.ToastNode.Notify("Animation exported.", ok ? pal.Ok : pal.Warn);
     }
 
     void ShowError(string message)

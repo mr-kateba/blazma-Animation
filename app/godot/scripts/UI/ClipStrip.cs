@@ -38,7 +38,7 @@ public partial class ClipStrip : PanelContainer
         root.AddThemeConstantOverride("separation", 8);
         AddChild(W.Margin(root, 12, 8, 12, 10));
 
-        var head = new HBoxContainer { LayoutDirection = LayoutDirectionEnum.Locale };
+        var head = new HBoxContainer { LayoutDirection = LayoutDirectionEnum.ApplicationLocale };
         _tabs = new Segmented("Clips", "Poses");
         _tabs.Selected += i => SetPosesMode(i == 1);
         head.AddChild(_tabs);

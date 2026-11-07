@@ -229,7 +229,7 @@ public partial class SelfTest
             var (_, _, bad, _) = strip.CellCounts();
             var sum = App.Execute("physics.analyze", Jo(new { clipId = clip, summaryOnly = true })).Data!["summary"]!;
             if (fresh.UnbalancedFrames != 0 || bad != 0 || (int)sum["unbalanced"]! != 0) return $"unbalanced {fresh.UnbalancedFrames}/{bad}/{sum["unbalanced"]}";
-            return App.Physics.ClipComputations == 2 && fresh.Worst!.Margin > 0.019 ? null : $"computations {App.Physics.ClipComputations}, worst margin {fresh.Worst.Margin}";
+            return App.Physics.ClipComputations == 2 && fresh.Worst!.Margin > 0.019 ? null : $"computations {App.Physics.ClipComputations}, worst margin {fresh.Worst?.Margin}";
         });
         Check("p6 the panel shows the before/after table with the right numbers", () =>
         {

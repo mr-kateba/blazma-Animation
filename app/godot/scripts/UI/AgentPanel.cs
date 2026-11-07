@@ -301,7 +301,7 @@ public partial class AgentPanel : PanelContainer
             copy.Pressed += () =>
             {
                 DisplayServer.ClipboardSet(CommandText);
-                _host.ToastNode.Notify(Tr("Copied to the clipboard"), P.Ok);
+                _host.ToastNode.Notify("Copied to the clipboard", P.Ok);
             };
             head.AddChild(copy);
             Buttons["copy"] = copy;
@@ -476,6 +476,7 @@ public partial class AgentPanel : PanelContainer
             Buttons[$"job:{id}:apply"] = add;
         }
         if (row.GetChildCount() > 0) v.AddChild(row);
+        else row.QueueFree(); // never added: would leak at exit
         card.AddChild(v);
         return card;
     }

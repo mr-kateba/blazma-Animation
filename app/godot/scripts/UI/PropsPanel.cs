@@ -77,7 +77,7 @@ public partial class PropsPanel : PanelContainer
         CustomMinimumSize = new Vector2(260, 0);
         SizeFlagsVertical = SizeFlags.ShrinkBegin;
         LocalizeNumeralSystem = false;
-        LayoutDirection = LayoutDirectionEnum.Locale;
+        LayoutDirection = LayoutDirectionEnum.ApplicationLocale;
         Visible = false;
 
         var root = new VBoxContainer();

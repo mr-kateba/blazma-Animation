@@ -141,7 +141,7 @@ public partial class MainWindow
         Agent.Visible = show;
         if (show) Agent.MarkDirty();
         _aiButton.SetPressedNoSignal(show);
-        if (show) _splitAgent.SplitOffset = Math.Min(_splitAgent.SplitOffset, 0);
+        if (show) _splitAgent.SplitOffsets = new int[] { Math.Min(_splitAgent.SplitOffsets[0], 0) };
         UpdateAgentUi();
     }
 

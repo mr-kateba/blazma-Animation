@@ -18,7 +18,7 @@ public partial class AiSettingsDialog : ConfirmationDialog
     public LineEdit RunnerEdit { get; } = new() { AutoTranslateMode = AutoTranslateModeEnum.Disabled, TextDirection = Control.TextDirection.Ltr, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, ThemeTypeVariation = "MonoEdit", PlaceholderText = "kimodo-runner" };
     public LineEdit ModelsEdit { get; } = new() { AutoTranslateMode = AutoTranslateModeEnum.Disabled, TextDirection = Control.TextDirection.Ltr, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, ThemeTypeVariation = "MonoEdit", PlaceholderText = "…/kimodo-models" };
     public OptionButton DeviceBox { get; } = new() { FitToLongestItem = false, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-    public SpinBox TimeoutBox { get; } = new() { MinValue = 1, MaxValue = 600, Step = 1, Value = 15, Rounded = true };
+    public SpinBox TimeoutBox { get; } = new UnitSpinBox() { MinValue = 1, MaxValue = 600, Step = 1, Value = 15, Rounded = true };
     public Button CheckButton { get; } = new() { Text = "Check", FocusMode = Control.FocusModeEnum.None };
     public Button LogToggle { get; } = new() { Flat = true, FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
     public TextEdit LogBox { get; } = new() { Editable = false, Visible = false, CustomMinimumSize = new Vector2(0, 130), ThemeTypeVariation = "", AutoTranslateMode = AutoTranslateModeEnum.Disabled, TextDirection = Control.TextDirection.Ltr, WrapMode = TextEdit.LineWrappingMode.Boundary };
@@ -92,7 +92,7 @@ public partial class AiSettingsDialog : ConfirmationDialog
         TimeoutBox.GetLineEdit().TextDirection = Control.TextDirection.Ltr;
         TimeoutBox.GetLineEdit().ThemeTypeVariation = "MonoEdit";
         TimeoutBox.TooltipText = "Longest a single generation may take before it is stopped. The first one loads the models and is the slowest.";
-        TimeoutBox.Suffix = "min";
+        ((UnitSpinBox)TimeoutBox).UnitEn = "min";
         Row(grid, "Time limit", TimeoutBox);
 
         root.AddChild(new HSeparator());
@@ -266,7 +266,7 @@ public partial class AiSettingsDialog : ConfirmationDialog
         var g = hw.BestGpu;
         _gpuLine.Text = g is null ? Tr("No dedicated GPU detected: Kimodo will run on the processor.")
             : string.Format(CultureInfo.InvariantCulture, g.Integrated == true ? Tr("Recognised graphics: {0} (built into the processor, shares system memory)") : Tr("Recognised graphics card: {0}, video memory {1}"),
-                AiText.Ltr(g.Name), AiText.Ltr(g.VramBytes is { } v ? AiModelsDialog.Size(v) : Tr("unknown")));
+                AiText.Ltr(g.Name), AiText.Ltr(g.VramBytes is { } v ? AiModelsDialog.FormatSize(v) : Tr("unknown")));
     }
 
     // ---- check --------------------------------------------------------------------------------------------------------
@@ -336,6 +336,6 @@ public partial class AiSettingsDialog : ConfirmationDialog
                 d = System.IO.Path.GetDirectoryName(d) ?? "";
             }
         }
-        _host.ToastNode.Notify(Tr("Open docs/AI_INTEGRATION.md in the Blazma folder (section 5)."), _host.Palette.Warn);
+        _host.ToastNode.Notify("Open docs/AI_INTEGRATION.md in the Blazma folder (section 5).", _host.Palette.Warn);
     }
 }

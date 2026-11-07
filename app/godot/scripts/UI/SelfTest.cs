@@ -70,6 +70,7 @@ public partial class SelfTest : Node
 
     void Finish()
     {
+        if (System.Environment.GetEnvironmentVariable("BLAZMA_ORPHANS") == "1") Node.PrintOrphanNodes();
         GD.Print($"SELFTEST RESULT {(_failures == 0 ? "PASS" : "FAIL")}");
         try { App.ShutdownCleanly(); } catch (Exception e) { GD.Print($"shutdown error: {e.Message}"); }
         GetTree().Quit(_failures == 0 ? 0 : 1);
@@ -97,6 +98,10 @@ public partial class SelfTest : Node
         foreach (var pressed in new[] { true, false })
             GetViewport().PushInput(new InputEventKey { Keycode = k, PhysicalKeycode = k, CtrlPressed = true, ShiftPressed = shift, Pressed = pressed }, false);
     }
+
+    /// <summary>Development shortcut: BLAZMA_ONLY_PHASES=2,5 runs only those of phases 2-7 (then finishes).</summary>
+    static bool WantPhase(int n) =>
+        System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_PHASES") is not { } only || only.Split(',').Contains(n.ToString());
 
     // ---- main scenario -----------------------------------------------------------------------
 
@@ -341,6 +346,13 @@ public partial class SelfTest : Node
             return;
         }
 
+        if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_POLISH") == "1")
+        {
+            await RunPolish();
+            Finish();
+            return;
+        }
+
         if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_P9") == "1")
         {
             // Development shortcut: only the Phase 9 scenario (it starts from a new project).
@@ -358,22 +370,24 @@ public partial class SelfTest : Node
         }
 
         // Phase 2: characters, posing, IK, pose library, import and bone mapping.
-        await RunPhase2();
+        if (WantPhase(2)) await RunPhase2();
 
         // Phase 3: timeline, keys, playback, dope sheet, graph editor, markers, trail and onion skin.
-        await RunPhase3();
+        if (WantPhase(3)) await RunPhase3();
 
         // Phase 4: export dialog, .glb written and re-imported by Godot.
-        await RunPhase4();
+        if (WantPhase(4)) await RunPhase4();
 
         // Phase 5: the app hosts the agent API; AI Workspace panel.
-        await RunPhase5();
+        if (WantPhase(5)) await RunPhase5();
 
         // Phase 6: balance overlays, timeline strip, Physics panel, auto-balance and secondary motion.
-        await RunPhase6();
+        if (WantPhase(6)) await RunPhase6();
 
         // Phase 7: text-to-motion dialog, drafts, AI settings.
-        await RunPhase7();
+        if (WantPhase(7)) await RunPhase7();
+
+        if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_PHASES") is not null) { Finish(); return; }
 
         // AI models window: hardware, recommendation, licences, download against a local fake server.
         await RunModels();
@@ -386,6 +400,9 @@ public partial class SelfTest : Node
 
         // Viewport camera: fly mode, framing, numpad views, camera settings.
         await RunCamera();
+
+        // UI audit fixes: file association, translations, autosave thread, file errors.
+        await RunPolish();
 
         // Restore the user's settings.
         App.SetLanguage(backup.Language); App.SetTheme(backup.Theme); App.SetAdvancedMode(backup.AdvancedMode);
@@ -434,7 +451,7 @@ public partial class SelfTest : Node
     {
         _w.NewProjectNow();
         _w.CreateClipNamed("Before crash");
-        App.AutosaveNow();
+        App.AutosaveNowAndWait();
         if (App.LastAutosaveUtc is null) { Fail("crash-phase1-autosave", "no autosave was written"); Finish(); return; }
         await Frames(2);
         System.IO.File.WriteAllText(System.IO.Path.Combine(_dir, "phase1.ok"), "ok");

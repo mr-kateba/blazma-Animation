@@ -125,7 +125,7 @@ public partial class MainWindow
             case PImport: PromptImportProp(); break;
             case PAttach:
                 if (Selection.PropId is { } a && Selection.BoneId is { } b) AttachPropNow(a, b, false);
-                else _toast.Notify(Tr("Select a prop and a bone first."), _palette.Warn);
+                else _toast.Notify("Select a prop and a bone first.", _palette.Warn);
                 break;
             case PDetach: if (Selection.PropId is { } d) DetachPropNow(d, true); break;
             case PKey: if (Selection.PropId is { } k) App.KeyPropAtCurrent(k); break;
@@ -176,7 +176,7 @@ public partial class MainWindow
         if (TemplatesDlg.Visible) return;
         if (App.Session.Project.Characters.Count == 0)
         {
-            _toast.Notify(Tr("Add a character first, then apply a template to it."), _palette.Warn);
+            _toast.Notify("Add a character first, then apply a template to it.", _palette.Warn);
             return;
         }
         Inspector.Flush();
@@ -195,7 +195,7 @@ public partial class MainWindow
         {
             ShowNewClip(clipId);
             var clipName = Proj8.Clips.Find(c => c.Id.ToString() == clipId)?.Name ?? "";
-            _toast.Notify(string.Format(CultureInfo.InvariantCulture, Tr("Clip added: {0}"), clipName), _palette.Ok);
+            _toast.NotifyFormat("Clip added: {0}", _palette.Ok, clipName);
         }
         return r;
     }
@@ -215,8 +215,8 @@ public partial class MainWindow
     public void OpenRetargetDialog()
     {
         if (RetargetDlg.Visible) return;
-        if (App.Session.Project.Clips.Count == 0) { _toast.Notify(Tr("Create a clip first, then copy it onto another character."), _palette.Warn); return; }
-        if (App.Session.Project.Characters.Count < 2) { _toast.Notify(Tr("Add or import a second character first, then copy the clip onto it."), _palette.Warn); return; }
+        if (App.Session.Project.Clips.Count == 0) { _toast.Notify("Create a clip first, then copy it onto another character.", _palette.Warn); return; }
+        if (App.Session.Project.Characters.Count < 2) { _toast.Notify("Add or import a second character first, then copy the clip onto it.", _palette.Warn); return; }
         Inspector.Flush();
         RetargetDlg.Open();
     }
@@ -242,7 +242,7 @@ public partial class MainWindow
         if (FootLockDlg.Visible) return;
         if (!App.Physics.TryResolve(out _, out _, out _))
         {
-            _toast.Notify(Tr("Key a clip for this character first, then lock its feet."), _palette.Warn);
+            _toast.Notify("Key a clip for this character first, then lock its feet.", _palette.Warn);
             return;
         }
         Inspector.Flush();
@@ -305,7 +305,7 @@ public partial class MainWindow
         var prop = Props.Find(propId);
         if (prop is null) return false;
         var characterId = prop.Attachment?.Character.ToString() ?? Selection.CharacterId;
-        if (characterId is null) { _toast.Notify(Tr("Select a character first."), _palette.Warn); return false; }
+        if (characterId is null) { _toast.Notify("Select a character first.", _palette.Warn); return false; }
         return App.Execute("prop.attach", new JsonObject { ["propId"] = propId, ["characterId"] = characterId, ["bone"] = boneId, ["keepWorld"] = keepWorld }).Ok;
     }
 
@@ -317,7 +317,7 @@ public partial class MainWindow
         var name = Props.Find(propId)?.Name ?? "";
         Selection.SelectProp(null);
         var ok = App.Execute("prop.remove", new JsonObject { ["propId"] = propId }).Ok;
-        if (ok) _toast.NotifyAction(string.Format(CultureInfo.InvariantCulture, Tr("Prop removed: {0}"), name), _palette.Warn, Tr("Undo"), DoUndo);
+        if (ok) _toast.NotifyActionFormat("Prop removed: {0}", name, _palette.Warn, "Undo", DoUndo);
         return ok;
     }
 
@@ -346,7 +346,7 @@ public partial class MainWindow
 
     public void PromptNewSequence()
     {
-        if (App.Session.Project.Characters.Count == 0) { _toast.Notify(Tr("Add a character first, then make a sequence for it."), _palette.Warn); return; }
+        if (App.Session.Project.Characters.Count == 0) { _toast.Notify("Add a character first, then make a sequence for it.", _palette.Warn); return; }
         PromptName("New Sequence", "Create", NextSequenceName(), name => CreateSequenceNow(name));
     }
 
@@ -373,7 +373,7 @@ public partial class MainWindow
         var name = App.Session.Project.Sequences.Find(s => s.Id.ToString() == id)?.Name ?? "";
         if (App.SequencePlaying) App.StopSequence();
         var ok = App.Execute("sequence.remove", new JsonObject { ["sequenceId"] = id }).Ok;
-        if (ok) _toast.NotifyAction(string.Format(CultureInfo.InvariantCulture, Tr("Sequence deleted: {0}"), name), _palette.Warn, Tr("Undo"), DoUndo);
+        if (ok) _toast.NotifyActionFormat("Sequence deleted: {0}", name, _palette.Warn, "Undo", DoUndo);
         return ok;
     }
 
@@ -381,7 +381,7 @@ public partial class MainWindow
     {
         var r = ExecuteQuiet("sequence.add_clip", new JsonObject { ["sequenceId"] = sequenceId, ["clipId"] = clipId, ["matchFootPhase"] = matchFootPhase });
         if (!r.Ok) _toast.Notify(FriendlySequenceError(r), _palette.Err);
-        else if (r.Warnings.Any(w => w.Code == "no_feet")) _toast.Notify(Tr("This character has no humanoid feet, so the foot phase could not be matched."), _palette.Warn);
+        else if (r.Warnings.Any(w => w.Code == "no_feet")) _toast.Notify("This character has no humanoid feet, so the foot phase could not be matched.", _palette.Warn);
         return r;
     }
 
@@ -435,7 +435,7 @@ public partial class MainWindow
         if (clipId is null) return null;
         SelectClip(clipId);
         var name = App.Session.Project.Clips.Find(c => c.Id.ToString() == clipId)?.Name ?? "";
-        _toast.NotifyAction(string.Format(CultureInfo.InvariantCulture, Tr("Baked into the clip “{0}”."), name), _palette.Ok, Tr("Show clip"),
+        _toast.NotifyActionFormat("Baked into the clip “{0}”.", name, _palette.Ok, "Show clip",
             () => Timeline.SelectTab(TimelinePanel.TabTimeline));
         return clipId;
     }

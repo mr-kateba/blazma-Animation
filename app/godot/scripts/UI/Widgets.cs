@@ -118,10 +118,42 @@ public partial class Toast : PanelContainer
     /// <summary>A toast with a button (for example "Unpin"). The text of both must already be translated.</summary>
     public void NotifyAction(string message, Color dotColor, string actionText, Action onAction)
     {
-        _action.Text = actionText;
+        _actionKey = actionText;
+        _action.Text = TranslationServer.Translate(actionText);
         _action.AutoTranslateMode = AutoTranslateModeEnum.Disabled;
         _onAction = onAction;
         Present(message, dotColor, 7.5, true);
+    }
+
+    /// <summary>A toast built from a message key and format arguments, so it is re-translated if the language changes while it is visible.</summary>
+    public void NotifyFormat(string key, Color dotColor, params string[] args)
+    {
+        _onAction = null;
+        Present(key, dotColor, 4.5, false, args);
+    }
+
+    public void NotifyActionFormat(string key, string arg, Color dotColor, string actionText, Action onAction)
+    {
+        _actionKey = actionText;
+        _action.Text = TranslationServer.Translate(actionText);
+        _action.AutoTranslateMode = AutoTranslateModeEnum.Disabled;
+        _onAction = onAction;
+        Present(key, dotColor, 7.5, true, new[] { arg });
+    }
+
+    // The toast keeps the message key (not the translated text): a language switch re-translates it while it is still on screen.
+    string _key = "", _actionKey = "";
+    string[] _args = Array.Empty<string>();
+
+    string Render() => _args.Length == 0 ? TranslationServer.Translate(_key)
+        : string.Format(System.Globalization.CultureInfo.InvariantCulture, TranslationServer.Translate(_key), _args.Cast<object>().ToArray());
+
+    public override void _Notification(int what)
+    {
+        if (what != NotificationTranslationChanged || !Visible || _key.Length == 0) return;
+        _label.Text = Render();
+        if (_action.Visible && _actionKey.Length > 0) _action.Text = TranslationServer.Translate(_actionKey);
+        Reposition();
     }
     public bool Showing => Visible;
     public void HideNow() { _tween?.Kill(); Visible = false; }
@@ -132,8 +164,11 @@ public partial class Toast : PanelContainer
         Present(message, dotColor, 4.5, false);
     }
 
-    void Present(string message, Color dotColor, double seconds, bool withAction)
+    void Present(string message, Color dotColor, double seconds, bool withAction, string[]? args = null)
     {
+        _key = message;
+        _args = args ?? Array.Empty<string>();
+        message = Render();
         _action.Visible = withAction;
         MouseFilter = withAction ? MouseFilterEnum.Stop : MouseFilterEnum.Ignore;
         _label.Text = message;

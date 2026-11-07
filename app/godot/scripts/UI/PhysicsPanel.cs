@@ -98,7 +98,7 @@ public partial class PhysicsPanel : PanelContainer
         CustomMinimumSize = new Vector2(260, 0);
         SizeFlagsVertical = SizeFlags.ShrinkBegin;
         LocalizeNumeralSystem = false;
-        LayoutDirection = LayoutDirectionEnum.Locale; // the stage layer is left to right; the card itself mirrors in Arabic
+        LayoutDirection = LayoutDirectionEnum.ApplicationLocale; // the stage layer is left to right; the card itself mirrors in Arabic
         Visible = false;
 
         var root = new VBoxContainer();
@@ -277,8 +277,8 @@ public partial class PhysicsPanel : PanelContainer
     // ---- refresh -------------------------------------------------------------------------------------------------------
 
     static string Ltr(string s) => BalanceStrip.Ltr(s);
-    static string Cm(double cm) => Ltr(BalanceStrip.Signed(cm) + " cm");
-    static string Plain(double cm) => Ltr(cm.ToString("0.0", CultureInfo.InvariantCulture) + " cm");
+    static string Cm(double cm) => Ltr(BalanceStrip.Signed(cm) + Unit.Cm);
+    static string Plain(double cm) => Ltr(cm.ToString("0.0", CultureInfo.InvariantCulture) + Unit.Cm);
 
     public void Refresh()
     {
@@ -437,7 +437,7 @@ public partial class PhysicsPanel : PanelContainer
                 "untouched_frames_changed" => Tr("Frames that were not corrected moved slightly because of the new keys."),
                 "non_finite" => Tr("Some frames had invalid values and were skipped."),
                 "estimated_mass" => Tr("This character has no bone masses, so standard body proportions were used."),
-                _ => wn.Message,
+                _ => WarningText.Describe(wn),
             });
         lines.Add(Tr("Ctrl+Z undoes it."));
         _resultNote.Text = string.Join("\n", lines);

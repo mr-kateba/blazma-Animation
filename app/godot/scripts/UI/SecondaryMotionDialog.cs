@@ -224,12 +224,12 @@ public partial class SecondaryMotionDialog : ConfirmationDialog
                 "ik_driven" => Tr("Arm and leg bones that an IK control drives are overridden while that control is pinned."),
                 "track_locked" => Tr("Locked rotation tracks were skipped."),
                 "track_muted" => Tr("Muted rotation tracks were skipped."),
-                _ => w.Message,
+                _ => WarningText.Describe(w),
             });
         lines.Add(Tr("Ctrl+Z undoes it."));
         _details.Text = string.Join("\n", lines);
         _result.Visible = true;
-        _host.ToastNode.Notify(Tr("Secondary motion added."), pal.Ok);
+        _host.ToastNode.Notify("Secondary motion added.", pal.Ok);
         return true;
     }
 

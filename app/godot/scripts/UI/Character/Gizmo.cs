@@ -409,7 +409,7 @@ public sealed class Gizmo
             App.Execute("pose.set_bone", args);
         }
         var d = pos - _startPos;
-        _label = string.Format(CultureInfo.InvariantCulture, "{0:+0.000;-0.000;0.000}  {1:+0.000;-0.000;0.000}  {2:+0.000;-0.000;0.000} m", d.X, d.Y, d.Z);
+        _label = string.Format(CultureInfo.InvariantCulture, "{0:+0.000;-0.000;0.000}  {1:+0.000;-0.000;0.000}  {2:+0.000;-0.000;0.000}" + Unit.M, d.X, d.Y, d.Z);
     }
 
     /// <summary>Finish the drag. The whole drag is one undo step.</summary>

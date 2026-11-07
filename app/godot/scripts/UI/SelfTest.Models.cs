@@ -188,7 +188,7 @@ public partial class SelfTest
             PressButton(dlg.Cards["light"].Action);
             await Settle();
             Check($"models {lang} confirmation shows size, free space, folder and both licences", () =>
-                dlg.Current == AiModelsDialog.View.Confirm && dlg.Plan is { } p && dlg.ConfirmSizes.Contains(AiModelsDialog.Size(p.BytesTotal)) && dlg.ConfirmSpace.Contains(" GB")
+                dlg.Current == AiModelsDialog.View.Confirm && dlg.Plan is { } p && dlg.ConfirmSizes.Contains(AiModelsDialog.FormatSize(p.BytesTotal)) && dlg.ConfirmSpace.Contains(" GB")
                 && dlg.DirEdit.Text == dir && dlg.LicenceChecks.Count == 2 ? null : $"{dlg.Current} {dlg.ConfirmSizes} {dlg.ConfirmSpace} {dlg.LicenceChecks.Count}");
             Check($"models {lang} Download stays disabled until every licence is ticked", () =>
             {

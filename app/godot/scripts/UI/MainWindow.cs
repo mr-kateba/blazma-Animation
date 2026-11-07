@@ -125,7 +125,7 @@ public partial class MainWindow : Control
 
     void StartupChecks()
     {
-        ShowRecoveryIfAny();
+        OpenStartupProject();
         var selfTest = SelfTest.TryCreate(this);
         if (selfTest is not null) AddChild(selfTest);
     }
@@ -136,7 +136,7 @@ public partial class MainWindow : Control
         if (_fpsTimer >= 0.5)
         {
             _fpsTimer = 0;
-            _fpsText.Text = $"{Engine.GetFramesPerSecond():0} FPS";
+            _fpsText.Text = string.Format(Tr("{0} FPS"), P8.Ltr(Engine.GetFramesPerSecond().ToString("0", CultureInfo.InvariantCulture)));
         }
         FlushHistoryIfStale();
     }
@@ -195,7 +195,7 @@ public partial class MainWindow : Control
         _hint.GrowHorizontal = GrowDirection.Begin;
         _hint.GrowVertical = GrowDirection.Begin;
         _hint.OffsetRight = -14; _hint.OffsetBottom = -10;
-        _hint.LayoutDirection = LayoutDirectionEnum.Locale;
+        _hint.LayoutDirection = LayoutDirectionEnum.ApplicationLocale;
         _center.AddChild(_hint);
 
         BuildMotionLayers();
@@ -638,7 +638,7 @@ public partial class MainWindow : Control
     {
         var bad = System.IO.Path.GetInvalidFileNameChars();
         var s = new string(name.Select(c => bad.Contains(c) ? '_' : c).ToArray()).Trim();
-        return s.Length == 0 ? "Untitled" : s;
+        return s.Length == 0 ? TranslationServer.Translate("Untitled") : s;
     }
 
     void PromptName(string title, string ok, string initial, Action<string> accept)
@@ -662,7 +662,29 @@ public partial class MainWindow : Control
 
     public void RequestNew() => GuardUnsaved(NewProjectNow);
     public void RequestOpen() => GuardUnsaved(PromptOpenFile);
-    public void RequestSave() { if (App.FilePath is null) PromptSaveAs(null); else App.Save(); }
+    bool _manualSaving;
+
+    public void RequestSave()
+    {
+        if (App.FilePath is null) { PromptSaveAs(null); return; }
+        SaveWithBusyIndicator(() => App.Save());
+    }
+
+    /// <summary>Manual saves stay synchronous; the status bar shows "Saving…" and a wait cursor while they run.</summary>
+    void SaveWithBusyIndicator(Action save)
+    {
+        _manualSaving = true;
+        UpdateStatus();
+        Input.SetDefaultCursorShape(Input.CursorShape.Busy);
+        RenderingServer.ForceDraw();
+        try { save(); }
+        finally
+        {
+            _manualSaving = false;
+            Input.SetDefaultCursorShape(Input.CursorShape.Arrow);
+            UpdateStatus();
+        }
+    }
     public void RequestQuit() => GuardUnsaved(QuitNow);
 
     public void NewProjectNow()
@@ -682,7 +704,12 @@ public partial class MainWindow : Control
         return ok;
     }
 
-    public bool SaveToPath(string path) => App.SaveAs(path);
+    public bool SaveToPath(string path)
+    {
+        var ok = false;
+        SaveWithBusyIndicator(() => ok = App.SaveAs(path));
+        return ok;
+    }
 
     // ---- export (Phase 4) ------------------------------------------------------------------------------------------------
 
@@ -690,8 +717,8 @@ public partial class MainWindow : Control
     public void OpenExportDialog()
     {
         if (ExportDlg.Visible) return;
-        if (App.Session.Project.Clips.Count == 0) { _toast.Notify(Tr("Create a clip first, then export it."), _palette.Warn); return; }
-        if (App.Session.Project.Characters.Count == 0) { _toast.Notify(Tr("Add a character first, then export its animation."), _palette.Warn); return; }
+        if (App.Session.Project.Clips.Count == 0) { _toast.Notify("Create a clip first, then export it.", _palette.Warn); return; }
+        if (App.Session.Project.Characters.Count == 0) { _toast.Notify("Add a character first, then export its animation.", _palette.Warn); return; }
         Inspector.Flush(); // commit text typed in the inspector first
         ExportDlg.Open();
     }
@@ -853,7 +880,7 @@ public partial class MainWindow : Control
     {
         var dirty = App.IsDirty;
         _statusDot.SetColor(dirty ? _palette.Warn : _palette.Ok);
-        _statusText.Text = dirty ? Tr("Unsaved changes") : Tr("All changes saved");
+        _statusText.Text = _manualSaving || App.IsAutosaving ? Tr("Saving…") : dirty ? Tr("Unsaved changes") : Tr("All changes saved");
         _autosaveText.Text = App.LastAutosaveUtc is { } t
             ? string.Format(Tr("Autosaved {0}"), t.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture))
             : "";
@@ -942,7 +969,7 @@ public partial class MainWindow : Control
     }
 
     void OnLoadWarnings(IReadOnlyList<string> warnings) =>
-        _toast.Notify(Tr("This project was made with an older version and was repaired while opening:") + " " + string.Join(" ", warnings.Take(3)), _palette.Warn);
+        _toast.Notify("This project was made with an older version and was repaired while opening:" + " " + string.Join(" ", warnings.Take(3)), _palette.Warn);
 
     void OnError(string message)
     {
@@ -950,8 +977,8 @@ public partial class MainWindow : Control
         if (_suppressToast) return;
         if (CodeMessage(App.LastErrorCode) is { } friendly) { _toast.Notify(friendly, _palette.Err); return; }
         if (App.LastErrorCode == "driven_by_ik") { ShowDrivenToast(); return; }
-        if (App.LastErrorCode == "rig_mismatch") { _toast.Notify(Tr("This clip animates a different character. Pick or create another clip for this one."), _palette.Err); return; }
-        if (App.LastErrorCode == "track_locked") { _toast.Notify(Tr("That channel is locked. Unlock it in the dope sheet first."), _palette.Err); return; }
+        if (App.LastErrorCode == "rig_mismatch") { _toast.Notify("This clip animates a different character. Pick or create another clip for this one.", _palette.Err); return; }
+        if (App.LastErrorCode == "track_locked") { _toast.Notify("That channel is locked. Unlock it in the dope sheet first.", _palette.Err); return; }
         _toast.Notify(FriendlyError(message), _palette.Err);
     }
 
@@ -966,10 +993,10 @@ public partial class MainWindow : Control
     void SaveLayoutValues()
     {
         var l = App.Settings.Layout;
-        l["split_left"] = _splitOuter.SplitOffset;
-        l["split_right"] = _splitInner.SplitOffset;
-        l["split_dock"] = _splitDock.SplitOffset;
-        l["split_agent"] = _splitAgent.SplitOffset;
+        l["split_left"] = _splitOuter.SplitOffsets[0];
+        l["split_right"] = _splitInner.SplitOffsets[0];
+        l["split_dock"] = _splitDock.SplitOffsets[0];
+        l["split_agent"] = _splitAgent.SplitOffsets[0];
         var win = GetWindow();
         if (win.Mode == Window.ModeEnum.Windowed)
         {
@@ -982,16 +1009,36 @@ public partial class MainWindow : Control
     {
         var l = App.Settings.Layout;
         int Get(string key) => l.TryGetValue(key, out var v) ? v.AsInt32() : 0;
-        _splitOuter.SplitOffset = Get("split_left");
-        _splitInner.SplitOffset = Get("split_right");
-        _splitDock.SplitOffset = Get("split_dock");
-        _splitAgent.SplitOffset = Get("split_agent");
+        _splitOuter.SplitOffsets = new int[] { Get("split_left") };
+        _splitInner.SplitOffsets = new int[] { Get("split_right") };
+        _splitDock.SplitOffsets = new int[] { Get("split_dock") };
+        _splitAgent.SplitOffsets = new int[] { Get("split_agent") };
         var win = GetWindow();
         if (!SelfTest.IsRequested && win.Mode == Window.ModeEnum.Windowed && Get("window_w") >= 800 && Get("window_h") >= 500)
             win.Size = new Vector2I(Get("window_w"), Get("window_h"));
     }
 
     // ---- recovery ---------------------------------------------------------------------------
+
+    /// <summary>
+    /// File association / command line: opens the project named on the command line. When crash recovery holds unsaved work for
+    /// that same file, the recovery dialog comes first (Recover restores it; otherwise the file is opened once the dialog is closed).
+    /// </summary>
+    public void OpenStartupProject(string? startup = null)
+    {
+        var path = startup ?? App.StartupProject;
+        if (path is null) { ShowRecoveryIfAny(); return; }
+        bool Same(string? p) => p is not null && string.Equals(System.IO.Path.GetFullPath(p), path,
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        var matching = App.Recovery.FindRecoverable().Any(c => Same(c.ProjectPath));
+        if (!matching) { OpenPath(path); ShowRecoveryIfAny(); return; }
+        ShowRecoveryIfAny();
+        if (RecoveryDialogNode is { } dlg)
+            dlg.VisibilityChanged += () =>
+            {
+                if (!dlg.Visible && !Same(App.FilePath) && !App.IsDirty) OpenPath(path);
+            };
+    }
 
     public void ShowRecoveryIfAny()
     {

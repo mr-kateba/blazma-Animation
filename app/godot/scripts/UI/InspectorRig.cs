@@ -352,7 +352,7 @@ public partial class InspectorPanel
         {
             ["characterId"] = c.Id.ToString(), ["bone"] = id, ["rx"] = x, ["ry"] = y, ["rz"] = z,
         });
-        if (r.Ok && r.Warnings.Any(w => w.Code == "clamped_by_limits")) _host.ToastNode.Notify(Tr("The value was limited to the joint range."), _host.Palette.Warn);
+        if (r.Ok && r.Warnings.Any(w => w.Code == "clamped_by_limits")) _host.ToastNode.Notify("The value was limited to the joint range.", _host.Palette.Warn);
         RefreshRig(true);
     }
 

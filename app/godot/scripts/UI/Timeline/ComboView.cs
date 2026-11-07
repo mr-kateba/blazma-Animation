@@ -298,7 +298,7 @@ public partial class ComboView : VBoxContainer
 
     static HBoxContainer Row()
     {
-        var r = new HBoxContainer { LayoutDirection = LayoutDirectionEnum.Locale };
+        var r = new HBoxContainer { LayoutDirection = LayoutDirectionEnum.ApplicationLocale };
         r.AddThemeConstantOverride("separation", 8);
         return r;
     }

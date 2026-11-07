@@ -175,7 +175,7 @@ public partial class MainWindow
     {
         var current = Timeline.Size.Y;
         if (current < 60 || current >= height - 2) return;
-        _splitDock.SplitOffset -= (int)(height - current);
+        _splitDock.SplitOffsets = new int[] { _splitDock.SplitOffsets[0] - ((int)(height - current)) };
     }
 
     string ClipSignature() => string.Join("|", App.Session.Project.Clips.Select(c => $"{c.Id}:{c.Name}:{c.Duration.Value}:{c.IsDraft}:{c.Fps}"));
@@ -194,7 +194,7 @@ public partial class MainWindow
         else if (Selection.ControlId is { } ctl) targets = App.ControlKeyTargets(c.Id.ToString(), ctl);
         if (targets is null)
         {
-            _toast.Notify(Tr("Select a bone or control first, or use Key to key the whole pose."), _palette.Warn);
+            _toast.Notify("Select a bone or control first, or use Key to key the whole pose.", _palette.Warn);
             return false;
         }
         return App.KeyAtCurrent(targets);

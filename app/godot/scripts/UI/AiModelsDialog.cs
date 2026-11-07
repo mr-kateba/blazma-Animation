@@ -207,7 +207,7 @@ public partial class AiModelsDialog : AcceptDialog
 
     // ---- formatting ---------------------------------------------------------------------------------------------------
 
-    public static string Size(long? bytes)
+    public static string FormatSize(long? bytes)
     {
         if (bytes is not { } b) return "?";
         return b >= 1L << 30 ? string.Format(CultureInfo.InvariantCulture, "{0:0.0} GB", b / (double)(1L << 30))
@@ -277,8 +277,8 @@ public partial class AiModelsDialog : AcceptDialog
         _hwGpu.Text = g is null || g.Integrated == true && g.VramBytes is null
             ? (g is null ? Tr("No dedicated GPU detected") : string.Format(CultureInfo.InvariantCulture, Tr("Graphics: {0} (built into the processor, shares system memory)"), L(g.Name)))
             : g.Integrated == true ? string.Format(CultureInfo.InvariantCulture, Tr("Graphics: {0} (built into the processor, shares system memory)"), L(g.Name))
-            : string.Format(CultureInfo.InvariantCulture, Tr("Graphics card: {0}, video memory {1}"), L(g.Name), L(g.VramBytes is { } v ? Size(v) : Tr("unknown")));
-        _hwOther.Text = string.Format(CultureInfo.InvariantCulture, Tr("Memory (RAM): {0}   Processor: {1} cores"), L(Size(hw.TotalRamBytes)), L(hw.LogicalCpus.ToString(CultureInfo.InvariantCulture)));
+            : string.Format(CultureInfo.InvariantCulture, Tr("Graphics card: {0}, video memory {1}"), L(g.Name), L(g.VramBytes is { } v ? FormatSize(v) : Tr("unknown")));
+        _hwOther.Text = string.Format(CultureInfo.InvariantCulture, Tr("Memory (RAM): {0}   Processor: {1} cores"), L(FormatSize(hw.TotalRamBytes)), L(hw.LogicalCpus.ToString(CultureInfo.InvariantCulture)));
         _hwNote.Text = hw.Notes.Count > 0 ? string.Join("\n", hw.Notes) : "";
         _rec = HardwareAdvisor.Recommend(hw, Catalog);
         if (!_deviceTouched) DeviceBox.Select(_rec.Device == "cpu" ? 1 : 0);
@@ -335,7 +335,7 @@ public partial class AiModelsDialog : AcceptDialog
             var t = c.Tier;
             c.Name.Text = TierName(t);
             c.Info.Text = string.Format(CultureInfo.InvariantCulture, Tr("Download size {0}. Needs {1} RAM (more is better: {2}); a graphics card needs {3} video memory."),
-                L(Size(t.TotalBytes)), L($"{t.MinRamGiB:0} GB"), L($"{t.RecommendedRamGiB:0} GB"), L($"{t.MinVramGiB:0} GB"));
+                L(FormatSize(t.TotalBytes)), L($"{t.MinRamGiB:0} GB"), L($"{t.RecommendedRamGiB:0} GB"), L($"{t.MinVramGiB:0} GB"));
             c.Reason.Text = Arabic ? t.QualityAr : t.QualityEn;
             var st = ModelCatalog.State(t, _dir);
             c.Installed = st.Installed;
@@ -408,8 +408,8 @@ public partial class AiModelsDialog : AcceptDialog
         _plan = dl.Plan(t, _dir, Catalog);
         var p = _plan;
         _confTitle.Text = TierName(t);
-        _confSizes.Text = string.Format(CultureInfo.InvariantCulture, Tr("Total size {0}. Still to download: {1}."), L(Size(p.BytesTotal)), L(Size(p.BytesToDownload)));
-        _confSpace.Text = string.Format(CultureInfo.InvariantCulture, Tr("Free space on that drive: {0}"), L(p.FreeBytes is { } f ? Size(f) : Tr("unknown")));
+        _confSizes.Text = string.Format(CultureInfo.InvariantCulture, Tr("Total size {0}. Still to download: {1}."), L(FormatSize(p.BytesTotal)), L(FormatSize(p.BytesToDownload)));
+        _confSpace.Text = string.Format(CultureInfo.InvariantCulture, Tr("Free space on that drive: {0}"), L(p.FreeBytes is { } f ? FormatSize(f) : Tr("unknown")));
         _confWarn.Text = !p.EnoughSpace ? Tr("There is not enough free space for this package. Choose another folder or free some space.")
             : p.Conflicts.Count > 0 ? string.Format(CultureInfo.InvariantCulture, Tr("These files already exist but are different, so Blazma will not overwrite them: {0}"), L(string.Join(", ", p.Conflicts)))
             : "";
@@ -484,8 +484,8 @@ public partial class AiModelsDialog : AcceptDialog
             DownloadStage.Completed => Tr("Done"),
             _ => string.Format(CultureInfo.InvariantCulture, Tr("Downloading {0} (file {1} of {2})"), L(p.FileName), L((p.FileIndex + 1).ToString(CultureInfo.InvariantCulture)), L(p.FileCount.ToString(CultureInfo.InvariantCulture))),
         };
-        _progBytes.Text = string.Format(CultureInfo.InvariantCulture, Tr("{0} of {1}"), L(Size(p.BytesDone)), L(Size(p.BytesTotal)));
-        _progSpeed.Text = string.Format(CultureInfo.InvariantCulture, Tr("Speed {0}/s. Time left: {1}"), L(Size((long)p.BytesPerSecond)),
+        _progBytes.Text = string.Format(CultureInfo.InvariantCulture, Tr("{0} of {1}"), L(FormatSize(p.BytesDone)), L(FormatSize(p.BytesTotal)));
+        _progSpeed.Text = string.Format(CultureInfo.InvariantCulture, Tr("Speed {0}/s. Time left: {1}"), L(FormatSize((long)p.BytesPerSecond)),
             L(p.Eta is { } e ? AiText.Elapsed(e) : "--:--"));
     }
 
@@ -503,7 +503,7 @@ public partial class AiModelsDialog : AcceptDialog
             _progFile.Text = Tr("Done");
             _progError.Text = Tr("The AI model is installed and Kimodo is ready to use.");
             _progError.AddThemeColorOverride("font_color", _host.Palette.Ok);
-            _host.ToastNode.Notify(Tr("AI model ready"), _host.Palette.Ok);
+            _host.ToastNode.Notify("AI model ready", _host.Palette.Ok);
             _host.GenerateDlg.NotifyModelsChanged();
             return;
         }

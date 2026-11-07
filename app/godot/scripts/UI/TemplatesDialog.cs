@@ -235,7 +235,7 @@ public partial class TemplatesDialog : ConfirmationDialog
         var r = App.Execute("template.delete", new JsonObject { ["templateId"] = row.Id });
         if (!r.Ok) return;
         Reload(null);
-        _host.ToastNode.NotifyAction(Tr("Template deleted."), _host.Palette.Warn, Tr("Undo"), () => { _host.DoUndo(); if (Visible) Reload(null); });
+        _host.ToastNode.NotifyAction("Template deleted.", _host.Palette.Warn, "Undo", () => { _host.DoUndo(); if (Visible) Reload(null); });
     }
 
     void SaveCurrent()

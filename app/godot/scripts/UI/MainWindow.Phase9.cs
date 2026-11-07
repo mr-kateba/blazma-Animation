@@ -215,7 +215,7 @@ public partial class MainWindow
     {
         var name = App.Session.Project.Combos.Find(c => c.Id.ToString() == id)?.Name ?? "";
         var ok = App.Execute("combo.remove", new JsonObject { ["comboId"] = id }).Ok;
-        if (ok) _toast.NotifyAction(string.Format(CultureInfo.InvariantCulture, Tr("Combo deleted: {0}"), name), _palette.Warn, Tr("Undo"), DoUndo);
+        if (ok) _toast.NotifyActionFormat("Combo deleted: {0}", name, _palette.Warn, "Undo", DoUndo);
         return ok;
     }
 
@@ -233,7 +233,7 @@ public partial class MainWindow
         }
         var r = ExecuteQuiet("combo.add_attack", args);
         if (!r.Ok) { _toast.Notify(FriendlyCombatError(r), _palette.Err); return null; }
-        if (r.Warnings.Any(w => w.Code == "no_hitboxes")) _toast.Notify(Tr("This clip has no hitbox yet, so the attack cannot hit anything. Add one in the Combat panel."), _palette.Warn);
+        if (r.Warnings.Any(w => w.Code == "no_hitboxes")) _toast.Notify("This clip has no hitbox yet, so the attack cannot hit anything. Add one in the Combat panel.", _palette.Warn);
         var id = (string?)r.Data?["attackId"];
         Timeline.Combo.Canvas.SelectedAttackId = id;
         Timeline.Combo.Sync();
@@ -267,7 +267,7 @@ public partial class MainWindow
             if (sid is null) return null;
             var sname = App.Session.Project.Sequences.Find(s => s.Id.ToString() == sid)?.Name ?? "";
             App.SetActiveSequence(sid);
-            _toast.NotifyAction(string.Format(CultureInfo.InvariantCulture, Tr("Baked into the sequence “{0}”."), sname), _palette.Ok, Tr("Show sequence"),
+            _toast.NotifyActionFormat("Baked into the sequence “{0}”.", sname, _palette.Ok, "Show sequence",
                 () => Timeline.SelectTab(TimelinePanel.TabSequence));
             return sid;
         }
@@ -275,7 +275,7 @@ public partial class MainWindow
         if (clipId is null) return null;
         SelectClip(clipId);
         var name = App.Session.Project.Clips.Find(c => c.Id.ToString() == clipId)?.Name ?? "";
-        _toast.NotifyAction(string.Format(CultureInfo.InvariantCulture, Tr("Baked into the clip “{0}”."), name), _palette.Ok, Tr("Show clip"),
+        _toast.NotifyActionFormat("Baked into the clip “{0}”.", name, _palette.Ok, "Show clip",
             () => Timeline.SelectTab(TimelinePanel.TabTimeline));
         return clipId;
     }

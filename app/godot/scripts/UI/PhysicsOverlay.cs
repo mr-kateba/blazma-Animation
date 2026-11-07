@@ -150,7 +150,7 @@ public partial class PhysicsOverlay : Control
     {
         if (PhysicsAnalysis.MarginCm(b) is not { } cm) return;
         // numbers are always left-to-right, also in Arabic
-        var text = (cm > 0 ? "+" : cm < 0 ? "−" : "") + Math.Abs(cm).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " cm";
+        var text = (cm > 0 ? "+" : cm < 0 ? "−" : "") + Math.Abs(cm).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + Unit.Cm;
         var font = BlazmaTheme.Mono;
         var size = font.GetStringSize(text, HorizontalAlignment.Left, -1, 11);
         var pos = at + new Vector2(11, 4);

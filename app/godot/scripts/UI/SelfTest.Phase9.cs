@@ -382,7 +382,7 @@ public partial class SelfTest
         Check("p9 the Hit test dialog opens from the panel; attacker, clip and defender are preselected", () =>
             hdlg.IsOpen && hdlg.RunEnabled && hdlg.Attacker.GetItemText(hdlg.Attacker.Selected) == man.Name && hdlg.AttackClip.GetItemText(hdlg.AttackClip.Selected) == "Attack swing" && hdlg.Defender.GetItemText(hdlg.Defender.Selected) == dc.Name
                 ? null : $"open={hdlg.IsOpen} atk={hdlg.Attacker.GetItemText(hdlg.Attacker.Selected)} clip={hdlg.AttackClip.GetItemText(hdlg.AttackClip.Selected)} def={hdlg.Defender.GetItemText(hdlg.Defender.Selected)}");
-        hdlg.SelectAttacker(mid); hdlg.SelectAttackClip(swingId); hdlg.SelectDefender(dummy);
+        hdlg.SelectAttacker(mid); hdlg.SelectAttackClip(swingId); hdlg.SelectDefender(dummy!);
         hdlg.DefZ.Value = 8; hdlg.DefX.Value = 0; hdlg.DefFacing.Value = 180;
         hdlg.PressRun();
         await Settle();
@@ -438,7 +438,7 @@ public partial class SelfTest
         // run again for the reaction
         _w.OpenHitTestDialog();
         await Settle();
-        hdlg.SelectAttacker(mid); hdlg.SelectAttackClip(swingId); hdlg.SelectDefender(dummy);
+        hdlg.SelectAttacker(mid); hdlg.SelectAttackClip(swingId); hdlg.SelectDefender(dummy!);
         hdlg.DefZ.Value = hitZ;
         hdlg.PressRun();
         await Settle();
@@ -493,7 +493,7 @@ public partial class SelfTest
         PressButton(cp.HitAdd);
         await Settle();
         Check("p9 a second attack clip 'Heavy Swing' (45 frames) with its own phases 12-22 and sword hitbox", () =>
-            Heavy().Combat?.Phases is not null && Heavy().Combat.Hitboxes.Count == 1 && Heavy().DurationFrames == 45 ? null : $"phases={Heavy().Combat?.Phases is not null} boxes={Heavy().Combat?.Hitboxes.Count} frames={Heavy().DurationFrames}");
+            Heavy().Combat?.Phases is not null && Heavy().Combat!.Hitboxes.Count == 1 && Heavy().DurationFrames == 45 ? null : $"phases={Heavy().Combat?.Phases is not null} boxes={Heavy().Combat?.Hitboxes.Count} frames={Heavy().DurationFrames}");
         _w.SelectClip(swingId);
         _w.OpenComboEditor();
         await Settle();
@@ -675,7 +675,7 @@ public partial class SelfTest
         Shot(P("p9-ar-dark-combat-panel"), GetViewport());
         _w.OpenHitTestDialog();
         await Settle();
-        hdlg.SelectAttacker(mid); hdlg.SelectAttackClip(swingId); hdlg.SelectDefender(dummy);
+        hdlg.SelectAttacker(mid); hdlg.SelectAttackClip(swingId); hdlg.SelectDefender(dummy!);
         foreach (var z in new[] { hitZ, 0.7, 0.9, 0.6, 1.0, 0.5, 0.4, 0.3, 1.1, 1.2 })
         {
             hdlg.DefZ.Value = z;

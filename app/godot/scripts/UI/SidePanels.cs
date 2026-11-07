@@ -119,9 +119,18 @@ public partial class HistoryPanel : PanelContainer
         List.EnsureCurrentIsVisible();
     }
 
+    /// <summary>Who made the change, in the current language (the session id of an agent is not shown).</summary>
+    static string OriginName(Blazma.Commands.CommandOrigin o) => TranslationServer.Translate(o.Source switch
+    {
+        Blazma.Commands.CommandSource.Ui => "You", // tr
+        Blazma.Commands.CommandSource.Cli => "Command line", // tr
+        Blazma.Commands.CommandSource.Mcp => "AI agent", // tr
+        _ => "Test", // tr
+    });
+
     void Add(TransactionInfo t, Color color)
     {
-        var idx = List.AddItem($"{TranslationServer.Translate(t.Label)}  ·  {t.Origin}");
+        var idx = List.AddItem($"{TranslationServer.Translate(t.Label)}  ·  {OriginName(t.Origin)}");
         List.SetItemCustomFgColor(idx, color);
     }
 
