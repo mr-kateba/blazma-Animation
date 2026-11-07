@@ -4,7 +4,7 @@
 
 ## المتطلبات (مرة واحدة)
 
-- .NET SDK 8 و10، وأداة `zip` و`file`، و`nsis` (`sudo apt-get install -y nsis zip file`).
+- .NET SDK 8 و10، وأداة `zip` و`file`، و`nsis` و`desktop-file-utils` (لبناء AppImage) (`sudo apt-get install -y nsis zip file desktop-file-utils p7zip-full`).
 - Godot 4.7.2 **.NET** لنظام Linux في `/opt/godot/Godot_v4.7.2-stable_mono_linux_x86_64/` (أو متغير `GODOT=...`).
 - قوالب التصدير الرسمية في `~/.local/share/godot/export_templates/4.7.2.stable.mono/`: ملفات `windows_*x86_64*` و`linux_*x86_64*` من
   `Godot_v4.7.2-stable_mono_export_templates.tpz` (من https://github.com/godotengine/godot/releases/tag/4.7.2-stable، وتحقق من `SHA512-SUMS.txt`).
