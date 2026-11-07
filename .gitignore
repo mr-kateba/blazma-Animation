@@ -8,7 +8,7 @@ obj/
 *.safetensors
 /models/
 # Screenshots from local runs
-screenshots/
+/screenshots/
 
 # Godot
 app/godot/.godot/
