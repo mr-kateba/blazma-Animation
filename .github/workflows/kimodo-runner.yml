@@ -201,7 +201,7 @@ jobs:
           $vcvars = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
           $deps = cmd /c "call `"$vcvars`" >nul && dumpbin /nologo /dependents ai\kimodo\build\bin\ggml-cuda.dll"
           $deps | Write-Output
-          foreach ($d in ($deps | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '\.dll$' })) {
+          foreach ($d in ($deps | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^[A-Za-z0-9_.-]+\.dll$' })) { # dependency lines only, not "Dump of file …"
             if ($d -ieq "nvcuda.dll") { continue } # part of the NVIDIA driver, never shipped
             if ($d -match '^(api-ms-|ext-ms-)') { continue }
             if ((Test-Path "cuda-addon/$d") -or (Test-Path "ai/kimodo/build/bin/$d") -or (Test-Path "$env:WINDIR/System32/$d")) { continue }
