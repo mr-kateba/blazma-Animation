@@ -555,6 +555,13 @@ int main(int argc, char **argv) {
 #if defined(__linux__)
     bind_to_parent();
 #endif
+#if defined(_WIN32)
+    // kimodo.cpp turns off GGML Vulkan's FP16 / cooperative-matrix paths for its F32 reference model (they convert
+    // F32 inputs to FP16 and break parity), but only on Unix (setenv). Do the same on Windows, before any backend
+    // loads; a value the user set (GGML_* passes through Blazma) wins.
+    for (const char *name : {"GGML_VK_DISABLE_COOPMAT", "GGML_VK_DISABLE_COOPMAT2", "GGML_VK_DISABLE_F16"})
+        if (!std::getenv(name)) _putenv_s(name, "1");
+#endif
     log(std::string("kimodo-runner ") + runner_version + " ready (protocol " + std::to_string(protocol_version) + ")");
     std::thread(read_input).detach();
 
