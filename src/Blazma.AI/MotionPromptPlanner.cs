@@ -121,7 +121,10 @@ public static class MotionPromptPlanner
         A("wave", "wave", "waves", "waving", "waved", "greet", "greets", "greeting");
         A("dance", "dance", "dances", "dancing", "danced");
         A("idle", "idle", "idles", "idling", "stand", "stands", "standing", "stood", "wait", "waits", "waiting", "waited", "stand still",
-            "stands still", "standing still", "breathe", "breathes", "breathing", "rest", "rests");
+            "stands still", "standing still", "breathe", "breathes", "breathing", "rest", "rests",
+            "return to ready stance", "returns to ready stance", "return to a ready stance", "returns to a ready stance", "return to guard stance", "returns to guard stance",
+            "return to a guard stance", "returns to a guard stance", "return to guard", "returns to guard", "ready stance", "guard stance", "get ready", "gets ready",
+            "return to stance", "returns to stance", "return to idle", "returns to idle");
         A("stop", "stop", "stops", "stopping", "stopped", "halt", "halts", "freeze", "freezes", "froze");
         A("step_back", "step back", "steps back", "stepping back", "stepped back", "step backward", "steps backward", "step backwards", "steps backwards",
             "back away", "backs away", "backing away", "back up", "backs up", "retreat", "retreats");
@@ -152,7 +155,10 @@ public static class MotionPromptPlanner
         A("punch", "يضرب", "اضرب", "ضرب", "تضرب", "ضربه", "يلكم", "الكم", "لكم", "لكمه", "بوكس", "يبوكس", "يهاجم", "هاجم", "هجوم");
         A("wave", "يلوح", "لوح", "الوح", "تلوح", "تلويح", "ياشر", "اشر", "يشاور", "شاور", "باي", "تحيه", "يحيي");
         A("dance", "يرقص", "ارقص", "رقص", "ترقص", "يتمايل");
-        A("idle", "يقف", "واقف", "وقوف", "ثابت", "ثبات", "يستني", "استني", "ينتظر", "انتظر", "انتظار", "يرتاح", "ارتاح", "اثبت", "يثبت");
+        A("idle", "يقف", "واقف", "وقوف", "ثابت", "ثبات", "يستني", "استني", "ينتظر", "انتظر", "انتظار", "يرتاح", "ارتاح", "اثبت", "يثبت",
+            // "returns to the ready stance" must not be read as «يرجع» = step back.
+            "يرجع لوضع الاستعداد", "ارجع لوضع الاستعداد", "ترجع لوضع الاستعداد", "يرجع الي وضع الاستعداد", "يرجع لوضعه", "ارجع لوضعك", "يرجع لوضعه الاصلي",
+            "يرجع للوضع الطبيعي", "يرجع لوضع القتال", "يرجع لوضع الوقوف", "وضع الاستعداد", "يستعد", "استعد", "يتاهب", "يرجع لحاله الاستعداد");
         A("stop", "وقف", "قف", "اقف", "يوقف", "توقف", "يتوقف", "تقف");
         A("step_back", "يرجع", "ارجع", "رجع", "ترجع", "يتراجع", "تراجع", "اتراجع", "يرجع لورا", "ارجع لورا", "يرجع ورا", "ارجع ورا",
             "خطوه لورا", "خطوه للخلف", "خطوتين لورا");

@@ -253,7 +253,7 @@ public partial class GenerateMotionDialog : ConfirmationDialog
         UpdateButtons();
         Show(_snap);
         if (!IsRunning) { _planEdited = false; RefreshPlan(); }
-        PopupCentered(new Vector2I(600, 0));
+        PopupCentered(new Vector2I(760, 0));
         Prompt.GrabFocus();
     }
 
@@ -420,7 +420,13 @@ public partial class GenerateMotionDialog : ConfirmationDialog
         lines.AddRange(warnings.Select(AiText.Warning));
         lines.Add(Tr("Accept it to keep it, or discard it. Ctrl+Z undoes either."));
         _details.Text = string.Join("\n", lines);
+        if (AutoCloseAfterApply)
+            GetTree().CreateTimer(1.2).Timeout += () => { if (Visible && _jobId == jobId && !IsRunning) Hide(); };
     }
+
+    /// <summary>Close the dialog a moment after the draft was added, so the motion playing in the 3D view is not hidden behind it.
+    /// The UI self-test turns this off (it inspects the dialog after generating).</summary>
+    public bool AutoCloseAfterApply { get; set; } = true;
 
     void Show(MotionJobSnapshot? snap)
     {
@@ -485,7 +491,7 @@ public partial class GenerateMotionDialog : ConfirmationDialog
             var words = W.Label(seg.Text, null, false);
             words.AutoTranslateMode = Node.AutoTranslateModeEnum.Disabled;
             words.TextDirection = Control.TextDirection.Auto;
-            words.CustomMinimumSize = new Vector2(110, 0);
+            words.CustomMinimumSize = new Vector2(100, 0);
             words.AutowrapMode = TextServer.AutowrapMode.WordSmart;
             var caption = new LineEdit
             {
@@ -501,7 +507,8 @@ public partial class GenerateMotionDialog : ConfirmationDialog
             var status = W.Label("", null, false);
             var row = _planRows.Count;
             _planRows.Add((caption, seconds, status));
-            caption.TextChanged += _ => { _planEdited = true; ShowStatus(row); };
+            caption.TextChanged += _ => { _planEdited = true; ShowStatus(row); caption.TooltipText = caption.Text; };
+            caption.TooltipText = seg.Caption; // the full English text (the box can be too narrow for it)
             seconds.ValueChanged += _ => { _planEdited = true; ShowPlanSummary(); };
             foreach (var c in new Control[] { index, words, caption, seconds, status }) _planGrid.AddChild(c);
             ShowStatus(row);

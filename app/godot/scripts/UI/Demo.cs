@@ -84,6 +84,7 @@ public partial class Demo : Node
         _w.NewProjectNow();
         await Wait(1.0);
         _w.Stage.FrameAll();
+        _w.Stage.Orbit(-70, 0); // a little to the side: turns and travel read better
         _target = new Vector3(0, 0.9f, 0);
         _follow = true;
         Caption("١) كتابة الطلب");
@@ -108,20 +109,19 @@ public partial class Demo : Node
         Caption("٢) الخطة المفهومة");
         GD.Print("DEMO plan: " + string.Join(" | ", dlg.PlanRows.Select(r => $"{r.Text} => {r.Caption} {r.Seconds}s understood={r.Understood}")));
         await Wait(3.5);
-        if (_n == 4)
-        {
-            // The planner reads «يرجع» as "step back"; the user edits step 2 by hand, as the dialog allows.
-            Caption("٢) تعديل الخطوة ٢ يدويًا: «يقف في وضع الاستعداد»");
-            dlg.EditStep(1, caption: "a person stands still");
-            await Wait(3.0);
-        }
 
         Caption("٣) التوليد");
         var t0 = Godot.Time.GetTicksMsec();
         _w.LastMotionApply = null;
         dlg.PressGenerate();
+        var f0 = Engine.GetFramesDrawn();
         var tw = 0.0;
-        while (_w.LastMotionApply is null && tw < 600) { await Wait(1.0 / 30); tw += 1.0 / 30; }
+        while (_w.LastMotionApply is null && tw < 3600)
+        {
+            await Wait(1.0 / 30); tw += 1.0 / 30;
+            if (provider == "kimodo" && Engine.GetFramesDrawn() - f0 == 30) Caption("٣) التوليد — …جاري التوليد (تم قص وقت الانتظار)");
+        }
+        GD.Print($"DEMO CUT {f0 + 30} {Engine.GetFramesDrawn()}"); // frames to drop from the video (Kimodo waiting time)
         GD.Print($"DEMO generation wall ms {Godot.Time.GetTicksMsec() - t0} provider={provider} applied={_w.LastMotionApply is not null}");
         await Wait(2.0);
 

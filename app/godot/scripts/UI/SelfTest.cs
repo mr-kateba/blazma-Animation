@@ -35,6 +35,7 @@ public partial class SelfTest : Node
         try
         {
             System.IO.Directory.CreateDirectory(_dir);
+            _w.GenerateDlg.AutoCloseAfterApply = false;
             await Frames(3);
             switch (_mode)
             {

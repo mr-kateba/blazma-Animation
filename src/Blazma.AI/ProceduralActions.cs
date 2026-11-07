@@ -48,11 +48,11 @@ public sealed partial class ProceduralMotionProvider
         var startle = Bump(Math.Clamp(u / 0.3, 0, 1), 0.3);                                     // flinch: crouch, shoulders up
         var look = Smooth((u - 0.1) / 0.22) * (1 - Smooth((u - 0.68) / 0.27)) * vary;          // turn and hold, then face forward
         var pelvis = new Vec3(0.01 * look, StandY - 0.035 * startle + 0.0015 * b, -0.01 * startle);
-        var hips = Ry(15 * look) * Rx(2 + 4 * startle);
+        var hips = Ry(22 * look) * Rx(2 + 4 * startle);
         Legs(fr, pelvis, hips, StanceAnkle(1, 0), Ry(6), StanceAnkle(-1, 0), Ry(-6));
-        fr.R[Spine1] = Ry(15 * look) * Rx(-1 + 4 * startle);
-        fr.R[Spine2] = Ry(20 * look);
-        fr.R[Chest] = Ry(20 * look) * Rx(-2 * b - 6 * startle);
+        fr.R[Spine1] = Ry(22 * look) * Rx(-1 + 4 * startle);
+        fr.R[Spine2] = Ry(30 * look);
+        fr.R[Chest] = Ry(30 * look) * Rx(-2 * b - 6 * startle);
         StabiliseHead(fr, Ry(140 * look) * Rx(-6 * startle + 3 * look));
         // Arms: pulled in and up with the flinch, the far arm follows the twist a little.
         ArmsDown(fr, -25 * startle + 3 * b, -25 * startle - 10 * look + 3 * b, 12 + 55 * startle, 12 + 55 * startle);

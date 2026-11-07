@@ -6,6 +6,20 @@ public class MotionPromptPlannerTests
 {
     static string[] Actions(MotionPlan p) => p.Segments.Select(s => s.Action ?? "?").ToArray();
 
+    [Theory]
+    [InlineData("يضرب لكمة قوية ثم يرجع لوضع الاستعداد", "punch,idle")]
+    [InlineData("يضرب ثم يرجع لوضعه", "punch,idle")]
+    [InlineData("يضرب ثم يستعد", "punch,idle")]
+    [InlineData("punch then returns to a ready stance", "punch,idle")]
+    [InlineData("kick then return to guard stance", "kick,idle")]
+    [InlineData("يمشي ثم يرجع ورا", "walk,step_back")]
+    public void ReturnToReadyStance_IsIdle_NotStepBack(string prompt, string expected)
+    {
+        var p = MotionPromptPlanner.Plan(prompt, 5);
+        Assert.Equal(expected, string.Join(",", Actions(p)));
+        Assert.All(p.Segments, s => Assert.True(s.Understood));
+    }
+
     [Fact]
     public void UsersSentence_IsLookBack_Run_Die_InOrder()
     {
