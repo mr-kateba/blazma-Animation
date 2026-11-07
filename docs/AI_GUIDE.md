@@ -53,6 +53,7 @@ Tips:
 
 - `motion_providers` says what is installed. Kimodo (local AI, body only: no fingers or face) works only after the user installed `kimodo-runner` and the model files; nothing is downloaded automatically. `provider: "procedural"` is a built-in keyword demo (walk, run, jump, wave, squat, idle), **not AI**.
 - `motion_generate {characterId, prompt, durationSeconds}` starts a background job and returns `jobId`; it does not change the project. Without Kimodo it fails with `provider_unavailable` (do not retry; tell the user, or use the procedural demo if that is what they want).
+- Multi-step prompts ("someone is behind you, run, then die", Arabic or English) are split into steps by an offline planner: each step is generated on its own and the steps are joined into ONE draft clip with a marker per step. Check the split first with `motion_plan_prompt {prompt, durationSeconds}`; pass `segments: [{text, durationSeconds?, caption?}]` to `motion_generate` for an explicit plan. The result's `plan` is the plan used; `motion_job_status` lists `segments` (text, caption, length, provider, device, state).
 - Poll `motion_job_status {jobId}` (headless: add `waitSeconds`). When `state` is `ready`, `motion_job_apply {jobId}` adds a **draft** clip (undoable) and returns `clipId`. Read the job's `warnings` (bones that are not driven).
 - Review and edit it like any clip (`anim_evaluate`, `key_set`, ...), then `clip_accept_draft {clipId}`; to discard it use `clip_delete`.
 

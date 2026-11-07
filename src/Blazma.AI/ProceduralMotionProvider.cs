@@ -12,7 +12,23 @@ public sealed partial class ProceduralMotionProvider : IMotionGenerationProvider
 {
     public const string ProviderId = "procedural";
 
-    enum Kind { Walk, Run, Jump, Wave, Squat, Idle, Attack }
+    enum Kind { Walk, Run, Jump, Wave, Squat, Idle, Attack, Die, Fall, LookBack, TurnAround, Stop }
+
+    /// <summary>Actions added for the prompt planner (D45): English words match whole words only, Arabic as substrings.</summary>
+    static readonly (Kind Kind, string[] Words)[] Actions =
+    {
+        (Kind.Die, new[] { "die", "dies", "dying", "died", "dead", "يموت", "موت", "مات" }),
+        (Kind.Fall, new[] { "fall", "falls", "falling", "fell", "collapse", "collapses", "يقع", "يطيح", "يسقط", "سقط" }),
+        (Kind.LookBack, new[] { "look back", "looks back", "looking back", "over their shoulder", "over his shoulder", "يلتفت", "التفت" }),
+        (Kind.TurnAround, new[] { "turn around", "turns around", "turning around", "turn", "turns", "يستدير", "يلف" }),
+    };
+
+    static readonly (Kind Kind, string[] Words)[] LateActions =
+    {
+        (Kind.Stop, new[] { "stop", "stops", "halt", "halts", "توقف", "وقف" }),
+        (Kind.Attack, new[] { "punch", "punches", "punching", "لكمه", "لكمة" }),
+        (Kind.Squat, new[] { "sit", "sits", "sit down", "sits down" }),
+    };
 
     static readonly (Kind Kind, string[] Words)[] Keywords =
     {
@@ -25,7 +41,7 @@ public sealed partial class ProceduralMotionProvider : IMotionGenerationProvider
         (Kind.Idle, new[] { "idle", "stand", "breath", "wait", "وقوف", "يقف", "انتظار", "ثبات" }),
     };
 
-    public static IReadOnlyList<string> SupportedKeywords => new[] { "walk", "run", "jump", "wave", "squat", "idle", "attack" };
+    public static IReadOnlyList<string> SupportedKeywords => new[] { "walk", "run", "jump", "wave", "squat", "idle", "attack", "punch", "turn around", "look back", "fall", "die", "stop" };
 
     public string Id => ProviderId;
 
@@ -34,7 +50,7 @@ public sealed partial class ProceduralMotionProvider : IMotionGenerationProvider
         new[]
         {
             "Deterministic keyword-based cycles for tests and offline demos; it does not understand free text.",
-            "Keywords: " + string.Join(", ", SupportedKeywords) + " (also Arabic: مشي، ركض، قفز، تلويح، قرفصاء، وقوف، هجوم).",
+            "Keywords: " + string.Join(", ", SupportedKeywords) + " (also Arabic: مشي، ركض، قفز، تلويح، قرفصاء، وقوف، هجوم، يلتفت، يلف، يقع، يموت، وقف).",
             "Body only (30 SOMA joints), like Kimodo: fingers and face are not animated.",
         });
 
@@ -58,8 +74,15 @@ public sealed partial class ProceduralMotionProvider : IMotionGenerationProvider
     static Kind? Classify(string prompt)
     {
         var p = prompt.ToLowerInvariant();
+        static bool Has(string p, string w) => w.Any(c => c > 127)
+            ? p.Contains(w, StringComparison.Ordinal)
+            : System.Text.RegularExpressions.Regex.IsMatch(p, @"(?<![a-z])" + System.Text.RegularExpressions.Regex.Escape(w) + "(?![a-z])");
+        foreach (var (kind, words) in Actions)
+            if (words.Any(w => Has(p, w))) return kind;
         foreach (var (kind, words) in Keywords)
             if (words.Any(w => p.Contains(w, StringComparison.Ordinal))) return kind;
+        foreach (var (kind, words) in LateActions)
+            if (words.Any(w => Has(p, w))) return kind;
         return null;
     }
 
@@ -141,6 +164,9 @@ public sealed partial class ProceduralMotionProvider : IMotionGenerationProvider
                 case Kind.Wave: Wave(f, t, vary, phase0); break;
                 case Kind.Squat: Squat(f, t / duration, vary); break;
                 case Kind.Attack: Attack(f, t, t / duration, vary, phase0); break;
+                case Kind.LookBack: LookBack(f, t, t / duration, vary, phase0); break;
+                case Kind.TurnAround: TurnAround(f, t, t / duration, vary, phase0); break;
+                case Kind.Fall or Kind.Die: Fall(f, t, t / duration, kind == Kind.Die, vary); break;
                 default: PlantedIdle(f, t, vary, phase0, loop ? duration : 0); break;
             }
             if (f.Absolute)

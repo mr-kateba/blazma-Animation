@@ -361,6 +361,14 @@ public partial class SelfTest : Node
             return;
         }
 
+        if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_PLAN") == "1")
+        {
+            // Development shortcut: only the motion prompt planner scenario (D45).
+            await RunPlan();
+            Finish();
+            return;
+        }
+
         if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_P8") == "1")
         {
             // Development shortcut: only the Phase 8 scenario (it starts from a new project).
@@ -386,6 +394,9 @@ public partial class SelfTest : Node
 
         // Phase 7: text-to-motion dialog, drafts, AI settings.
         if (WantPhase(7)) await RunPhase7();
+
+        // Motion prompt planner (D45): multi-step prompts in the Generate dialog.
+        if (WantPhase(7)) await RunPlan();
 
         if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_PHASES") is not null) { Finish(); return; }
 

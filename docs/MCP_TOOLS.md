@@ -77,7 +77,7 @@ No arguments.
 
 | Tool | Effect | Summary |
 |---|---|---|
-| [`ai_hardware`](#ai_hardware) | readonly | This PC's hardware for local AI (offline, read-only): OS, CPU threads, RAM, graphics cards (name, vendor, VRAM, integrated or discrete; Windows from the registry, Linux from sysfs, NVIDIA VRAM from nvidia-smi when installed), the best GPU, and which Kimodo package (light / standard / reference) and device fit it. |
+| [`ai_hardware`](#ai_hardware) | readonly | This PC's hardware for local AI (offline, read-only): OS, CPU threads, RAM, graphics cards (name, vendor, VRAM, integrated or discrete; Windows from the registry, Linux from sysfs, NVIDIA VRAM from nvidia-smi when installed), the best GPU, and which Kimodo package (light / standard / reference) and device fit it. kimodoDevices: the devices kimodo-runner itself listed when it last started (CUDA / Vulkan graphics cards and the CPU; null until it has run), and where the last generation ran. |
 | [`ai_models`](#ai_models) | readonly | The downloadable Kimodo model packages (tiers) with download size, licences, RAM/VRAM needs (estimates), whether each fits this PC, the recommended one, and whether it is installed in the configured models folder. Read-only. Downloading is NOT available to agents: only the user can start it, from Settings → AI after seeing the size and licences (DECISIONS D43). |
 | [`anim_evaluate`](#anim_evaluate) | readonly | The pose a clip produces at a frame (does not change anything). Returns per-bone rotation/position and the pose JSON. |
 | [`anim_pose_from_frame`](#anim_pose_from_frame) | mutating | Set the character's working pose to what the clip gives at a frame (undoable). |
@@ -127,10 +127,11 @@ No arguments.
 | [`marker_add`](#marker_add) | mutating | Add a named marker (optionally a key-pose phase) at a frame. Returns {markerId}. |
 | [`marker_delete`](#marker_delete) | mutating | Delete a marker. |
 | [`marker_update`](#marker_update) | mutating | Change a marker's frame, name and/or phase (at least one). |
-| [`motion_generate`](#motion_generate) | readonly | Start generating a motion from a text prompt for a character. Runs in the background and returns a jobId; it does not change the project. Poll motion.job_status, then call motion.job_apply to add the result as a DRAFT clip (undoable), review it, and keep it with clip.accept_draft (or remove it with clip.delete). Provider: kimodo (local AI, must be installed by the user) by default; 'procedural' is a built-in keyword demo (walk, run, jump, wave, squat, idle), not AI. Body only: fingers and face are not generated. |
+| [`motion_generate`](#motion_generate) | readonly | Start generating a motion from a text prompt for a character. Runs in the background and returns a jobId; it does not change the project. Poll motion.job_status, then call motion.job_apply to add the result as a DRAFT clip (undoable), review it, and keep it with clip.accept_draft (or remove it with clip.delete). Provider: kimodo (local AI, must be installed by the user) by default; 'procedural' is a built-in keyword demo (walk, run, jump, wave, squat, idle, turn around, look back, fall, die, stop, punch), not AI. Body only: fingers and face are not generated. Multi-step prompts ("someone is behind you, run, then die"; Arabic or English) are split into steps by the offline planner (see motion.plan_prompt); each step is generated separately (Kimodo gets an English caption per step) and the steps are joined into ONE draft clip with a marker per step. Pass 'segments' for an explicit plan. The result's 'plan' is the plan used. |
 | [`motion_job_apply`](#motion_job_apply) | mutating | Add a finished generation job's motion to the project as a new DRAFT clip (undoable; undo makes the job ready again). Returns clipId. Review it, edit keys, then clip.accept_draft. Fails with job_stale when the project was replaced, or the character was removed, re-rigged or its rig/humanoid mapping changed since the job started; with job_applied when it was already applied. |
 | [`motion_job_cancel`](#motion_job_cancel) | readonly | Cancel a running generation job you started (stops the Kimodo runner). Does not change the project. |
 | [`motion_job_status`](#motion_job_status) | readonly | State of a generation job (running, ready, failed, cancelled, applied) with progress, warnings and, once applied, its clipId. Without jobId: all jobs. Agents see only the jobs they started. Headless only: waitSeconds blocks until the job finishes (at most 25 s per call; call again to keep waiting). |
+| [`motion_plan_prompt`](#motion_plan_prompt) | readonly | Read-only: how motion.generate would split a prompt into steps, offline (no AI, no network): Arabic and English sequencing words (ثم، بعدين، وبعدها، then, after that…), punctuation and «و»/'and' between two different actions; per-step English caption, action, length (from 'for 3 seconds' / «لمدة 3 ثواني» or per-action defaults scaled to durationSeconds), and whether each step was understood (Arabic that is not understood should be rephrased). |
 | [`motion_providers`](#motion_providers) | readonly | List the motion generation providers and diagnostics: is kimodo-runner configured and found, are the model files there, CPU/RAM/GPU (best effort, offline). Never downloads anything. Agents see file names and found flags, not absolute paths. |
 | [`physics_analyze`](#physics_analyze) | readonly | Balance analysis of a clip, frame by frame: centre of mass (COM), foot contacts, support polygon (convex hull of the touching sole points, XZ), signed margin of the tested point to the polygon (inside positive, metres) and balanced/unbalanced/airborne. Returns {summary:{unbalancedRanges…}, frames:[…]}. Does not change anything. |
 | [`physics_auto_balance`](#physics_auto_balance) | mutating | Move the COM inside the support polygon (by 'margin') on unbalanced frames by shifting the hips horizontally; supporting feet stay planted (legs re-solved with IK). Keys the pelvis translation (and leg rotations of unpinned supporting legs) on corrected frames; every other frame keeps exactly its original pose (frames between the surrounding original keys are keyed with their original values). Refuses (no_leg_ik / track_locked / track_muted) when a supporting foot could not stay planted, unless allowFootSlide. At most 5000 frames and 200,000 keys (too_large). One undo step. Returns before/after margins per frame. |
@@ -184,7 +185,7 @@ No arguments.
 
 ### `ai_hardware`
 
-This PC's hardware for local AI (offline, read-only): OS, CPU threads, RAM, graphics cards (name, vendor, VRAM, integrated or discrete; Windows from the registry, Linux from sysfs, NVIDIA VRAM from nvidia-smi when installed), the best GPU, and which Kimodo package (light / standard / reference) and device fit it.
+This PC's hardware for local AI (offline, read-only): OS, CPU threads, RAM, graphics cards (name, vendor, VRAM, integrated or discrete; Windows from the registry, Linux from sysfs, NVIDIA VRAM from nvidia-smi when installed), the best GPU, and which Kimodo package (light / standard / reference) and device fit it. kimodoDevices: the devices kimodo-runner itself listed when it last started (CUDA / Vulkan graphics cards and the CPU; null until it has run), and where the last generation ran.
 
 Effect: **readonly**. Command id: `ai.hardware`.
 
@@ -871,7 +872,7 @@ Effect: **mutating**. Command id: `marker.update`.
 
 ### `motion_generate`
 
-Start generating a motion from a text prompt for a character. Runs in the background and returns a jobId; it does not change the project. Poll motion.job_status, then call motion.job_apply to add the result as a DRAFT clip (undoable), review it, and keep it with clip.accept_draft (or remove it with clip.delete). Provider: kimodo (local AI, must be installed by the user) by default; 'procedural' is a built-in keyword demo (walk, run, jump, wave, squat, idle), not AI. Body only: fingers and face are not generated.
+Start generating a motion from a text prompt for a character. Runs in the background and returns a jobId; it does not change the project. Poll motion.job_status, then call motion.job_apply to add the result as a DRAFT clip (undoable), review it, and keep it with clip.accept_draft (or remove it with clip.delete). Provider: kimodo (local AI, must be installed by the user) by default; 'procedural' is a built-in keyword demo (walk, run, jump, wave, squat, idle, turn around, look back, fall, die, stop, punch), not AI. Body only: fingers and face are not generated. Multi-step prompts ("someone is behind you, run, then die"; Arabic or English) are split into steps by the offline planner (see motion.plan_prompt); each step is generated separately (Kimodo gets an English caption per step) and the steps are joined into ONE draft clip with a marker per step. Pass 'segments' for an explicit plan. The result's 'plan' is the plan used.
 
 Effect: **readonly**. Command id: `motion.generate`.
 
@@ -888,6 +889,7 @@ Effect: **readonly**. Command id: `motion.generate`.
 | `reduceKeys` | boolean | no | Remove keys that linear interpolation reproduces within 0.1° / 0.5 mm (default true). |
 | `loop` | boolean | no | Ask for a loopable motion (procedural only; Kimodo ignores constraints). |
 | `inPlace` | boolean | no | Remove travel (procedural only). |
+| `segments` | array | no | Optional explicit plan (at most 12 steps, in order): [{text, durationSeconds?, caption?}]. text may be Arabic or English (translated offline); caption overrides the English caption sent to Kimodo; steps without durationSeconds share the rest of durationSeconds. |
 
 ### `motion_job_apply`
 
@@ -920,6 +922,17 @@ Effect: **readonly**. Command id: `motion.job_status`.
 |---|---|---|---|
 | `jobId` | string | no | Job id from motion.generate (omit to list all jobs). (min length 1) |
 | `waitSeconds` | number | no | Wait up to this long for the job to finish (headless mode only, capped at 25 s; ignored in the app). |
+
+### `motion_plan_prompt`
+
+Read-only: how motion.generate would split a prompt into steps, offline (no AI, no network): Arabic and English sequencing words (ثم، بعدين، وبعدها، then, after that…), punctuation and «و»/'and' between two different actions; per-step English caption, action, length (from 'for 3 seconds' / «لمدة 3 ثواني» or per-action defaults scaled to durationSeconds), and whether each step was understood (Arabic that is not understood should be rephrased).
+
+Effect: **readonly**. Command id: `motion.plan_prompt`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | string | yes | The prompt (Arabic or English). (min length 1) |
+| `durationSeconds` | number | yes | Total length to share among the steps (0.2–30). |
 
 ### `motion_providers`
 

@@ -77,6 +77,7 @@ public static partial class AiText
         "decode" => T("Decoding the motion"),
         "encode" or "text" => T("Reading the prompt"),
         "retarget" => T("Fitting the motion to the character"),
+        "assemble" => T("Joining the steps"),
         "done" => T("Finishing"),
         "ready" => T("Ready"),
         "applied" => T("Added to the project"),

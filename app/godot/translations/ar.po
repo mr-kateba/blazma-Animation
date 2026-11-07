@@ -3792,3 +3792,51 @@ msgstr "وُلِّدت على: المعالج (CPU)"
 
 msgid "The graphics card path failed, so Kimodo fell back to another device. Details: {0}"
 msgstr "فشل التشغيل على بطاقة الرسوميات، فانتقل Kimodo تلقائيًا إلى جهاز آخر. التفاصيل: {0}"
+
+msgid "Steps"
+msgstr "الخطوات"
+
+msgid "Your words"
+msgstr "كلماتك"
+
+msgid "Sent to the generator"
+msgstr "ما يُرسَل إلى المولّد"
+
+msgid "Understood"
+msgstr "مفهومة"
+
+msgid "Not understood"
+msgstr "غير مفهومة"
+
+msgid "Edited"
+msgstr "معدّلة"
+
+msgid "As written (English)"
+msgstr "كما كُتبت (إنجليزي)"
+
+msgid "One step, {0}"
+msgstr "خطوة واحدة، {0}"
+
+msgid "{0} steps, total {1}"
+msgstr "{0} خطوات، المجموع {1}"
+
+msgid "Each step is generated separately and joined into one clip, in this order. You can edit the English text and the length of each step."
+msgstr "تُولَّد كل خطوة وحدها ثم تُدمج في مقطع واحد بهذا الترتيب. يمكنك تعديل النص الإنجليزي ومدة كل خطوة."
+
+msgid "Some steps were not understood. Rephrase them in the prompt, or type what the character should do in English in the step's box."
+msgstr "بعض الخطوات لم تُفهم. أعد صياغتها في الوصف، أو اكتب بالإنجليزية ما يجب أن تفعله الشخصية في خانة الخطوة."
+
+msgid "The English text the generator receives for this step. Kimodo understands English motion descriptions best."
+msgstr "النص الإنجليزي الذي يستلمه المولّد لهذه الخطوة. يفهم Kimodo أوصاف الحركة بالإنجليزية أفضل."
+
+msgid "Step {0} of {1}"
+msgstr "الخطوة {0} من {1}"
+
+msgid "Joining the steps"
+msgstr "دمج الخطوات"
+
+msgid "Steps in the clip:"
+msgstr "الخطوات في المقطع:"
+
+msgid "Plan a motion prompt"
+msgstr "تخطيط وصف الحركة"

@@ -6,6 +6,7 @@ using Blazma.Core.Ids;
 using Blazma.Core.Model;
 using Blazma.Core.Persistence;
 using Blazma.Core.Timing;
+using Blazma.Motion;
 
 namespace Blazma.Commands;
 
@@ -32,6 +33,12 @@ public sealed record MotionJobSnapshot(
 {
     public bool IsFinished => State is not MotionJobState.Running;
 
+    /// <summary>The steps of a planned (multi-step) job, in order; empty for a single-prompt job.</summary>
+    public IReadOnlyList<MotionJobSegment> Segments { get; init; } = Array.Empty<MotionJobSegment>();
+
+    /// <summary>0-based step being generated (planned jobs while running), else null.</summary>
+    public int? CurrentSegment { get; init; }
+
     /// <summary>Who started the job ("ui", "mcp:&lt;session&gt;", "test"); null when it was started without an origin.</summary>
     public string? Owner { get; init; }
 
@@ -54,6 +61,30 @@ public sealed record MotionJobSnapshot(
         ["created"] = Created.ToString("O", CultureInfo.InvariantCulture),
         ["finished"] = Finished?.ToString("O", CultureInfo.InvariantCulture),
         ["owner"] = Owner,
+        ["segments"] = new JsonArray(Segments.Select(x => (JsonNode?)x.ToJson()).ToArray()),
+        ["currentSegment"] = CurrentSegment,
+    };
+}
+
+/// <summary>One step of a planned generation: the user's words, what was sent to the provider and how long it is (DECISIONS D45).</summary>
+/// <param name="Prompt">Text sent to the provider (English caption for Kimodo, a keyword for the procedural generator).</param>
+public sealed record MotionJobPart(string Text, string Prompt, double DurationSeconds, string? Action = null, bool Understood = true);
+
+/// <summary>State of one step of a planned job. <paramref name="Device"/>: where Kimodo generated it ("generatedOn"), when known.</summary>
+public sealed record MotionJobSegment(int Index, string Text, string Caption, double DurationSeconds, string Provider, string? Action, bool Understood,
+    string State, string? Device)
+{
+    public JsonObject ToJson() => new()
+    {
+        ["index"] = Index,
+        ["text"] = Text,
+        ["caption"] = Caption,
+        ["durationSeconds"] = Math.Round(DurationSeconds, 3),
+        ["provider"] = Provider,
+        ["action"] = Action,
+        ["understood"] = Understood,
+        ["state"] = State,
+        ["device"] = Device,
     };
 }
 
@@ -103,7 +134,12 @@ public sealed class MotionJobService : IDisposable
         public int? Frames;
         public DateTimeOffset Created;
         public DateTimeOffset? Finished;
+        public List<MotionJobSegment> Segments = new();
+        public int? CurrentSegment;
     }
+
+    /// <summary>Cross-fade between the steps of a planned job (seconds; shorter for very short steps).</summary>
+    public const double StepBlendSeconds = 0.3;
 
     public const int MaxRunningJobs = 4;
 
@@ -202,7 +238,24 @@ public sealed class MotionJobService : IDisposable
     /// <summary>Starts a job owned by <paramref name="owner"/> for <paramref name="projectId"/>. <paramref name="rigSnapshot"/> must be a
     /// private copy (it is used on a worker thread).</summary>
     public MotionJobSnapshot Start(IMotionGenerationProvider provider, MotionRequest request, Rig rigSnapshot, ObjectId characterId, RetargetOptions options,
-        CommandOrigin? owner, ObjectId? projectId)
+        CommandOrigin? owner, ObjectId? projectId) => StartCore(provider, request, null, rigSnapshot, characterId, options, owner, projectId);
+
+    /// <summary>
+    /// Starts a planned job (DECISIONS D45): every part is generated as its own provider request (in order, seed + index), retargeted, then
+    /// the parts are assembled with the clip-sequence machinery (root continuity and facing, <see cref="StepBlendSeconds"/> cross-fades,
+    /// foot-phase matching between two gait steps) and baked into ONE draft clip with a marker per step. One part = <see cref="Start(IMotionGenerationProvider, MotionRequest, Rig, ObjectId, RetargetOptions, CommandOrigin?, ObjectId?)"/>
+    /// with that part's prompt. <paramref name="request"/> gives fps, seed and constraints; its prompt and length are the whole job's.
+    /// </summary>
+    public MotionJobSnapshot StartPlan(IMotionGenerationProvider provider, MotionRequest request, IReadOnlyList<MotionJobPart> parts, Rig rigSnapshot,
+        ObjectId characterId, RetargetOptions options, CommandOrigin? owner = null, ObjectId? projectId = null)
+    {
+        if (parts.Count == 0) throw new ArgumentException("A plan needs at least one part.", nameof(parts));
+        if (parts.Count == 1) return StartCore(provider, request with { Prompt = parts[0].Prompt }, null, rigSnapshot, characterId, options, owner, projectId);
+        return StartCore(provider, request, parts, rigSnapshot, characterId, options, owner, projectId);
+    }
+
+    MotionJobSnapshot StartCore(IMotionGenerationProvider provider, MotionRequest request, IReadOnlyList<MotionJobPart>? parts, Rig rigSnapshot, ObjectId characterId,
+        RetargetOptions options, CommandOrigin? owner, ObjectId? projectId)
     {
         Job job;
         lock (_lock)
@@ -217,13 +270,15 @@ public sealed class MotionJobService : IDisposable
                 CharacterId = characterId.ToString(), ClipName = options.Name, RigId = rigSnapshot.Id, RigFingerprint = RigFingerprint(rigSnapshot),
                 Owner = owner, ProjectId = projectId, Created = Clock.GetUtcNow(),
             };
+            if (parts is not null)
+                job.Segments = parts.Select((x, i) => new MotionJobSegment(i, x.Text, x.Prompt, x.DurationSeconds, provider.Id, x.Action, x.Understood, "pending", null)).ToList();
             _jobs.Add(job);
         }
-        _ = Task.Run(() => RunAsync(job, provider, request, rigSnapshot, options));
+        _ = Task.Run(() => RunAsync(job, provider, request, parts, rigSnapshot, options));
         return Snapshot(job);
     }
 
-    async Task RunAsync(Job job, IMotionGenerationProvider provider, MotionRequest request, Rig rig, RetargetOptions options)
+    async Task RunAsync(Job job, IMotionGenerationProvider provider, MotionRequest request, IReadOnlyList<MotionJobPart>? parts, Rig rig, RetargetOptions options)
     {
         var lastReported = -1.0;
         var lastStage = "";
@@ -243,6 +298,24 @@ public sealed class MotionJobService : IDisposable
         });
         try
         {
+            if (parts is not null)
+            {
+                var (clip, warnings, message) = await RunPartsAsync(job, provider, request, parts, rig, options, progress).ConfigureAwait(false);
+                lock (_lock)
+                {
+                    if (job.State != MotionJobState.Running) return;
+                    if (job.CancelRequested || job.Cts.IsCancellationRequested) { Finish(job, MotionJobState.Cancelled, null, "Cancelled."); return; }
+                    job.Result = clip;
+                    job.Frames = (int)clip.DurationFrames;
+                    job.Warnings = warnings;
+                    job.State = MotionJobState.Ready;
+                    job.Stage = "ready";
+                    job.Progress = 1;
+                    job.CurrentSegment = null;
+                    job.Message = message;
+                }
+                return;
+            }
             var motion = await provider.GenerateAsync(request, progress, job.Cts.Token).ConfigureAwait(false);
             job.Cts.Token.ThrowIfCancellationRequested();
             progress.Report(new GenerationProgress("retarget", 1, "converting to the character"));
@@ -288,6 +361,114 @@ public sealed class MotionJobService : IDisposable
             Raise(job); // before waiters are released: whoever waited for the job has also seen its final event
             job.Done.TrySetResult();
         }
+    }
+
+    /// <summary>Generates every part in order, retargets each, then assembles and bakes them into one draft clip.</summary>
+    async Task<(Clip Clip, List<string> Warnings, string Message)> RunPartsAsync(Job job, IMotionGenerationProvider provider, MotionRequest request,
+        IReadOnlyList<MotionJobPart> parts, Rig rig, RetargetOptions options, IProgress<GenerationProgress> progress)
+    {
+        var ct = job.Cts.Token;
+        var n = parts.Count;
+        var blend = Math.Min(StepBlendSeconds, 0.5 * parts.Min(x => x.DurationSeconds));
+        var clips = new List<Clip>();
+        var warnings = new List<string>();
+        if (request.Constraints is { Loop: true }) warnings.Add("Loop was ignored: a motion made of several steps does not loop.");
+        string? lastDevice = null;
+        for (var i = 0; i < n; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var part = parts[i];
+            var index = i;
+            SetSegment(job, i, "generating", null);
+            var length = Math.Clamp(part.DurationSeconds + (i < n - 1 ? blend : 0), MotionRequest.MinDurationSeconds, MotionRequest.MaxDurationSeconds);
+            var req = request with
+            {
+                Prompt = part.Prompt, DurationSeconds = length, Seed = unchecked(request.Seed + (ulong)i),
+                Constraints = request.Constraints is { } c ? c with { Loop = false } : null,
+            };
+            var step = new SyncProgress(p => progress.Report(new GenerationProgress(p.Stage, (index + 0.9 * Math.Clamp(p.Fraction, 0, 1)) / n,
+                $"{index + 1}/{n}: {part.Prompt}" + (p.Message is { Length: > 0 } m ? " · " + m : ""))));
+            MotionResult motion;
+            try { motion = await provider.GenerateAsync(req, step, ct).ConfigureAwait(false); }
+            catch (MotionGenerationException e) { throw new MotionGenerationException(e.Code, $"Step {i + 1} (\"{part.Text}\"): {e.Message}", e); }
+            ct.ThrowIfCancellationRequested();
+            progress.Report(new GenerationProgress("retarget", (i + 0.95) / n, $"{i + 1}/{n}: converting to the character"));
+            var r = MotionRetargeter.Retarget(motion, rig, options with
+            {
+                ClipId = ObjectId.New(), Name = StepName(i, part.Text), ReduceKeys = false, Cyclic = false, Metadata = new Dictionary<string, string>(),
+            });
+            clips.Add(r.Clip);
+            foreach (var w in r.Warnings) if (!warnings.Contains(w)) warnings.Add(w);
+            var device = motion.Metadata.GetValueOrDefault("kimodo.generatedOn");
+            lastDevice = device ?? lastDevice;
+            SetSegment(job, i, "done", device);
+        }
+        ct.ThrowIfCancellationRequested();
+        progress.Report(new GenerationProgress("assemble", 1, $"joining {n} steps"));
+        var clip = Assemble(rig, clips, parts, options, blend, warnings);
+        clip.Metadata["source.provider"] = provider.Id;
+        clip.Metadata["segments"] = n.ToString(CultureInfo.InvariantCulture);
+        for (var i = 0; i < n; i++)
+            clip.Metadata[$"segment.{i + 1}"] = $"{parts[i].Text} → {parts[i].Prompt} ({parts[i].DurationSeconds.ToString("0.##", CultureInfo.InvariantCulture)} s)";
+        if (lastDevice is not null) clip.Metadata["kimodo.generatedOn"] = lastDevice;
+        var message = $"{clip.DurationFrames} frames from {n} steps: {string.Join(" → ", parts.Select(x => x.Action ?? x.Prompt))}.";
+        return (clip, warnings, message);
+    }
+
+    internal static string StepName(int index, string text)
+    {
+        text = string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        if (text.Length > 40) text = text[..39] + "…";
+        return $"{index + 1}. {text}";
+    }
+
+    static bool IsGait(string? action) => action is "walk" or "run" or "sprint";
+
+    /// <summary>The step clips placed one after another as a clip sequence (root and facing continue, cross-fades, foot phase matched
+    /// between two gait steps), baked into one draft clip with the job's id, name and metadata.</summary>
+    static Clip Assemble(Rig rig, List<Clip> clips, IReadOnlyList<MotionJobPart> parts, RetargetOptions options, double blend, List<string> warnings)
+    {
+        var p = new Project();
+        p.Rigs.Add(rig);
+        var ch = new Character { Name = "Generated", Rig = rig.Id };
+        p.Characters.Add(ch);
+        p.Clips.AddRange(clips);
+        var fps = options.Fps.FramesPerSecond;
+        var seq = new ClipSequence { Name = options.Name, Character = ch.Id, Fps = options.Fps, AlignRoot = true, AlignYaw = true };
+        var blendFrames = (long)Math.Round(blend * fps);
+        for (var i = 0; i < clips.Count; i++)
+        {
+            var item = new SequenceItem { Clip = clips[i].Id, BlendInFrames = i == 0 ? 0 : blendFrames, BlendCurve = BlendCurve.Smooth };
+            if (i > 0)
+            {
+                var ev = new SequenceEvaluator(p, seq);
+                item.StartFrame = Math.Max(0, (long)Math.Round(ev.EndSeconds * fps) - blendFrames);
+                if (IsGait(parts[i - 1].Action) && IsGait(parts[i].Action))
+                {
+                    var to = Math.Min(clips[i].DurationFrames - 2, (long)Math.Round(clips[i].Fps.FramesPerSecond * 0.6));
+                    if (to > 0 && ev.MatchFootPhase(item.StartFrame, clips[i], 0, to, 1) is long best) item.InFrame = best;
+                }
+            }
+            seq.Items.Add(item);
+        }
+        var diags = new List<Diagnostic>();
+        var clip = BakeSequence.Bake(p, seq, new SequenceEvaluator(p, seq), options.Name, options.ReduceKeys, false, diags, out _);
+        foreach (var d in diags) if (!warnings.Contains(d.Message)) warnings.Add(d.Message);
+        clip.Id = options.ClipId;
+        clip.IsDraft = true;
+        clip.Metadata = new Dictionary<string, string>(options.Metadata);
+        return clip;
+    }
+
+    void SetSegment(Job job, int index, string state, string? device)
+    {
+        lock (_lock)
+        {
+            if (index >= job.Segments.Count) return;
+            job.Segments[index] = job.Segments[index] with { State = state, Device = device ?? job.Segments[index].Device };
+            job.CurrentSegment = state == "generating" ? index : job.CurrentSegment;
+        }
+        Raise(job);
     }
 
     /// <summary>Sets a final state if the job is still running (caller holds the lock).</summary>
@@ -453,7 +634,10 @@ public sealed class MotionJobService : IDisposable
     {
         lock (_lock)
             return new MotionJobSnapshot(j.Id, j.Provider, j.Prompt, j.Seed, j.CharacterId, j.ClipName, j.State, j.Stage, j.Progress,
-                j.ErrorCode, j.Message, j.Warnings.ToList(), j.ClipId, j.Frames, j.Created, j.Finished) { Owner = j.Owner?.ToString() };
+                j.ErrorCode, j.Message, j.Warnings.ToList(), j.ClipId, j.Frames, j.Created, j.Finished)
+            {
+                Owner = j.Owner?.ToString(), Segments = j.Segments.ToList(), CurrentSegment = j.State == MotionJobState.Running ? j.CurrentSegment : null,
+            };
     }
 
     void Raise(Job job)
@@ -517,7 +701,9 @@ public static class AICommands
         r.Register(new("motion.generate",
             "Start generating a motion from a text prompt for a character. Runs in the background and returns a jobId; it does not change the project. " +
             "Poll motion.job_status, then call motion.job_apply to add the result as a DRAFT clip (undoable), review it, and keep it with clip.accept_draft (or remove it with clip.delete). " +
-            "Provider: kimodo (local AI, must be installed by the user) by default; 'procedural' is a built-in keyword demo (walk, run, jump, wave, squat, idle), not AI. Body only: fingers and face are not generated.",
+            "Provider: kimodo (local AI, must be installed by the user) by default; 'procedural' is a built-in keyword demo (walk, run, jump, wave, squat, idle, turn around, look back, fall, die, stop, punch), not AI. Body only: fingers and face are not generated. " +
+            "Multi-step prompts (\"someone is behind you, run, then die\"; Arabic or English) are split into steps by the offline planner (see motion.plan_prompt); each step is generated " +
+            "separately (Kimodo gets an English caption per step) and the steps are joined into ONE draft clip with a marker per step. Pass 'segments' for an explicit plan. The result's 'plan' is the plan used.",
             CommandEffect.ReadOnly,
             S.Of(S.Str("characterId", "Character to animate (its rig must be humanoid-mapped).", true),
                  S.Str("prompt", "What the character should do, e.g. \"a person walks forward\".", true),
@@ -529,11 +715,38 @@ public static class AICommands
                  S.Bool("footCleanup", "Pin feet during ground contact (default true).", false),
                  S.Bool("reduceKeys", "Remove keys that linear interpolation reproduces within 0.1° / 0.5 mm (default true).", false),
                  S.Bool("loop", "Ask for a loopable motion (procedural only; Kimodo ignores constraints).", false),
-                 S.Bool("inPlace", "Remove travel (procedural only).", false)),
+                 S.Bool("inPlace", "Remove travel (procedural only).", false),
+                 ("segments", new JsonObject
+                 {
+                     ["type"] = "array",
+                     ["description"] = $"Optional explicit plan (at most {MotionPromptPlanner.MaxSegments} steps, in order): [{{text, durationSeconds?, caption?}}]. text may be Arabic or English " +
+                         "(translated offline); caption overrides the English caption sent to Kimodo; steps without durationSeconds share the rest of durationSeconds.",
+                     ["items"] = new JsonObject
+                     {
+                         ["type"] = "object",
+                         ["properties"] = new JsonObject
+                         {
+                             ["text"] = new JsonObject { ["type"] = "string" }, ["durationSeconds"] = new JsonObject { ["type"] = "number" }, ["caption"] = new JsonObject { ["type"] = "string" },
+                         },
+                         ["required"] = new JsonArray("text"),
+                     },
+                 }, false)),
             a => new GenerateMotion(jobs, S.Id(a, "characterId"), S.Text(a, "prompt"), S.Number(a, "durationSeconds"),
                 Args.OptLong(a, "fps"), a["seed"] is null ? null : (ulong)Math.Max(0, Args.OptLong(a, "seed") ?? 0),
                 ((string?)a["provider"])?.Trim().ToLowerInvariant(), S.OptName(a, "name"),
-                (bool?)a["footCleanup"] ?? true, (bool?)a["reduceKeys"] ?? true, (bool?)a["loop"] ?? false, (bool?)a["inPlace"] ?? false)));
+                (bool?)a["footCleanup"] ?? true, (bool?)a["reduceKeys"] ?? true, (bool?)a["loop"] ?? false, (bool?)a["inPlace"] ?? false)
+            {
+                Segments = ParseSegments(a["segments"]),
+            }));
+
+        r.Register(new("motion.plan_prompt",
+            "Read-only: how motion.generate would split a prompt into steps, offline (no AI, no network): Arabic and English sequencing words (ثم، بعدين، وبعدها، then, after that…), " +
+            "punctuation and «و»/'and' between two different actions; per-step English caption, action, length (from 'for 3 seconds' / «لمدة 3 ثواني» or per-action defaults scaled to " +
+            "durationSeconds), and whether each step was understood (Arabic that is not understood should be rephrased).",
+            CommandEffect.ReadOnly,
+            S.Of(S.Str("prompt", "The prompt (Arabic or English).", true),
+                 S.Num("durationSeconds", $"Total length to share among the steps ({MotionRequest.MinDurationSeconds}–{MotionRequest.MaxDurationSeconds}).", true)),
+            a => new PlanMotionPrompt(S.Text(a, "prompt"), S.Number(a, "durationSeconds"))));
 
         r.Register(new("motion.job_status",
             "State of a generation job (running, ready, failed, cancelled, applied) with progress, warnings and, once applied, its clipId. Without jobId: all jobs. " +
@@ -559,6 +772,61 @@ public static class AICommands
             S.Of(S.Str("clipId", "Draft clip id.", true)),
             a => new AcceptDraft(S.Id(a, "clipId"))));
     }
+
+    /// <summary>Parses motion.generate's 'segments' argument (null when absent).</summary>
+    internal static List<SegmentInput>? ParseSegments(JsonNode? node)
+    {
+        if (node is null) return null;
+        if (node is not JsonArray arr || arr.Count == 0) throw new CommandException("invalid_args", "'segments' must be a non-empty array of {text, durationSeconds?, caption?}.");
+        if (arr.Count > MotionPromptPlanner.MaxSegments) throw new CommandException("invalid_args", $"'segments' has more than {MotionPromptPlanner.MaxSegments} steps.");
+        var list = new List<SegmentInput>();
+        foreach (var item in arr)
+        {
+            if (item is not JsonObject o) throw new CommandException("invalid_args", "Each segment must be an object {text, durationSeconds?, caption?}.");
+            foreach (var (k, _) in o)
+                if (k is not ("text" or "durationSeconds" or "caption")) throw new CommandException("invalid_args", $"Unknown segment field '{k}'.");
+            static string? Str(JsonNode? n, string key) =>
+                n is null ? null : n is JsonValue v && v.TryGetValue<string>(out var t) ? t.Trim() : throw new CommandException("invalid_args", $"Segment '{key}' must be a string.");
+            var text = Str(o["text"], "text");
+            if (string.IsNullOrEmpty(text)) throw new CommandException("invalid_args", "Each segment needs a non-empty 'text'.");
+            var caption = Str(o["caption"], "caption");
+            if (text.Length > MotionRequest.MaxPromptLength || caption?.Length > MotionRequest.MaxPromptLength)
+                throw new CommandException("invalid_args", $"A segment text is too long (max {MotionRequest.MaxPromptLength} characters).");
+            double? seconds = null;
+            if (o["durationSeconds"] is { } dn)
+            {
+                if (dn is not JsonValue dv || !SchemaValidator.TryGetNumber(dv, out var d) || !double.IsFinite(d)
+                    || d < MotionRequest.MinDurationSeconds || d > MotionRequest.MaxDurationSeconds)
+                    throw new CommandException("invalid_args", $"Segment durationSeconds must be between {MotionRequest.MinDurationSeconds} and {MotionRequest.MaxDurationSeconds}.");
+                seconds = d;
+            }
+            list.Add(new SegmentInput(text, seconds, string.IsNullOrEmpty(caption) ? null : caption));
+        }
+        return list;
+    }
+
+    /// <summary>A plan as JSON (motion.plan_prompt, and motion.generate's 'plan').</summary>
+    public static JsonObject PlanJson(MotionPlan plan) => new()
+    {
+        ["prompt"] = plan.Prompt,
+        ["totalSeconds"] = plan.TotalSeconds,
+        ["segmentCount"] = plan.Segments.Count,
+        ["allUnderstood"] = plan.AllUnderstood,
+        ["segments"] = new JsonArray(plan.Segments.Select(x => (JsonNode?)new JsonObject
+        {
+            ["index"] = x.Index,
+            ["text"] = x.Text,
+            ["caption"] = x.Caption,
+            ["action"] = x.Action,
+            ["durationSeconds"] = x.DurationSeconds,
+            ["durationExplicit"] = x.DurationExplicit,
+            ["understood"] = x.Understood,
+            ["language"] = x.IsArabic ? "ar" : "en",
+            ["procedural"] = x.ProceduralPrompt,
+            ["unrecognized"] = new JsonArray(x.Unrecognized.Select(w => (JsonNode?)w).ToArray()),
+        }).ToArray()),
+        ["warnings"] = new JsonArray(plan.Warnings.Select(w => (JsonNode?)w).ToArray()),
+    };
 
     internal static JsonObject DescribeProvider(ProviderDiagnostics d)
     {
@@ -761,6 +1029,9 @@ public sealed class GenerateMotion(MotionJobService jobs, ObjectId characterId, 
     public string Label => "Generate motion";
     public CommandOrigin? Origin { get; set; }
 
+    /// <summary>Explicit plan (agents' 'segments', the dialog's edited plan); null = plan the prompt.</summary>
+    public IReadOnlyList<SegmentInput>? Segments { get; init; }
+
     public CommandOutcome Execute(Project project)
     {
         var (character, rig) = PoseCommands.Resolve(project, characterId);
@@ -769,11 +1040,25 @@ public sealed class GenerateMotion(MotionJobService jobs, ObjectId characterId, 
         if (fps is > 240) throw new CommandException("invalid_args", "'fps' must be between 1 and 240.");
         var rate = fps is long f ? new FrameRate((int)f) : project.Settings.DefaultFrameRate;
         var actualSeed = seed ?? (ulong)Random.Shared.NextInt64(0, int.MaxValue);
-        var request = new MotionRequest(prompt, durationSeconds, rate.FramesPerSecond, actualSeed,
+        try { new MotionRequest(prompt, durationSeconds, rate.FramesPerSecond, actualSeed).Validate(); }
+        catch (MotionGenerationException e) { throw new CommandException("invalid_args", e.Message); }
+        var plan = Segments is null ? MotionPromptPlanner.Plan(prompt, durationSeconds) : MotionPromptPlanner.FromSegments(Segments, durationSeconds);
+        var multi = plan.Segments.Count > 1;
+        var total = multi ? plan.TotalSeconds : durationSeconds;
+        var request = new MotionRequest(prompt, total, rate.FramesPerSecond, actualSeed,
             loop || inPlace ? new MotionConstraints { Loop = loop, InPlace = inPlace } : null);
         try { request.Validate(); }
         catch (MotionGenerationException e) { throw new CommandException("invalid_args", e.Message); }
         var p = jobs.Resolve(provider);
+        var procedural = p.Id == ProceduralMotionProvider.ProviderId;
+        string Sent(MotionSegmentPlan x) => procedural ? x.ProceduralPrompt ?? x.Caption : x.Caption;
+        var parts = new List<MotionJobPart>();
+        if (multi)
+            parts.AddRange(plan.Segments.Select(x => new MotionJobPart(x.Text, Sent(x), x.DurationSeconds, x.Action, x.Understood)));
+        else if (plan.Segments.Count == 1 && (Segments is not null || plan.Segments[0] is { IsArabic: true, Understood: true }))
+            parts.Add(new MotionJobPart(plan.Segments[0].Text, Sent(plan.Segments[0]), total, plan.Segments[0].Action));
+        else
+            parts.Add(new MotionJobPart(prompt, prompt, total)); // a single English step: the prompt as written, as before the planner
 
         var clipName = name ?? (p.Id == ProceduralMotionProvider.ProviderId ? "Procedural: " : "AI: ") + Shorten(prompt, 40);
         // The worker thread gets its own copy of the rig: the project is only touched on the session thread.
@@ -790,14 +1075,16 @@ public sealed class GenerateMotion(MotionJobService jobs, ObjectId characterId, 
                 ["provider"] = p.Id,
                 ["prompt"] = prompt,
                 ["seed"] = actualSeed.ToString(CultureInfo.InvariantCulture),
-                ["durationSeconds"] = durationSeconds.ToString(CultureInfo.InvariantCulture),
+                ["durationSeconds"] = total.ToString(CultureInfo.InvariantCulture),
                 ["character"] = character.Name,
             },
         };
-        var job = jobs.Start(p, request, rigCopy, characterId, options, Origin ?? CommandOrigin.Ui, project.Id);
+        if (parts[0].Prompt != prompt && !multi) options.Metadata["caption"] = parts[0].Prompt;
+        var job = jobs.StartPlan(p, request, parts, rigCopy, characterId, options, Origin ?? CommandOrigin.Ui, project.Id);
         var data = job.ToJson();
+        data["plan"] = AICommands.PlanJson(plan);
         data["next"] = "Poll motion.job_status {jobId}; when state is 'ready' call motion.job_apply {jobId}.";
-        var warnings = new List<Diagnostic>();
+        var warnings = plan.Warnings.Select(w => new Diagnostic("plan", w)).ToList();
         if (p.Id == ProceduralMotionProvider.ProviderId)
             warnings.Add(new Diagnostic("procedural", "Procedural provider: a keyword-based demo cycle, not AI generation."));
         return new CommandOutcome(Array.Empty<Change>(), data, warnings);
@@ -940,4 +1227,22 @@ public sealed class AcceptDraft(ObjectId clipId) : ClipEdit(clipId)
         clip.Metadata["acceptedUtc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
         return new JsonObject { ["clipId"] = clip.Id.ToString(), ["isDraft"] = false };
     }
+}
+
+public sealed class PlanMotionPrompt(string prompt, double durationSeconds) : ICommand
+{
+    public string Id => "motion.plan_prompt";
+    public CommandEffect Effect => CommandEffect.ReadOnly;
+    public string Label => "Plan a motion prompt";
+
+    public CommandOutcome Execute(Project project)
+    {
+        if (prompt.Length > MotionRequest.MaxPromptLength) throw new CommandException("invalid_args", $"The prompt is too long (max {MotionRequest.MaxPromptLength} characters).");
+        if (!double.IsFinite(durationSeconds) || durationSeconds < MotionRequest.MinDurationSeconds || durationSeconds > MotionRequest.MaxDurationSeconds)
+            throw new CommandException("invalid_args", $"durationSeconds must be between {MotionRequest.MinDurationSeconds} and {MotionRequest.MaxDurationSeconds}.");
+        var plan = MotionPromptPlanner.Plan(prompt, durationSeconds);
+        return new CommandOutcome(Array.Empty<Change>(), AICommands.PlanJson(plan), plan.Warnings.Select(w => new Diagnostic("plan", w)).ToList());
+    }
+
+    public IReadOnlyList<Change> Undo(Project project) => Array.Empty<Change>();
 }
