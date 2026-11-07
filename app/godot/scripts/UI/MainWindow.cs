@@ -128,6 +128,7 @@ public partial class MainWindow : Control
         OpenStartupProject();
         var selfTest = SelfTest.TryCreate(this);
         if (selfTest is not null) AddChild(selfTest);
+        else if (Demo.TryCreate(this) is { } demo) AddChild(demo);
     }
 
     public override void _Process(double delta)
