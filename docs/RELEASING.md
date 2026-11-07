@@ -57,3 +57,7 @@ scripts/release-smoke.sh 0.9.0
 - `gh release create v0.9.0 build/release/0.9.0/* --title "Blazma Animation 0.9.0" --notes-file build/release/0.9.0/RELEASE_NOTES-0.9.0.md --prerelease`
 - أو شغّل workflow **Release** يدويًا (Actions ← Release ← Run workflow) مع الإصدار؛ يستدعي نفس `scripts/build-release.sh` ويرفع المخرجات
   كـ artifact، ويُنشئ الـ Release إذا فعّلت `publish`. (يستهلك دقائق Actions؛ الطريقة المحلية مجانية.)
+
+## وقت تشغيل VC++ في المثبّت
+
+عند وجود Windows kimodo-runner ينزّل `build-release.sh` الملف `vc_redist.x64.exe` مرة واحدة إلى `build/cache` من `https://aka.ms/vs/17/release/vc_redist.x64.exe` ويتحقق من توقيع Microsoft بـ `osslsigncode verify` (`apt-get install -y osslsigncode`)؛ بدونه يطبع تحذيرًا مع SHA-256 للتوثيق اليدوي. يُضمَّن في المثبّت فقط (لا في مجلد التطبيق ولا في الـzip؛ الـzip فيه `README-VC_REDIST.txt`)، ويفحص `release-smoke.sh` وجوده عبر `7z l`. الإشعار: `packaging/legal/MSVC_REDIST_NOTICE.txt`.

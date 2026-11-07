@@ -21,6 +21,9 @@ SetCompressor /SOLID lzma
 !ifndef OUTFILE
   !define OUTFILE "BlazmaAnimation-${VERSION}-setup.exe"
 !endif
+!ifndef VCREDIST
+  !define VCREDIST ""
+!endif
 !ifndef REPO
   !define REPO "..\.."
 !endif
@@ -78,6 +81,8 @@ LangString MSG_RUNNING ${LANG_ENGLISH} "${APPNAME} (or one of its AI tools, blaz
 LangString MSG_RUNNING ${LANG_ARABIC} "${APPNAME} (أو إحدى أدواته blazma-mcp / blazma-anim) يعمل الآن.$\r$\nاحفظ عملك وأغلقه ثم اضغط إعادة المحاولة."
 LangString MSG_MODELS ${LANG_ENGLISH} "Also delete the downloaded AI models?$\r$\n$\r$\n$1 MB in $\"${MODELSDIR}$\"$\r$\n$\r$\nKeep them (No) if you plan to reinstall; they can also be downloaded again later."
 LangString MSG_MODELS ${LANG_ARABIC} "هل تريد حذف نماذج الذكاء الاصطناعي التي نُزِّلت أيضًا؟$\r$\n$\r$\n$1 ميغابايت في $\"${MODELSDIR}$\"$\r$\n$\r$\nأبقِها (لا) إن كنت ستعيد التثبيت؛ ويمكن تنزيلها مجددًا لاحقًا."
+LangString MSG_VCRT ${LANG_ENGLISH} "The Microsoft Visual C++ runtime was not installed (administrator approval was declined or setup failed).$\r$\nThe app works, but AI motion generation (Kimodo) needs it. Install it from https://aka.ms/vs/17/release/vc_redist.x64.exe"
+LangString MSG_VCRT ${LANG_ARABIC} "لم يُثبَّت Microsoft Visual C++ runtime (رُفضت صلاحية المدير أو فشل التثبيت).$\r$\nيعمل البرنامج، لكن توليد الحركة بالذكاء الاصطناعي (Kimodo) يحتاجه. ثبّته من https://aka.ms/vs/17/release/vc_redist.x64.exe"
 
 ; Asks until the app and its tools are closed (Retry) or the user gives up (Cancel). $0 is clobbered.
 !macro WAIT_UNTIL_CLOSED UN
@@ -146,6 +151,61 @@ Section "${APPNAME} (required)" SecApp
   WriteRegDWORD HKCU "${UNINSTKEY}" "NoModify" 1
   WriteRegDWORD HKCU "${UNINSTKEY}" "NoRepair" 1
 SectionEnd
+
+; Microsoft Visual C++ 2015-2022 x64 runtime (needed by tools\kimodo\kimodo-runner.exe: MSVCP140 / VCRUNTIME140 / VCRUNTIME140_1).
+; Installed only when missing or older than 14.40; only this step asks for administrator rights (UAC via ShellExecute "runas"),
+; everything else stays per-user. Declining keeps the install working; only AI generation needs the runtime.
+!if "${VCREDIST}" != ""
+Function VCRuntimeOK ; pushes 1 if installed (>= 14.40) in either registry view, else 0
+  Push $0
+  Push $1
+  Push $2
+  StrCpy $2 0
+  SetRegView 64
+  Call VCCheckView
+  SetRegView 32
+  Call VCCheckView
+  SetRegView 32
+  Pop $2
+  Pop $1
+  Pop $0
+  Push $2
+FunctionEnd
+Function VCCheckView ; sets $2 to 1 when the current view has a new enough runtime
+  ReadRegDWORD $0 HKLM "SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" "Installed"
+  ${If} $0 == 1
+    ReadRegDWORD $0 HKLM "SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" "Major"
+    ReadRegDWORD $1 HKLM "SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" "Minor"
+    ${If} $0 > 14
+      StrCpy $2 1
+    ${ElseIf} $0 == 14
+      ${If} $1 >= 40
+        StrCpy $2 1
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
+FunctionEnd
+
+Section "-vcruntime"
+  Call VCRuntimeOK
+  Pop $0
+  ${If} $0 == 1
+    DetailPrint "Visual C++ runtime already installed"
+  ${Else}
+    DetailPrint "Installing the Microsoft Visual C++ runtime (administrator approval required)..."
+    InitPluginsDir
+    File "/oname=$PLUGINSDIR\vc_redist.x64.exe" "${VCREDIST}"
+    ClearErrors
+    ExecShellWait "runas" "$PLUGINSDIR\vc_redist.x64.exe" "/install /quiet /norestart" SW_HIDE
+    Call VCRuntimeOK
+    Pop $0
+    ${If} $0 != 1
+      MessageBox MB_OK|MB_ICONEXCLAMATION "$(MSG_VCRT)" /SD IDOK
+    ${EndIf}
+    Delete "$PLUGINSDIR\vc_redist.x64.exe"
+  ${EndIf}
+SectionEnd
+!endif
 
 Section "Associate .blazanim files" SecAssoc
   WriteRegStr HKCU "Software\Classes\.blazanim" "" "${PROGID}"

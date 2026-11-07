@@ -1,0 +1,10 @@
+Microsoft Visual C++ Redistributable (vc_redist.x64.exe)
+
+The Windows installer (not the portable zip, not the installed app folder) carries the unmodified, Microsoft-signed
+"Microsoft Visual C++ 2015-2022 Redistributable (x64)" downloaded from https://aka.ms/vs/17/release/vc_redist.x64.exe.
+It is installed only when the runtime is missing, because tools\kimodo\kimodo-runner.exe and its GGML libraries are
+built with MSVC and need MSVCP140.dll, VCRUNTIME140.dll and VCRUNTIME140_1.dll.
+
+Microsoft permits redistribution of this package under the Visual Studio redistributable terms
+(https://visualstudio.microsoft.com/license-terms/). Its own licence terms are shown by its setup and apply to it;
+Microsoft is the copyright holder. Blazma Animation does not modify it.

@@ -48,3 +48,5 @@ Blazma's local text-to-motion runner (`ai/kimodo`, built by the manual `kimodo-r
 No model weights are shipped. The Kimodo models the user downloads from Hugging Face inside the app carry their own
 licences (NVIDIA Open Model License for the SOMA motion model; Meta Llama 3 Community License for the text encoder,
 "Built with Meta Llama 3"); their licence and NOTICE files are downloaded next to the models.
+
+- Microsoft Visual C++ Redistributable (installer only, installed if missing): see legal/MSVC_REDIST_NOTICE.txt

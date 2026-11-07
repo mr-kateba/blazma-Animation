@@ -149,3 +149,10 @@ certutil -hashfile BlazmaAnimation-<الإصدار>-setup.exe SHA256
 ```
 
 أدوات الذكاء الاصطناعي (`blazma-mcp.exe` و`blazma-anim.exe`) داخل مجلد `tools` في كلا النسختين. بناء الإصدارات بنفسك: `docs/RELEASING.md`.
+
+## وقت تشغيل Visual C++ (لتوليد الحركة Kimodo)
+
+`kimodo-runner.exe` مبني بـ MSVC ويحتاج Microsoft Visual C++ 2015–2022 x64 Runtime (الملفات MSVCP140.dll وVCRUNTIME140.dll وVCRUNTIME140_1.dll). الخطأ «MSVCP140.dll was not found» يعني غيابه.
+
+- **المثبّت:** يتحقق من وجوده (الإصدار 14.40 فأعلى) ويثبّت `vc_redist.x64.exe` الرسمي المضمَّن بصمت إن لم يكن موجودًا؛ تُطلب موافقة المدير (UAC) لهذه الخطوة فقط، وبقية التثبيت للمستخدم الحالي. عند الرفض يكتمل التثبيت ويعمل البرنامج، لكن توليد الحركة بالذكاء الاصطناعي يحتاج الـruntime.
+- **النسخة المحمولة:** ثبّته يدويًا مرة واحدة (يحتاج صلاحيات مدير): <https://aka.ms/vs/17/release/vc_redist.x64.exe> (التعليمات أيضًا في `README-VC_REDIST.txt` داخل الـzip).

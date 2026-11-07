@@ -63,6 +63,8 @@ if command -v 7z >/dev/null; then
   if [ -f "$D/kimodo-runner-$V-win64.zip" ]; then
     grep -q "kimodo-runner.exe" "$T/setup-list.txt" && ok "installer payload has tools/kimodo/kimodo-runner.exe" || bad "runner staged but missing from the installer"
     grep -q "ggml-vulkan.dll" "$T/setup-list.txt" && grep -q "ggml-cpu-x64.dll" "$T/setup-list.txt" && ok "installer payload has the GGML backends" || bad "installer payload lacks ggml-vulkan.dll / ggml-cpu-*.dll"
+    grep -q "vc_redist.x64.exe" "$T/setup-list.txt" && ok "installer payload has vc_redist.x64.exe (VC++ runtime)" || bad "installer payload lacks vc_redist.x64.exe"
+    unzip -l "$D/BlazmaAnimation-$V-win64.zip" | grep -q "vc_redist" && bad "vc_redist.x64.exe must not be in the portable zip" || ok "portable zip has no vc_redist.x64.exe"
   fi
 else
   echo "  SKIP  7z not installed: installer payload not listed (portable.txt absence and runner not checked; apt-get install -y p7zip-full)"

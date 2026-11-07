@@ -109,6 +109,24 @@ if [ $SKIP_LINUX = 0 ]; then
   chmod +x "$WORK/tools-linux/blazma-mcp" "$WORK/tools-linux/blazma-anim"
 fi
 
+# ---------------------------------------------------------------- 3a. VC++ runtime (installer only; kimodo-runner.exe is built with MSVC)
+VCREDIST=""
+fetch_vcredist() {
+  VCREDIST="$CACHE/vc_redist.x64.exe"
+  if [ ! -f "$VCREDIST" ]; then
+    curl -fL --retry 3 -o "$VCREDIST.part" https://aka.ms/vs/17/release/vc_redist.x64.exe || die "vc_redist.x64.exe download failed"
+    mv "$VCREDIST.part" "$VCREDIST"
+  fi
+  [ "$(head -c2 "$VCREDIST")" = MZ ] || { rm -f "$VCREDIST"; die "vc_redist.x64.exe is not a PE file"; }
+  if command -v osslsigncode >/dev/null; then
+    osslsigncode verify -in "$VCREDIST" 2>&1 | tee "$WORK/vcredist-verify.txt" | tail -3
+    grep -q "Microsoft" "$WORK/vcredist-verify.txt" && grep -qi "succeeded" "$WORK/vcredist-verify.txt" \
+      || { rm -f "$VCREDIST"; die "vc_redist.x64.exe is not validly signed by Microsoft"; }
+  else
+    echo "WARNING: osslsigncode not installed (apt-get install -y osslsigncode) — signature NOT verified. SHA-256: $(sha256sum "$VCREDIST" | cut -d' ' -f1)"
+  fi
+}
+
 # ---------------------------------------------------------------- 3b. optional kimodo-runner (never model weights)
 stage_runner() { # source (dir or zip), exe name, dest-dir → copies runner + libraries, checks SHA256SUMS.txt if present
   local src="$1" exe="$2" dst="$3" tmp
@@ -159,6 +177,7 @@ cp "$WORK/win/BlazmaAnimation.exe" "$WORK/win/BlazmaAnimation.pck" "$WSTAGE/"
 cp -r "$WIN_DATA" "$WSTAGE/"; find "$WSTAGE" -name '*.pdb' -delete
 mkdir -p "$WSTAGE/tools"; cp "$WORK/tools-win/blazma-mcp.exe" "$WORK/tools-win/blazma-anim.exe" "$WSTAGE/tools/"
 if [ $HAVE_RUNNER_WIN = 1 ]; then
+  log "VC++ runtime for the installer"; fetch_vcredist
   cp -r "$WORK/runner-win" "$WSTAGE/tools/kimodo"
   (cd "$WORK" && rm -rf "kimodo-runner-$VERSION-win64" && cp -r runner-win "kimodo-runner-$VERSION-win64" && zip -q -r -9 -X "$OUT/kimodo-runner-$VERSION-win64.zip" "kimodo-runner-$VERSION-win64")
 fi
@@ -171,8 +190,15 @@ Portable mode marker. While this file sits next to BlazmaAnimation.exe, settings
 are kept in the "userdata" folder next to the exe instead of %APPDATA%\BlazmaAnimation.
 Delete this file to use the normal per-user folder.
 TXT
+if [ $HAVE_RUNNER_WIN = 1 ]; then cat > "$WSTAGE/README-VC_REDIST.txt" <<'TXT'
+AI motion generation (tools\kimodo\kimodo-runner.exe) needs the Microsoft Visual C++ 2015-2022 x64 runtime.
+If you see "MSVCP140.dll was not found", install it once (needs administrator rights):
+  https://aka.ms/vs/17/release/vc_redist.x64.exe
+(the installer BlazmaAnimation-<version>-setup.exe does this for you). The rest of the app does not need it.
+TXT
+fi
 (cd "$WORK/stage" && zip -q -r -9 -X "$OUT/$WINNAME.zip" "$WINNAME")
-rm "$WSTAGE/portable.txt"
+rm "$WSTAGE/portable.txt"; rm -f "$WSTAGE/README-VC_REDIST.txt"
 
 if [ $SKIP_INSTALLER = 0 ]; then
   log "Windows installer (NSIS)"
@@ -181,7 +207,7 @@ if [ $SKIP_INSTALLER = 0 ]; then
   { find "$WSTAGE" -mindepth 1 -maxdepth 1 -type f -printf 'Delete "$INSTDIR\\%f"\n'
     find "$WSTAGE" -mindepth 1 -maxdepth 1 -type d -printf 'RMDir /r "$INSTDIR\\%f"\n'; } | sort > "$UNLIST"
   grep -q portable.txt "$UNLIST" && die "portable.txt must not be in the installer payload"
-  makensis -V2 -DVERSION="$VERSION" -DNUMVER="$NUMVER" -DSRCDIR="$WSTAGE" -DREPO="$ROOT" -DUNINSTLIST="$UNLIST" \
+  makensis -V2 -DVERSION="$VERSION" -DNUMVER="$NUMVER" -DSRCDIR="$WSTAGE" -DREPO="$ROOT" -DUNINSTLIST="$UNLIST" ${VCREDIST:+-DVCREDIST="$VCREDIST"} \
     -DOUTFILE="$OUT/BlazmaAnimation-$VERSION-setup.exe" "$ROOT/packaging/windows/installer.nsi" || die "makensis failed"
 fi
 
