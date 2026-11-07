@@ -37,8 +37,10 @@ internal sealed class RunnerProcess : IDisposable
         _stdin = process.StandardInput.BaseStream;
         ProcessId = process.Id;
         _ = Task.Run(ReadStdoutAsync);
-        _ = Task.Run(ReadStderrAsync);
+        _stderrDone = Task.Run(ReadStderrAsync);
     }
+
+    readonly Task _stderrDone;
 
     public int ProcessId { get; }
     public bool HasExited { get { try { return _process.HasExited; } catch (InvalidOperationException) { return true; } } }
@@ -199,8 +201,16 @@ internal sealed class RunnerProcess : IDisposable
     MotionGenerationException Crashed(string what, Exception? inner = null)
     {
         string code = "";
-        try { if (_process.WaitForExit(2000)) code = $" (exit code {_process.ExitCode})"; }
-        catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+        try
+        {
+            if (_process.WaitForExit(2000))
+            {
+                code = $" (exit code {_process.ExitCode})";
+                // The process is gone, so stderr reaches end of input shortly: let its last lines arrive.
+                _stderrDone.Wait(1000);
+            }
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException) { }
         var tail = StderrTail();
         return new MotionGenerationException("runner_crashed",
             $"{what}{code}." + (tail.Length > 0 ? $" Last log lines:\n{tail}" : ""), inner);
