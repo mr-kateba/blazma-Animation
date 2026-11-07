@@ -259,9 +259,10 @@ jobs:
           r=ai/kimodo/build/bin/kimodo-runner
           printf 'GGUF' > dummy.gguf
           # frames beyond 32 bits and fractional frames are rejected (they used to wrap / truncate); so is an unknown device
-          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"generate","params":{"prompt":"w","frames":4294967396,"motionModel":"x","textModel":"x"}}' \
-                        '{"jsonrpc":"2.0","id":2,"method":"generate","params":{"prompt":"w","frames":30.5,"motionModel":"x","textModel":"x"}}' \
-                        '{"jsonrpc":"2.0","id":3,"method":"generate","params":{"prompt":"w","frames":30,"device":"turbo","motionModel":"x","textModel":"x"}}' \
+          # (stdin stays open a moment: end of input during a generate request ends the runner at once, by design)
+          { printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"generate","params":{"prompt":"w","frames":4294967396,"motionModel":"x","textModel":"x"}}' \
+                          '{"jsonrpc":"2.0","id":2,"method":"generate","params":{"prompt":"w","frames":30.5,"motionModel":"x","textModel":"x"}}' \
+                          '{"jsonrpc":"2.0","id":3,"method":"generate","params":{"prompt":"w","frames":30,"device":"turbo","motionModel":"x","textModel":"x"}}'; sleep 2; } \
             | $r --stdio | tee val.txt
           test "$(grep -c '"code":"invalid_request"' val.txt)" = 3
           # no GPU: "gpu" and "hybrid" fail with device_unavailable, "cpu" reaches the model loader
