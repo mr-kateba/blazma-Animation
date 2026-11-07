@@ -54,6 +54,8 @@ public sealed class AppSettings
     public string KimodoModels { get; set; } = "";
     /// <summary>auto | cpu | vulkan</summary>
     public string KimodoDevice { get; set; } = "auto";
+    /// <summary>Text encoder file chosen by the model installer (empty = pick the best one found in the folder).</summary>
+    public string KimodoTextModel { get; set; } = "";
     /// <summary>Longest a single Kimodo generation may take (0 = the default of 15 minutes).</summary>
     public int KimodoTimeoutSeconds { get; set; }
 
@@ -93,6 +95,7 @@ public sealed class AppSettings
         AgentReadRoots.AddRange((string[])cfg.GetValue("agent", "read_roots", Array.Empty<string>()));
         KimodoRunner = (string)cfg.GetValue("ai", "kimodo_runner", KimodoRunner);
         KimodoModels = (string)cfg.GetValue("ai", "kimodo_models", KimodoModels);
+        KimodoTextModel = (string)cfg.GetValue("ai", "kimodo_text_model", KimodoTextModel);
         KimodoDevice = (string)cfg.GetValue("ai", "kimodo_device", KimodoDevice) is var dev && (dev == "cpu" || dev == "vulkan") ? dev : "auto";
         KimodoTimeoutSeconds = Math.Clamp((int)cfg.GetValue("ai", "kimodo_timeout_seconds", KimodoTimeoutSeconds), 0, 24 * 3600);
         if (cfg.HasSection("layout"))
@@ -131,6 +134,7 @@ public sealed class AppSettings
         cfg.SetValue("ai", "kimodo_runner", KimodoRunner);
         cfg.SetValue("ai", "kimodo_models", KimodoModels);
         cfg.SetValue("ai", "kimodo_device", KimodoDevice);
+        cfg.SetValue("ai", "kimodo_text_model", KimodoTextModel);
         cfg.SetValue("ai", "kimodo_timeout_seconds", KimodoTimeoutSeconds);
         foreach (var (k, v) in Layout) cfg.SetValue("layout", k, v);
         System.IO.Directory.CreateDirectory(AppPaths.UserDir);

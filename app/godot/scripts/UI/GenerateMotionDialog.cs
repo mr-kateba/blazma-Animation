@@ -25,6 +25,7 @@ public partial class GenerateMotionDialog : ConfirmationDialog
     public SpinBox Seed { get; } = new() { MinValue = 0, MaxValue = int.MaxValue, Step = 1, Rounded = true };
     public Button RandomSeed { get; } = new() { Text = "Random", FocusMode = Control.FocusModeEnum.None, TooltipText = "Pick a new random seed. The same prompt and seed give the same motion." };
     public OptionButton Provider { get; } = new() { FitToLongestItem = false, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+    public Button DownloadModel { get; } = new() { Text = "Download AI model…", FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
     public Button Setup { get; } = new() { Text = "AI settings…", FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
     public Button CancelJob { get; } = new() { Text = "Cancel generation", FocusMode = Control.FocusModeEnum.None };
     readonly Label _providerNote = W.Label("", "Dim", false);
@@ -111,6 +112,7 @@ public partial class GenerateMotionDialog : ConfirmationDialog
         providerBox.AddChild(_providerBadge);
         providerBox.AddChild(_providerNote);
         providerBox.AddChild(_keywords);
+        providerBox.AddChild(DownloadModel);
         providerBox.AddChild(Setup);
         root.AddChild(providerBox);
 
@@ -141,6 +143,7 @@ public partial class GenerateMotionDialog : ConfirmationDialog
         Prompt.TextChanged += UpdateButtons;
         Character.ItemSelected += _ => UpdateButtons();
         Setup.Pressed += () => _host.OpenAiSettings();
+        DownloadModel.Pressed += () => { Hide(); _host.OpenAiModels(); };
         CancelJob.Pressed += CancelRunning;
         Confirmed += () => Generate();
         CloseRequested += Hide;
@@ -179,6 +182,13 @@ public partial class GenerateMotionDialog : ConfirmationDialog
     public override void _Notification(int what)
     {
         if (what == NotificationTranslationChanged && IsNodeReady() && Visible) { RefreshProvider(); Show(_snap); }
+    }
+
+    /// <summary>The AI models window installed or closed: re-read whether Kimodo is available.</summary>
+    public void NotifyModelsChanged()
+    {
+        RefreshProvider();
+        UpdateButtons();
     }
 
     void OnSettings()
@@ -237,6 +247,7 @@ public partial class GenerateMotionDialog : ConfirmationDialog
         Provider.SetItemText(0, MotionProviderAvailable(AiText.KimodoId) ? Tr("Kimodo (local AI)") : Tr("Kimodo (local AI) — not installed"));
         _keywords.Visible = !kimodo;
         Setup.Visible = kimodo && info is { Available: false };
+        DownloadModel.Visible = Setup.Visible;
         _noteReason = info?.UnavailableReason;
         if (kimodo)
         {

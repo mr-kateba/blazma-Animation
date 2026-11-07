@@ -333,6 +333,14 @@ public partial class SelfTest : Node
             return;
         }
 
+        if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_MODELS") == "1")
+        {
+            // Development shortcut: only the AI models scenario.
+            await RunModels();
+            Finish();
+            return;
+        }
+
         if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_P9") == "1")
         {
             // Development shortcut: only the Phase 9 scenario (it starts from a new project).
@@ -366,6 +374,9 @@ public partial class SelfTest : Node
 
         // Phase 7: text-to-motion dialog, drafts, AI settings.
         await RunPhase7();
+
+        // AI models window: hardware, recommendation, licences, download against a local fake server.
+        await RunModels();
 
         // Phase 8: templates, retarget, foot lock, sequences, props.
         await RunPhase8();

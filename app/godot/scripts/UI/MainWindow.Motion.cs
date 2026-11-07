@@ -15,10 +15,11 @@ public sealed record MotionApplyInfo(string JobId, string ClipId, string ClipNam
 /// </summary>
 public partial class MainWindow
 {
-    const int MGenMotion = 93, MAiSettings = 94, MAcceptDraft = 95, MDiscardDraft = 96;
+    const int MGenMotion = 93, MAiSettings = 94, MAcceptDraft = 95, MDiscardDraft = 96, MAiModels = 98;
 
     public GenerateMotionDialog GenerateDlg { get; private set; } = null!;
     public AiSettingsDialog AiSettingsDlg { get; private set; } = null!;
+    public AiModelsDialog AiModelsDlg { get; private set; } = null!;
     public MotionApplyInfo? LastMotionApply { get; set; }
     public string? LastMotionApplyError { get; private set; }
 
@@ -28,6 +29,8 @@ public partial class MainWindow
         AddChild(GenerateDlg);
         AiSettingsDlg = new AiSettingsDialog(this);
         AddChild(AiSettingsDlg);
+        AiModelsDlg = new AiModelsDialog(this);
+        AddChild(AiModelsDlg);
     }
 
     void BuildMotionMenu()
@@ -38,7 +41,11 @@ public partial class MainWindow
         _mAnim.AddItem("Discard Draft", MDiscardDraft);
     }
 
-    void BuildMotionSettingsMenu() => _mSettings.AddItem("Motion Generation (AI)…", MAiSettings);
+    void BuildMotionSettingsMenu()
+    {
+        _mSettings.AddItem("Motion Generation (AI)…", MAiSettings);
+        _mSettings.AddItem("AI Models…", MAiModels);
+    }
 
     void OnMotionMenu(int id)
     {
@@ -46,6 +53,7 @@ public partial class MainWindow
         {
             case MGenMotion: OpenGenerateDialog(); break;
             case MAiSettings: OpenAiSettings(); break;
+            case MAiModels: OpenAiModels(); break;
             case MAcceptDraft: if (SelectedClip is { IsDraft: true } a) AcceptDraft(a.Id.ToString()); break;
             case MDiscardDraft: if (SelectedClip is { IsDraft: true } d) DiscardDraft(d.Id.ToString()); break;
         }
@@ -73,6 +81,12 @@ public partial class MainWindow
         }
         Inspector.Flush();
         GenerateDlg.Open();
+    }
+
+    public void OpenAiModels()
+    {
+        if (AiModelsDlg.Visible) return;
+        AiModelsDlg.Open();
     }
 
     public void OpenAiSettings()

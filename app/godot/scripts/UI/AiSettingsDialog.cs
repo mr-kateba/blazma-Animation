@@ -24,6 +24,8 @@ public partial class AiSettingsDialog : ConfirmationDialog
     public TextEdit LogBox { get; } = new() { Editable = false, Visible = false, CustomMinimumSize = new Vector2(0, 130), ThemeTypeVariation = "", AutoTranslateMode = AutoTranslateModeEnum.Disabled, TextDirection = Control.TextDirection.Ltr, WrapMode = TextEdit.LineWrappingMode.Boundary };
     readonly Button _browseRunner = new() { Text = "Browse…", FocusMode = Control.FocusModeEnum.None };
     readonly Button _browseModels = new() { Text = "Browse…", FocusMode = Control.FocusModeEnum.None };
+    public Button ModelsButton { get; } = new() { Text = "Download AI model…", FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
+    readonly Label _gpuLine = W.Label("", null, false);
     readonly Button _guide = new() { Text = "Open the install guide", FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
     readonly Label _runnerLine = W.Label("", null, false);
     readonly Label _modelsLine = W.Label("", null, false);
@@ -43,6 +45,7 @@ public partial class AiSettingsDialog : ConfirmationDialog
     public KimodoCheckResult? LastCheck { get; private set; }
     public string RunnerLineText => _runnerLine.Text;
     public string ModelsLineText => _modelsLine.Text;
+    public string GpuText => _gpuLine.Text;
     public string HardwareText => _hardware.Text;
     public string NotesText => _notes.Text;
     public bool IsOpen => Visible;
@@ -70,6 +73,7 @@ public partial class AiSettingsDialog : ConfirmationDialog
         var help = W.Label("Manual install steps are in the file docs/AI_INTEGRATION.md (sections 4 and 5) inside the Blazma folder: build or copy kimodo-runner, download the model files from their official pages, read their licences, then pick them below.", "Faint");
         Wrap(help);
         root.AddChild(help);
+        root.AddChild(ModelsButton);
         root.AddChild(_guide);
 
         var grid = new GridContainer { Columns = 2 };
@@ -103,7 +107,9 @@ public partial class AiSettingsDialog : ConfirmationDialog
         root.AddChild(StatusRow(_modelsDot, _modelsLine));
         Wrap(_hardware); Wrap(_notes);
         _hardware.TextDirection = Control.TextDirection.Auto;
+        Wrap(_gpuLine); _gpuLine.TextDirection = Control.TextDirection.Auto;
         root.AddChild(_hardware);
+        root.AddChild(_gpuLine);
         root.AddChild(_notes);
 
         root.AddChild(new HSeparator());
@@ -121,6 +127,7 @@ public partial class AiSettingsDialog : ConfirmationDialog
         _browseRunner.Pressed += () => { _runnerPicker.Title = Tr("Choose the Kimodo runner"); _runnerPicker.PopupCenteredRatio(0.6f); };
         _browseModels.Pressed += () => { _modelsPicker.Title = Tr("Choose the folder with the Kimodo model files"); _modelsPicker.PopupCenteredRatio(0.6f); };
         _guide.Pressed += OpenGuide;
+        ModelsButton.Pressed += () => { Hide(); _host.OpenAiModels(); };
         CheckButton.Pressed += () => RunCheck();
         LogToggle.Pressed += () => { _logOpen = !_logOpen; SyncLog(); };
         RunnerEdit.TextChanged += _ => Edited();
@@ -256,6 +263,10 @@ public partial class AiSettingsDialog : ConfirmationDialog
             : string.Join("; ", hw.Gpus.Select(g => g.VramBytes is { } v ? $"{g.Name} ({AiText.Bytes(v)})" : g.Name));
         _hardware.Text = string.Format(CultureInfo.InvariantCulture, Tr("This computer: {0} CPU cores, {1} RAM, GPU: {2}"),
             AiText.Ltr(hw.LogicalCpus.ToString(CultureInfo.InvariantCulture)), AiText.Ltr(AiText.Bytes(hw.TotalRamBytes)), AiText.Ltr(gpus));
+        var g = hw.BestGpu;
+        _gpuLine.Text = g is null ? Tr("No dedicated GPU detected: Kimodo will run on the processor.")
+            : string.Format(CultureInfo.InvariantCulture, g.Integrated == true ? Tr("Recognised graphics: {0} (built into the processor, shares system memory)") : Tr("Recognised graphics card: {0}, video memory {1}"),
+                AiText.Ltr(g.Name), AiText.Ltr(g.VramBytes is { } v ? AiModelsDialog.Size(v) : Tr("unknown")));
     }
 
     // ---- check --------------------------------------------------------------------------------------------------------

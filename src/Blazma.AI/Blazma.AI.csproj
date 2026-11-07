@@ -16,5 +16,7 @@
   <ItemGroup>
     <!-- Protocol/environment helpers are unit-tested directly. -->
     <InternalsVisibleTo Include="Blazma.Tests" />
+    <!-- The UI self-test points the downloader at a local fake server (plain http on loopback, see ModelDownloaderOptions.AllowLoopbackHttp). -->
+    <InternalsVisibleTo Include="Blazma.UI" />
   </ItemGroup>
 </Project>

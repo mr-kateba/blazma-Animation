@@ -86,6 +86,7 @@ public partial class AppController
         var s = KimodoSettings.FromEnvironment();
         if (Settings.KimodoRunner.Length > 0) s = s with { RunnerPath = Settings.KimodoRunner };
         if (Settings.KimodoModels.Length > 0) s = s with { ModelDirectory = Settings.KimodoModels };
+        if (Settings.KimodoTextModel.Length > 0) s = s with { TextModel = Settings.KimodoTextModel };
         if (Settings.KimodoDevice != "auto") s = s with { Device = Settings.KimodoDevice };
         if (Settings.KimodoTimeoutSeconds > 0) s = s with { GenerateTimeout = TimeSpan.FromSeconds(Settings.KimodoTimeoutSeconds) };
         return s;
@@ -99,9 +100,26 @@ public partial class AppController
     public void SetKimodoSettings(string runner, string models, string device, int timeoutSeconds)
     {
         Settings.KimodoRunner = runner.Trim();
+        // A text encoder chosen by the installer belongs to its folder: another folder means "find the best file there".
+        if (!string.Equals(Settings.KimodoModels, models.Trim(), StringComparison.Ordinal)) Settings.KimodoTextModel = "";
         Settings.KimodoModels = models.Trim();
         Settings.KimodoDevice = device is "cpu" or "vulkan" ? device : "auto";
         Settings.KimodoTimeoutSeconds = Math.Clamp(timeoutSeconds, 0, 24 * 3600);
+        Settings.Save();
+        ApplyKimodoSettings();
+        SettingsChanged?.Invoke();
+        AgentChanged?.Invoke();
+    }
+
+    /// <summary>Points Kimodo at a freshly downloaded package (folder, text encoder, device), saves, and restarts the runner.
+    /// Without a runner chosen yet, a runner bundled next to the app is used.</summary>
+    public void ApplyModelInstall(ModelInstallResult r, string? bundledRunner)
+    {
+        var s = r.ApplyTo(new KimodoSettings());
+        Settings.KimodoModels = s.ModelDirectory ?? "";
+        Settings.KimodoTextModel = s.TextModel ?? "";
+        Settings.KimodoDevice = s.Device is "cpu" or "vulkan" ? s.Device : "auto";
+        if (Settings.KimodoRunner.Length == 0 && bundledRunner is not null) Settings.KimodoRunner = bundledRunner;
         Settings.Save();
         ApplyKimodoSettings();
         SettingsChanged?.Invoke();
