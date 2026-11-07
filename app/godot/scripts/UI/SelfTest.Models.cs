@@ -61,7 +61,7 @@ public partial class SelfTest
                 var pos = (int)from;
                 while (pos < body.Length)
                 {
-                    var n = Math.Min(Slow.Contains(path) ? (System.Environment.GetEnvironmentVariable("BLAZMA_REEL_MODELS_DIR") is { Length: > 0 } ? 600_000 : 20_000) : 1 << 20, body.Length - pos);
+                    var n = Math.Min(Slow.Contains(path) ? 20_000 : 1 << 20, body.Length - pos);
                     await res.OutputStream.WriteAsync(body.AsMemory(pos, n));
                     await res.OutputStream.FlushAsync();
                     pos += n;
@@ -92,9 +92,7 @@ public partial class SelfTest
         // ---- fake server + test catalog (the real tiers' names, tiny files) ----
         using var host = new FakeHost();
         byte[] Rnd(int n) => System.Security.Cryptography.RandomNumberGenerator.GetBytes(n);
-        var reel = System.Environment.GetEnvironmentVariable("BLAZMA_REEL_MODELS_DIR") is { Length: > 0 }; // marketing capture: real tier names, believable sizes, a clean folder
-        var zoom = reel ? 400 : 1;
-        var motion = Rnd(300_000 * zoom); var tok = Rnd(5_000 * zoom); var textL = Rnd(40_000 * zoom); var textS = Rnd(60_000 * zoom); var textR = Rnd(80_000 * zoom);
+        var motion = Rnd(300_000); var tok = Rnd(5_000); var textL = Rnd(40_000); var textS = Rnd(60_000); var textR = Rnd(80_000);
         host.Files["/motion"] = motion; host.Files["/tok"] = tok; host.Files["/text-l"] = textL; host.Files["/text-r"] = textR;
         host.Files["/text-s"] = textS.Select(b => (byte)~b).ToArray(); // corrupted on purpose: the declared hash is of the good bytes
         host.Slow.Add("/motion");
@@ -104,7 +102,7 @@ public partial class SelfTest
         var fm = F("m", "kimodo-soma-rp-v1.1-f32.gguf", "/motion", motion, "nvidia-open-model");
         var ft = F("t", "tokenizer.gguf", "/tok", tok, "meta-llama-3");
         ModelTier Tier(string id, string nameEn, string nameAr, ModelFile text, double ram, double vram, bool gpu, ModelTier basis) =>
-            basis with { Id = id, NameEn = reel ? basis.NameEn : nameEn, NameAr = reel ? basis.NameAr : nameAr, TextFile = text, Files = new[] { fm, text, ft }, MinRamGiB = ram, RecommendedRamGiB = ram, MinVramGiB = vram, RecommendedVramGiB = vram, AutoNeedsGpu = gpu };
+            basis with { Id = id, NameEn = nameEn, NameAr = nameAr, TextFile = text, Files = new[] { fm, text, ft }, MinRamGiB = ram, RecommendedRamGiB = ram, MinVramGiB = vram, RecommendedVramGiB = vram, AutoNeedsGpu = gpu };
         var tiers = new[]
         {
             Tier("light", "Light (test)", "خفيف (اختبار)", F("tl", "Llama-3-Kimodo-Q4_K_M.gguf", "/text-l", textL, "meta-llama-3"), 6, 6, false, def.Tiers[0]),
@@ -116,7 +114,7 @@ public partial class SelfTest
         var dlg = _w.AiModelsDlg;
         var weak = FakePc(8, null, 0);
         var strong = FakePc(32, "NVIDIA GeForce RTX 4090", 24);
-        var pc = reel ? strong : weak;
+        var pc = weak;
         var probeSleep = 400;
         dlg.Catalog = catalog;
         dlg.ProbeFn = _ => { Thread.Sleep(probeSleep); return pc; };
@@ -143,19 +141,18 @@ public partial class SelfTest
         dlg.Hide();
         await Settle();
 
-        foreach (var lang in reel ? new[] { "ar" } : new[] { "en", "ar" })
+        foreach (var lang in new[] { "en", "ar" })
         {
             App.SetLanguage(lang); App.SetTheme("dark");
             await Settle();
             var en = lang == "en";
-            var dir = reel ? System.Environment.GetEnvironmentVariable("BLAZMA_REEL_MODELS_DIR")! : System.IO.Path.Combine(_dir, "models-" + lang);
-            if (reel && System.IO.Directory.Exists(dir)) System.IO.Directory.Delete(dir, true);
+            var dir = System.IO.Path.Combine(_dir, "models-" + lang);
             System.IO.Directory.CreateDirectory(dir);
             s.KimodoModels = ""; s.KimodoTextModel = "";
             kimodo.Settings = new KimodoSettings { RunnerPath = fake };
             dlg.ModelsDirOverride = dir;
             host.Slow.Add("/motion");
-            pc = reel ? strong : weak;   // reel: the app's own hardware card, fed a simulated GPU machine (documented in the film notes)
+            pc = weak;
             var probes0 = dlg.ProbesDone;
             var frames0 = Engine.GetProcessFrames();
             _w.OpenAiModels();

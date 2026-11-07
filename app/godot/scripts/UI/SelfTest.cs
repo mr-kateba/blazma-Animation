@@ -339,6 +339,13 @@ public partial class SelfTest : Node
             return;
         }
 
+        if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_REELMODELS") == "1")
+        {
+            await RunReelModels();
+            Finish();
+            return;
+        }
+
         if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_MODELS") == "1")
         {
             // Development shortcut: only the AI models scenario.
