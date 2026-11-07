@@ -1,0 +1,13 @@
+NVIDIA CUDA runtime libraries (only if tools/kimodo contains ggml-cuda.dll)
+
+tools/kimodo may contain these files from the NVIDIA CUDA Toolkit 12.4 for Windows x64, unmodified:
+  cudart64_12.dll, cublas64_12.dll, cublasLt64_12.dll
+They are redistributed under the NVIDIA CUDA Toolkit End User License Agreement, Attachment A
+("Redistributable Software"): https://docs.nvidia.com/cuda/eula/index.html
+Copyright (c) NVIDIA Corporation. All rights reserved.
+
+They are used only by ggml-cuda.dll (GGML's CUDA backend, MIT, see GGML_LICENSE.txt), which kimodo-runner
+loads at run time when an NVIDIA graphics card and driver are present. They are not part of Blazma's
+source code, are not covered by Blazma's licence, and may only be redistributed as part of this application
+under NVIDIA's terms. Without an NVIDIA driver they are not used. Deleting ggml-cuda.dll and these three
+files removes CUDA support; Vulkan and the CPU keep working.

@@ -36,8 +36,13 @@ The project ships no NOTICE file.
 ## kimodo-runner (only if the `tools/kimodo` folder is present)
 Blazma's local text-to-motion runner (`ai/kimodo`, built by the manual `kimodo-runner` workflow) links:
 - **kimodo.cpp** — Apache-2.0 (`legal/APACHE-2.0.txt`), https://github.com/localai-org/kimodo.cpp (pinned commit in
-  `ai/kimodo/CMakeLists.txt`); its NOTICE file: `legal/KIMODO_CPP_NOTICE.txt`.
+  `ai/kimodo/CMakeLists.txt`); its NOTICE file: `legal/KIMODO_CPP_NOTICE.txt`. Modified by Blazma's build: device
+  selection through GGML's backend registry (`ai/kimodo/patches/`, applied at configure time).
 - **GGML** — MIT, Copyright (c) 2023-2026 The ggml authors, https://github.com/ggml-org/ggml (`legal/GGML_LICENSE.txt`).
+- **SPIRV-Headers** (vulkan-sdk-1.4.309.0, compiled into `ggml-vulkan`) — MIT-style Khronos licence, Copyright (c)
+  2015-2024 The Khronos Group Inc., https://github.com/KhronosGroup/SPIRV-Headers (`legal/SPIRV_HEADERS_LICENSE.txt`).
+- **NVIDIA CUDA runtime** (`cudart64_12.dll`, `cublas64_12.dll`, `cublasLt64_12.dll`, only with `ggml-cuda.dll`) —
+  redistributed unmodified under the NVIDIA CUDA Toolkit EULA, Attachment A (`legal/NVIDIA_CUDA_NOTICE.txt`).
 - **nlohmann/json 3.11.3** — MIT, Copyright (c) 2013-2022 Niels Lohmann, https://github.com/nlohmann/json (`legal/NLOHMANN_JSON_LICENSE.txt`).
 
 No model weights are shipped. The Kimodo models the user downloads from Hugging Face inside the app carry their own

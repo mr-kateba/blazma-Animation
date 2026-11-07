@@ -2,6 +2,9 @@
 // process for Blazma Animation (DECISIONS D6). Protocol: newline-delimited JSON-RPC 2.0 on
 // stdin/stdout, one UTF-8 JSON object per line; stdout carries only protocol messages, logs go
 // to stderr. Methods: hello, diagnose, generate; notifications from Blazma: cancel, shutdown;
+// hello and diagnose list the GGML devices the loaded backends offer (like llama.cpp --list-devices);
+// generate takes device = auto | gpu | cpu | hybrid (text encoder on the CPU, motion model on the GPU)
+// and an optional gpu = <device name>, and reports the devices it actually ran on (DECISIONS D43).
 // notifications to Blazma: progress {id, stage, fraction, message}.
 //
 // This program never downloads anything and never opens a network connection. It loads only
@@ -18,6 +21,9 @@
 // Requests are read with a hard size limit: an oversized line is skipped without buffering it.
 
 #include <kimodo/kimodo_capi.h>
+#if defined(KIMODO_RUNNER_HAVE_GGML)
+#include <ggml-backend.h>
+#endif
 #include <nlohmann/json.hpp>
 
 #include "soma_skeleton.hpp"
@@ -51,7 +57,7 @@ namespace {
 
 using json = nlohmann::json;
 constexpr int protocol_version = 1;
-constexpr const char *runner_version = "0.2.0";
+constexpr const char *runner_version = "0.3.0";
 constexpr std::size_t max_request_bytes = 1u << 20; // requests are small (a prompt and paths)
 constexpr std::int64_t max_frames = 10000;
 constexpr std::int64_t max_steps = 1000;
@@ -64,7 +70,7 @@ using motion_ptr = std::unique_ptr<kimodo_motion, motion_deleter>;
 
 struct loaded_model {
     model_ptr model;
-    std::string motion_path, text_path, device;
+    std::string motion_path, text_path, text_device, motion_device;
     std::int64_t threads = 0;
 };
 loaded_model g_model;
@@ -180,6 +186,103 @@ std::string require_file(const json &p, const char *key) {
     return path;
 }
 
+// ---------------------------------------------------------------- devices
+// The runner and kimodo.cpp share one GGML backend registry (same ggml library in the process), so
+// the devices listed here are exactly the ones kimodo.cpp can be told to use (KIMODO_TEXT_DEVICE /
+// KIMODO_MOTION_DEVICE, see ai/kimodo/patches/kimodo_backend_select.hpp).
+#if defined(KIMODO_RUNNER_HAVE_GGML)
+void load_backends() {
+    static std::once_flag once;
+    // GGML_BACKEND_DL: load every ggml-<backend> library next to the program; a backend whose own
+    // dependencies are missing (no Vulkan loader, no NVIDIA driver) is skipped, the CPU always loads.
+    std::call_once(once, [] { if (ggml_backend_dev_count() == 0) ggml_backend_load_all(); });
+}
+const char *type_name(enum ggml_backend_dev_type t) {
+    switch (t) {
+    case GGML_BACKEND_DEVICE_TYPE_CPU: return "cpu";
+    case GGML_BACKEND_DEVICE_TYPE_GPU: return "gpu";
+    case GGML_BACKEND_DEVICE_TYPE_IGPU: return "igpu";
+    default: return "accel";
+    }
+}
+std::string backend_of(ggml_backend_dev_t d) { return ggml_backend_reg_name(ggml_backend_dev_backend_reg(d)); }
+bool is_gpu(ggml_backend_dev_t d) {
+    const auto t = ggml_backend_dev_type(d);
+    return t == GGML_BACKEND_DEVICE_TYPE_GPU || t == GGML_BACKEND_DEVICE_TYPE_IGPU;
+}
+json device_json(ggml_backend_dev_t d) {
+    std::size_t free = 0, total = 0;
+    ggml_backend_dev_memory(d, &free, &total);
+    return {{"name", ggml_backend_dev_name(d)}, {"description", ggml_backend_dev_description(d)},
+            {"type", type_name(ggml_backend_dev_type(d))}, {"backend", backend_of(d)},
+            {"memoryTotal", total}, {"memoryFree", free}};
+}
+json devices_json() {
+    load_backends();
+    json list = json::array();
+    for (std::size_t i = 0; i < ggml_backend_dev_count(); ++i) {
+        // ACCEL devices (BLAS and the like) are helpers of the CPU, not a place to run a model.
+        auto *d = ggml_backend_dev_get(i);
+        if (ggml_backend_dev_type(d) != GGML_BACKEND_DEVICE_TYPE_ACCEL) list.push_back(device_json(d));
+    }
+    return list;
+}
+json backends_json() {
+    load_backends();
+    json list = json::array();
+    for (std::size_t i = 0; i < ggml_backend_reg_count(); ++i) list.push_back(ggml_backend_reg_name(ggml_backend_reg_get(i)));
+    return list;
+}
+// GPU preference, the same order as Blazma's Auto: CUDA, then other discrete GPUs (Vulkan), then integrated.
+ggml_backend_dev_t pick_gpu(const std::string &wanted, const std::string &only_backend) {
+    load_backends();
+    if (!wanted.empty()) {
+        auto *d = ggml_backend_dev_by_name(wanted.c_str());
+        if (!d || !is_gpu(d)) throw rpc_error{"device_unavailable", "GPU device '" + wanted + "' is not available"};
+        return d;
+    }
+    ggml_backend_dev_t best = nullptr;
+    int best_rank = 100;
+    for (std::size_t i = 0; i < ggml_backend_dev_count(); ++i) {
+        auto *d = ggml_backend_dev_get(i);
+        if (!is_gpu(d)) continue;
+        const auto backend = backend_of(d);
+        if (!only_backend.empty() && backend != only_backend) continue;
+        const int rank = ggml_backend_dev_type(d) == GGML_BACKEND_DEVICE_TYPE_IGPU ? 2 : backend == "CUDA" ? 0 : 1;
+        if (rank < best_rank) { best = d; best_rank = rank; }
+    }
+    return best;
+}
+ggml_backend_dev_t cpu_device() {
+    load_backends();
+    auto *d = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU);
+    if (!d) throw rpc_error{"device_unavailable", "no GGML CPU backend could be loaded (ggml-cpu library missing next to kimodo-runner?)"};
+    return d;
+}
+#endif
+struct device_plan {
+    std::string mode;          // the resolved mode: gpu, cpu or hybrid
+    std::string text, motion;  // GGML device names
+    json text_json, motion_json;
+};
+device_plan plan_devices(const std::string &device, const std::string &gpu) {
+#if defined(KIMODO_RUNNER_HAVE_GGML)
+    ggml_backend_dev_t g = nullptr;
+    if (device != "cpu") {
+        g = pick_gpu(gpu, device == "vulkan" ? "Vulkan" : "");
+        if (!g && device != "auto")
+            throw rpc_error{"device_unavailable", "no usable GPU was found (no CUDA or Vulkan device; check the graphics driver)"};
+    }
+    auto *c = cpu_device();
+    std::string mode = !g ? "cpu" : device == "hybrid" ? "hybrid" : "gpu";
+    auto *text = mode == "gpu" ? g : c;
+    auto *motion = mode == "cpu" ? c : g;
+    return {mode, ggml_backend_dev_name(text), ggml_backend_dev_name(motion), device_json(text), device_json(motion)};
+#else
+    (void)device; (void)gpu;
+    throw rpc_error{"device_unavailable", "kimodo.cpp was built without GGML"};
+#endif
+}
 // ---------------------------------------------------------------- methods
 
 json skeleton_json() {
@@ -194,10 +297,21 @@ json skeleton_json() {
             {"names", names}, {"parents", parents}, {"offsets", offsets}};
 }
 
+json device_info(json r) {
+#if defined(KIMODO_RUNNER_HAVE_GGML)
+    r["backends"] = backends_json();
+    r["devices"] = devices_json();
+#else
+    r["backends"] = json::array();
+    r["devices"] = json::array();
+#endif
+    r["deviceModes"] = {"auto", "gpu", "cpu", "hybrid"};
+    return r;
+}
 json hello(const json &) {
-    return {{"protocol", protocol_version}, {"runner", "kimodo-runner"}, {"version", runner_version},
+    return device_info({{"protocol", protocol_version}, {"runner", "kimodo-runner"}, {"version", runner_version},
             {"kimodoAbi", kimodo_abi_version()}, {"skeletons", {std::string(blazma::soma::key)}},
-            {"ggml", ggml_compiled()}, {"vulkanCompiled", vulkan_compiled()}};
+            {"ggml", ggml_compiled()}, {"vulkanCompiled", vulkan_compiled()}});
 }
 
 json diagnose(const json &p) {
@@ -213,23 +327,28 @@ json diagnose(const json &p) {
            {"modelLoaded", static_cast<bool>(g_model.model)}, {"warnings", warnings}};
     if (const char *b = std::getenv("KIMODO_BACKEND")) r["KIMODO_BACKEND"] = b;
     if (const char *t = std::getenv("KIMODO_THREADS")) r["KIMODO_THREADS"] = t;
+    r = device_info(std::move(r));
+    if (r["devices"].empty()) r["warnings"].push_back("no GGML device could be loaded (ggml-cpu library missing?)");
     return r;
 }
 
-kimodo_model *ensure_model(const json &id, const std::string &motion, const std::string &text, const std::string &device, std::int64_t threads) {
-    // kimodo.cpp reads KIMODO_BACKEND and KIMODO_THREADS from the environment; both are set for every
-    // request (an earlier request's value never leaks into a later one) and are part of the cache key.
-    set_env("KIMODO_BACKEND", device == "cpu" ? "cpu" : "");
+kimodo_model *ensure_model(const json &id, const std::string &motion, const std::string &text, const device_plan &plan, std::int64_t threads) {
+    // kimodo.cpp (with Blazma's patch) reads KIMODO_TEXT_DEVICE when the model loads and
+    // KIMODO_MOTION_DEVICE when the motion weights load at the first generation, plus KIMODO_THREADS;
+    // all are set for every request (nothing leaks from an earlier one) and are part of the cache key.
+    set_env("KIMODO_BACKEND", "");
+    set_env("KIMODO_TEXT_DEVICE", plan.text);
+    set_env("KIMODO_MOTION_DEVICE", plan.motion);
     set_env("KIMODO_THREADS", threads > 0 ? std::to_string(threads) : "");
-    if (g_model.model && g_model.motion_path == motion && g_model.text_path == text && g_model.device == device && g_model.threads == threads)
+    if (g_model.model && g_model.motion_path == motion && g_model.text_path == text && g_model.text_device == plan.text &&
+        g_model.motion_device == plan.motion && g_model.threads == threads)
         return g_model.model.get();
     g_model.model.reset();
-    if (device == "vulkan" && !vulkan_compiled()) throw rpc_error{"device_unavailable", "this kimodo-runner was built without Vulkan"};
     progress(id, "load_model", 0.05, "loading Kimodo models");
-    log("loading motion model " + motion + " and text model " + text + " (device " + device + ")");
+    log("loading motion model " + motion + " on " + plan.motion + " and text model " + text + " on " + plan.text);
     kimodo_runtime_options options{};
     options.size = sizeof(options);
-    options.device = device == "cpu" ? KIMODO_DEVICE_CPU : device == "vulkan" ? KIMODO_DEVICE_VULKAN : KIMODO_DEVICE_AUTO;
+    options.device = plan.mode == "cpu" ? KIMODO_DEVICE_CPU : KIMODO_DEVICE_AUTO; // informational in ABI 1
     options.threads = static_cast<std::uint32_t>(threads);
     char err[1024] = {0};
     auto *m = kimodo_model_load(motion.c_str(), text.c_str(), nullptr, &options, err, static_cast<int>(sizeof(err)));
@@ -237,7 +356,8 @@ kimodo_model *ensure_model(const json &id, const std::string &motion, const std:
     g_model.model.reset(m);
     g_model.motion_path = motion;
     g_model.text_path = text;
-    g_model.device = device;
+    g_model.text_device = plan.text;
+    g_model.motion_device = plan.motion;
     g_model.threads = threads;
     return m;
 }
@@ -255,13 +375,18 @@ json generate(const json &id, const json &p) {
     const auto threads = get_int(p, "threads", 0, 0, max_threads);
     const auto seed = get_seed(p);
     const auto device = get_string(p, "device", "auto");
-    if (device != "auto" && device != "cpu" && device != "vulkan") throw rpc_error{"invalid_request", "device must be auto, cpu or vulkan"};
+    // "vulkan" is the 0.2 runner's value, kept for older Blazma builds: GPU mode limited to Vulkan devices.
+    if (device != "auto" && device != "gpu" && device != "cpu" && device != "hybrid" && device != "vulkan")
+        throw rpc_error{"invalid_request", "device must be auto, gpu, cpu or hybrid"};
+    const auto gpu = get_string(p, "gpu", "");
+    if (gpu.size() > 64) throw rpc_error{"invalid_request", "gpu must be a device name such as CUDA0 or Vulkan0"};
     const auto motion_path = require_file(p, "motionModel");
     const auto text_path = require_file(p, "textModel");
     // Blazma is gone: do not start a long generation for nobody (the request was still validated above).
     if (g_eof.load()) throw rpc_error{"input_closed", "input closed before the generation started"};
 
-    auto *model = ensure_model(id, motion_path, text_path, device, threads);
+    const auto plan = plan_devices(device, gpu);
+    auto *model = ensure_model(id, motion_path, text_path, plan, threads);
     progress(id, "generate", 0.2, "generating motion");
     kimodo_generation_options o{};
     o.size = sizeof(o);
@@ -296,7 +421,8 @@ json generate(const json &id, const json &p) {
     return {{"fps", blazma::soma::fps}, {"frames", t}, {"joints", j}, {"skeleton", skeleton_json()},
             {"rotations", std::move(rotations)}, {"rootPositions", std::move(roots)},
             {"model", motion_path}, {"textModel", text_path}, {"steps", steps}, {"seed", seed},
-            {"runner", std::string("kimodo-runner ") + runner_version}, {"warnings", json::array()}};
+            {"runner", std::string("kimodo-runner ") + runner_version}, {"warnings", json::array()},
+            {"device", {{"mode", plan.mode}, {"text", plan.text_json}, {"motion", plan.motion_json}}}};
 }
 
 // ---------------------------------------------------------------- input thread

@@ -3,33 +3,38 @@ name: kimodo-runner (optional)
 # Builds the optional kimodo-runner (ai/kimodo) that Blazma starts as a separate process for local
 # text-to-motion. Manual only. Its artifacts are bundled into a release by passing this run's id to the
 # Release workflow (input kimodo_runner_run_id) → tools/kimodo in the app zip/installer. It fetches kimodo.cpp at the pinned commit
-# (with its pinned GGML submodule) and nlohmann/json by SHA-256 at configure time. No model weights
-# are downloaded or bundled.
+# (with its pinned GGML submodule), SPIRV-Headers by commit and nlohmann/json by SHA-256 at configure time,
+# and applies Blazma's small kimodo.cpp patch (ai/kimodo/patches). No model weights are downloaded or bundled.
+#
+# One runner, several GGML backends loaded at run time (GGML_BACKEND_DL, DECISIONS D43): ggml-cpu-<variant>
+# (one per instruction-set level), ggml-vulkan (any GPU with a Vulkan driver) and, from the CUDA job,
+# ggml-cuda plus the CUDA runtime DLLs it needs. A backend whose dependencies are missing on the user's
+# machine simply does not load. CI machines have no GPU: the jobs check that the backend libraries are
+# there and load (CPU, Vulkan; CUDA's own DLL dependencies), and that the CPU path works.
 #
 # Supply chain (docs/AI_INTEGRATION.md §5): every action is pinned by commit SHA (the tag is in the
-# comment), the Vulkan SDK version is fixed, and each upload carries SHA256SUMS.txt. Still not pinned:
-# the hosted runner images (fixed to an OS version, not to an image build), the apt packages on Linux,
-# and the Vulkan SDK installer, which install-vulkan-sdk downloads from LunarG without a checksum.
+# comment), the Vulkan SDK and CUDA versions are fixed, and each upload carries SHA256SUMS*.txt. Still not
+# pinned: the hosted runner images, the apt packages on Linux, and the Vulkan SDK / CUDA installers, which
+# the actions download from LunarG / NVIDIA without a checksum.
 on:
   workflow_dispatch:
     inputs:
-      vulkan:
-        description: "Build the GGML Vulkan backend (installs the Vulkan SDK on the runner)"
+      cuda:
+        description: "Also build GGML's CUDA backend for Windows (NVIDIA; takes much longer)"
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: read
 
 jobs:
   windows:
-    name: kimodo-runner (Windows x64)
+    name: kimodo-runner (Windows x64, CPU + Vulkan)
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install the Vulkan SDK
-        if: ${{ inputs.vulkan }}
+      - name: Install the Vulkan SDK (headers, loader library, glslc)
         uses: humbletim/install-vulkan-sdk@30ba978f977e81b72d091fc8888feb1fb26f9aff # v1.2
         with:
           version: 1.4.309.0
@@ -40,7 +45,7 @@ jobs:
         shell: cmd
         run: |
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-          cmake -S ai/kimodo -B ai/kimodo/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKIMODO_RUNNER_VULKAN=${{ inputs.vulkan && 'ON' || 'OFF' }}
+          cmake -S ai/kimodo -B ai/kimodo/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKIMODO_RUNNER_VULKAN=ON -DKIMODO_RUNNER_CUDA=OFF
 
       - name: Build
         shell: cmd
@@ -48,21 +53,37 @@ jobs:
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
           cmake --build ai/kimodo/build --target kimodo-runner
 
-      - name: Protocol smoke test (no model)
+      - name: Protocol smoke test and backend loading (no model)
         shell: pwsh
         run: |
-          $exe = "ai/kimodo/build/bin/kimodo-runner.exe"
-          & $exe --version
+          $bin = "ai/kimodo/build/bin"
+          Get-ChildItem $bin -File | Select-Object Name, Length | Format-Table -AutoSize
+          foreach ($f in "kimodo-runner.exe", "kimodo.dll", "ggml.dll", "ggml-base.dll", "ggml-vulkan.dll", "ggml-cpu-x64.dll", "ggml-cpu-haswell.dll") {
+            if (-not (Test-Path (Join-Path $bin $f))) { throw "missing $f" }
+          }
+          & "$bin/kimodo-runner.exe" --version
           $req = '{"jsonrpc":"2.0","id":1,"method":"hello","params":{"protocol":1}}' + "`n" + '{"jsonrpc":"2.0","method":"shutdown"}'
-          $out = $req | & $exe --stdio
+          $out = $req | & "$bin/kimodo-runner.exe" --stdio
           Write-Output $out
-          if (-not ($out -match '"protocol":1')) { throw "hello failed" }
+          $hello = ($out | Select-Object -First 1 | ConvertFrom-Json).result
+          if ($hello.protocol -ne 1) { throw "hello failed" }
+          if (-not ($hello.backends -contains "CPU")) { throw "the CPU backend did not load" }
+          if (-not ($hello.devices | Where-Object { $_.type -eq "cpu" })) { throw "no CPU device listed" }
+          # The Vulkan loader (vulkan-1.dll) ships with every GPU driver, not with Blazma; the SDK may put one on PATH.
+          # Without a Vulkan driver (ICD) GGML does not register the backend, so check that the DLL itself loads.
+          $loader = Get-Command vulkan-1.dll -ErrorAction SilentlyContinue
+          if ($loader -or (Test-Path "$env:WINDIR\System32\vulkan-1.dll")) {
+            $env:PATH = (Resolve-Path $bin).Path + ";" + $env:PATH
+            [void][System.Runtime.InteropServices.NativeLibrary]::Load((Resolve-Path "$bin/ggml-vulkan.dll").Path)
+            Write-Output "ggml-vulkan.dll loads; GGML backends registered here: $($hello.backends -join ', ')"
+          } else { Write-Output "no Vulkan loader on this machine: ggml-vulkan.dll load not checked" }
 
       - name: Non-ASCII paths (runner folder and model path)
         shell: pwsh
         run: |
           # The manifest sets the process code page to UTF-8, so kimodo.cpp's narrow-char file APIs can open paths
-          # outside the system code page. Folder names are built from code points so this file stays ASCII.
+          # outside the system code page; GGML must also find its backend DLLs there. Folder names are built from
+          # code points so this file stays ASCII.
           $utf8 = [System.Text.UTF8Encoding]::new($false)
           $OutputEncoding = $utf8
           [Console]::OutputEncoding = $utf8
@@ -71,8 +92,7 @@ jobs:
           $bin = Join-Path $root "runner"
           $models = Join-Path $root "models"
           New-Item -ItemType Directory -Force -Path $bin, $models | Out-Null
-          Copy-Item ai/kimodo/build/bin/*.exe, ai/kimodo/build/bin/*.dll -Destination $bin -ErrorAction SilentlyContinue
-          Copy-Item ai/kimodo/build/bin/*.exe -Destination $bin
+          Copy-Item ai/kimodo/build/bin/*.exe, ai/kimodo/build/bin/*.dll -Destination $bin
           $model = Join-Path $models "dummy.gguf"
           [System.IO.File]::WriteAllBytes($model, [byte[]](0x47, 0x47, 0x55, 0x46)) # "GGUF" and nothing else
           $m = ($model | ConvertTo-Json)
@@ -87,7 +107,8 @@ jobs:
           $requests = @(
             '{"jsonrpc":"2.0","id":1,"method":"hello","params":{"protocol":1}}',
             ('{"jsonrpc":"2.0","id":2,"method":"diagnose","params":{"motionModel":' + $m + ',"textModel":' + $m + '}}'),
-            ('{"jsonrpc":"2.0","id":3,"method":"generate","params":{"prompt":"walk","frames":30,"device":"cpu","motionModel":' + $m + ',"textModel":' + $m + '}}')
+            ('{"jsonrpc":"2.0","id":3,"method":"generate","params":{"prompt":"walk","frames":30,"device":"cpu","motionModel":' + $m + ',"textModel":' + $m + '}}'),
+            ('{"jsonrpc":"2.0","id":4,"method":"generate","params":{"prompt":"walk","frames":30,"device":"turbo","motionModel":' + $m + ',"textModel":' + $m + '}}')
           )
           $out = @()
           foreach ($req in $requests) {
@@ -108,10 +129,12 @@ jobs:
           $text = $out -join "`n"
           if (-not ($text -match '"protocol":1')) { throw "hello failed from a non-ASCII folder" }
           if (-not ($text -match '"motionModelExists":true')) { throw "diagnose did not find the non-ASCII model path" }
+          if (-not ($text -match '"name":"CPU"')) { throw "GGML did not load its CPU backend from a non-ASCII folder" }
           # The file must be OPENED by kimodo.cpp: it is too short, so loading fails with "truncated GGUF header",
           # not with "cannot open GGUF file" (what a non-UTF-8 code page gives).
           if ($text -match 'cannot open GGUF file') { throw "kimodo.cpp could not open a non-ASCII path (UTF-8 manifest missing?)" }
           if (-not ($text -match 'truncated GGUF header')) { throw "unexpected generate answer for the dummy model" }
+          if (-not ($text -match 'device must be auto, gpu, cpu or hybrid')) { throw "an unknown device was not rejected" }
 
       - name: Checksums
         shell: pwsh
@@ -125,33 +148,134 @@ jobs:
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: kimodo-runner-windows-x64${{ inputs.vulkan && '-vulkan' || '-cpu' }}
+          name: kimodo-runner-windows-x64
           path: |
             ai/kimodo/build/bin/*.exe
             ai/kimodo/build/bin/*.dll
             ai/kimodo/build/bin/SHA256SUMS.txt
 
+  windows-cuda:
+    name: kimodo-runner (Windows x64, CUDA backend)
+    if: ${{ inputs.cuda }}
+    runs-on: windows-2022
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install the CUDA toolkit 12.4 (compiler, runtime, cuBLAS only)
+        uses: Jimver/cuda-toolkit@b8bf9c6c28f8a92fbb04dcfcaee872e60c57462d # v0.2.36
+        with:
+          cuda: "12.4.1"
+          method: network
+          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "thrust", "visual_studio_integration"]'
+          use-github-cache: false
+          use-local-cache: false
+
+      - name: Configure (MSVC, Ninja, CUDA)
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          rem kimodo.cpp does not use flash attention: skip those kernels (most of GGML's CUDA build time).
+          cmake -S ai/kimodo -B ai/kimodo/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKIMODO_RUNNER_VULKAN=OFF -DKIMODO_RUNNER_CUDA=ON -DGGML_CUDA_FA=OFF -DGGML_CUDA_NCCL=OFF
+
+      - name: Build
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          cmake --build ai/kimodo/build --target kimodo-runner
+
+      - name: Collect ggml-cuda.dll and the CUDA runtime DLLs it needs
+        shell: pwsh
+        run: |
+          $out = "cuda-addon"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item ai/kimodo/build/bin/ggml-cuda.dll $out
+          foreach ($f in "cudart64_12.dll", "cublas64_12.dll", "cublasLt64_12.dll") {
+            Copy-Item (Join-Path $env:CUDA_PATH "bin/$f") $out
+          }
+          Get-ChildItem $out | Select-Object Name, Length | Format-Table -AutoSize
+
+      - name: Check ggml-cuda.dll's dependencies and that the runner still works without an NVIDIA driver
+        shell: pwsh
+        run: |
+          $vcvars = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          $deps = cmd /c "call `"$vcvars`" >nul && dumpbin /nologo /dependents ai\kimodo\build\bin\ggml-cuda.dll"
+          $deps | Write-Output
+          foreach ($d in ($deps | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '\.dll$' })) {
+            if ($d -ieq "nvcuda.dll") { continue } # part of the NVIDIA driver, never shipped
+            if ($d -match '^(api-ms-|ext-ms-)') { continue }
+            if ((Test-Path "cuda-addon/$d") -or (Test-Path "ai/kimodo/build/bin/$d") -or (Test-Path "$env:WINDIR/System32/$d")) { continue }
+            throw "ggml-cuda.dll needs $d, which is not shipped"
+          }
+          # No NVIDIA driver here, so the CUDA backend cannot load: the CPU must still work next to it.
+          Copy-Item cuda-addon/*.dll ai/kimodo/build/bin/
+          $req = '{"jsonrpc":"2.0","id":1,"method":"hello","params":{"protocol":1}}' + "`n" + '{"jsonrpc":"2.0","method":"shutdown"}'
+          $out = $req | & ai/kimodo/build/bin/kimodo-runner.exe --stdio
+          Write-Output $out
+          $hello = ($out | Select-Object -First 1 | ConvertFrom-Json).result
+          if (-not ($hello.backends -contains "CPU")) { throw "the CPU backend did not load next to ggml-cuda.dll" }
+
+      - name: Checksums
+        shell: pwsh
+        run: |
+          Push-Location cuda-addon
+          Copy-Item ../packaging/legal/NVIDIA_CUDA_NOTICE.txt .
+          Get-ChildItem -File -Include *.dll, *.txt -Path * | Sort-Object Name | ForEach-Object {
+            "{0}  {1}" -f (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLowerInvariant(), $_.Name
+          } | Set-Content -Encoding ascii SHA256SUMS-cuda.txt
+          Get-Content SHA256SUMS-cuda.txt
+          Pop-Location
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          # Drop-in addition to kimodo-runner-windows-x64 (same sources, same compiler, same GGML C ABI).
+          name: kimodo-runner-windows-x64-cuda
+          path: cuda-addon/
+
   linux:
-    name: kimodo-runner (Linux x64, CPU)
+    name: kimodo-runner (Linux x64, CPU + Vulkan)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - run: sudo apt-get update && sudo apt-get install -y ninja-build g++-13
-      - run: cmake -S ai/kimodo -B ai/kimodo/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++-13 -DKIMODO_RUNNER_VULKAN=OFF
+      # libvulkan-dev + glslc build ggml-vulkan; mesa's lavapipe (a software Vulkan device) lets CI exercise it.
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build g++-13 libvulkan-dev glslc mesa-vulkan-drivers
+      - run: cmake -S ai/kimodo -B ai/kimodo/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++-13 -DCMAKE_C_COMPILER=gcc-13 -DKIMODO_RUNNER_VULKAN=ON
       - run: cmake --build ai/kimodo/build --target kimodo-runner
-      - name: Protocol smoke test (no model)
-        run: |
-          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"hello","params":{"protocol":1}}' '{"jsonrpc":"2.0","method":"shutdown"}' \
-            | ai/kimodo/build/bin/kimodo-runner --stdio | tee out.txt
-          grep -q '"protocol":1' out.txt
-      - name: Input validation and end-of-input exit
+      - name: Protocol smoke test and backend loading (no model)
         run: |
           r=ai/kimodo/build/bin/kimodo-runner
-          # frames beyond 32 bits and fractional frames are rejected (they used to wrap / truncate)
+          ls -la ai/kimodo/build/bin
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"hello","params":{"protocol":1}}' '{"jsonrpc":"2.0","method":"shutdown"}' \
+            | $r --stdio | tee out.txt
+          grep -q '"protocol":1' out.txt
+          grep -q '"name":"CPU"' out.txt
+          grep -q '"Vulkan"' out.txt   # ggml-vulkan loaded (lavapipe is hidden by default: it is a CPU-type device)
+          # Force lavapipe visible: the Vulkan backend must list it as a device.
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"diagnose","params":{}}' '{"jsonrpc":"2.0","method":"shutdown"}' \
+            | GGML_VK_VISIBLE_DEVICES=0 $r --stdio | tee diag.txt
+          grep -q '"name":"Vulkan0"' diag.txt
+      - name: Input validation, device planning and end-of-input exit
+        run: |
+          r=ai/kimodo/build/bin/kimodo-runner
+          printf 'GGUF' > dummy.gguf
+          # frames beyond 32 bits and fractional frames are rejected (they used to wrap / truncate); so is an unknown device
           printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"generate","params":{"prompt":"w","frames":4294967396,"motionModel":"x","textModel":"x"}}' \
                         '{"jsonrpc":"2.0","id":2,"method":"generate","params":{"prompt":"w","frames":30.5,"motionModel":"x","textModel":"x"}}' \
+                        '{"jsonrpc":"2.0","id":3,"method":"generate","params":{"prompt":"w","frames":30,"device":"turbo","motionModel":"x","textModel":"x"}}' \
             | $r --stdio | tee val.txt
-          test "$(grep -c '"code":"invalid_request"' val.txt)" = 2
+          test "$(grep -c '"code":"invalid_request"' val.txt)" = 3
+          # no GPU: "gpu" and "hybrid" fail with device_unavailable, "cpu" reaches the model loader
+          { printf '%s\n' '{"jsonrpc":"2.0","id":4,"method":"generate","params":{"prompt":"w","frames":30,"device":"gpu","motionModel":"dummy.gguf","textModel":"dummy.gguf"}}' \
+                          '{"jsonrpc":"2.0","id":5,"method":"generate","params":{"prompt":"w","frames":30,"device":"hybrid","motionModel":"dummy.gguf","textModel":"dummy.gguf"}}' \
+                          '{"jsonrpc":"2.0","id":6,"method":"generate","params":{"prompt":"w","frames":30,"device":"cpu","motionModel":"dummy.gguf","textModel":"dummy.gguf"}}'; sleep 3; } \
+            | $r --stdio 2>&1 | tee dev.txt
+          test "$(grep -c '"code":"device_unavailable"' dev.txt)" = 2
+          grep -q 'on CPU and text model dummy.gguf on CPU' dev.txt
+          grep -q 'truncated GGUF header' dev.txt
+          # with lavapipe visible, "hybrid" puts the motion model on Vulkan0 and the text encoder on the CPU
+          { printf '%s\n' '{"jsonrpc":"2.0","id":7,"method":"generate","params":{"prompt":"w","frames":30,"device":"hybrid","motionModel":"dummy.gguf","textModel":"dummy.gguf"}}'; sleep 3; } \
+            | GGML_VK_VISIBLE_DEVICES=0 $r --stdio 2>&1 | tee hyb.txt
+          grep -q 'on Vulkan0 and text model dummy.gguf on CPU' hyb.txt
           # an oversized line is answered with an id-less error and the runner keeps going
           { head -c 2000000 /dev/zero | tr '\0' 'x'; printf '\n%s\n' '{"jsonrpc":"2.0","id":3,"method":"hello"}'; } | $r --stdio | tee big.txt
           grep -q '"id":null' big.txt && grep -q '"id":3' big.txt
@@ -161,7 +285,7 @@ jobs:
         run: cd ai/kimodo/build/bin && sha256sum kimodo-runner *.so* | tee SHA256SUMS.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: kimodo-runner-linux-x64-cpu
+          name: kimodo-runner-linux-x64
           path: |
             ai/kimodo/build/bin/kimodo-runner
             ai/kimodo/build/bin/*.so*
