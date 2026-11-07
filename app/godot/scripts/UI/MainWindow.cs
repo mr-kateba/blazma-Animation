@@ -126,6 +126,10 @@ public partial class MainWindow : Control
     void StartupChecks()
     {
         OpenStartupProject();
+        if (float.TryParse(System.Environment.GetEnvironmentVariable("BLAZMA_UI_SCALE"), System.Globalization.CultureInfo.InvariantCulture, out var uiScale) && uiScale > 0.5f)
+        {   // recording / marketing captures: render the whole UI larger, crisp (vector text), instead of enlarging pixels afterwards
+            var win = GetWindow(); win.ContentScaleMode = Window.ContentScaleModeEnum.CanvasItems; win.ContentScaleFactor = uiScale;
+        }
         var selfTest = SelfTest.TryCreate(this);
         if (selfTest is not null) AddChild(selfTest);
         else if (Demo.TryCreate(this) is { } demo) AddChild(demo);

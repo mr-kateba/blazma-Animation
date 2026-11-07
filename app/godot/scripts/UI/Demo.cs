@@ -26,6 +26,10 @@ public partial class Demo : Node
     Label _step = null!, _note = null!;
     bool _follow;
     Vector3 _target;
+    static readonly string? SavePath = System.Environment.GetEnvironmentVariable("BLAZMA_DEMO_SAVE");   // .blazanim: written after the first generation, re-used for every re-take
+    static readonly bool GenOnly = System.Environment.GetEnvironmentVariable("BLAZMA_DEMO_GENONLY") == "1";  // generate + save, no recording pacing
+    static readonly bool Captions = System.Environment.GetEnvironmentVariable("BLAZMA_DEMO_CAPTIONS") != "0";
+    static readonly float FrameBox = float.TryParse(System.Environment.GetEnvironmentVariable("BLAZMA_DEMO_FRAME"), System.Globalization.CultureInfo.InvariantCulture, out var fb) ? fb : 1.7f;
     static AppController App => AppController.Instance;
 
     public static int Requested => int.TryParse(System.Environment.GetEnvironmentVariable("BLAZMA_DEMO"), out var n) && n is >= 1 and <= 4 ? n : 0;
@@ -44,8 +48,10 @@ public partial class Demo : Node
         var c = box.GetCenter();
         var goal = new Vector3(c.X, 0.9f, c.Z);
         _target = _target.Lerp(goal, 0.25f);
-        _w.Stage.Frame(new Aabb(_target - new Vector3(0.85f, 0.85f, 0.85f), new Vector3(1.7f, 1.7f, 1.7f)));
+        _w.Stage.Frame(new Aabb(_target - new Vector3(FrameBox / 2, FrameBox / 2, FrameBox / 2), new Vector3(FrameBox, FrameBox, FrameBox)));
     }
+
+    static void Mark(string what) => GD.Print($"DEMO MARK {what} frame={Engine.GetFramesDrawn()}");
 
     void Caption(string step)
     {
@@ -75,7 +81,7 @@ public partial class Demo : Node
         _note.AddThemeFontSizeOverride("font_size", 17);
         _note.AddThemeColorOverride("font_color", new Color(1f, 0.85f, 0.4f));
         box.AddChild(_step); box.AddChild(_note);
-        _w.AddChild(bar);
+        if (Captions) _w.AddChild(bar);
 
         GetWindow().GuiEmbedSubwindows = true; // dialogs must be drawn inside the recorded window
         await Wait(0.3);
@@ -97,13 +103,15 @@ public partial class Demo : Node
         await Wait(0.5);
         dlg.Duration.Value = Seconds[_n - 1];
         dlg.Prompt.GrabFocus();
+        Mark("typing-start");
         for (var i = 1; i <= prompt.Length; i++)
         {
             dlg.Prompt.Text = prompt[..i];
             dlg.Prompt.SetCaretColumn(i);
             dlg.Prompt.EmitSignal(TextEdit.SignalName.TextChanged);
-            await Wait(1.0 / 12);
+            await Wait(GenOnly ? 0.01 : 1.0 / 12);
         }
+        Mark("typing-end");
         await Wait(0.4);
         dlg.RefreshPlanNow();
         Caption("٢) الخطة المفهومة");
@@ -112,17 +120,22 @@ public partial class Demo : Node
 
         Caption("٣) التوليد");
         var t0 = Godot.Time.GetTicksMsec();
+        var reuse = SavePath is not null && System.IO.File.Exists(SavePath);
         _w.LastMotionApply = null;
-        dlg.PressGenerate();
+        if (!reuse) dlg.PressGenerate();
         var f0 = Engine.GetFramesDrawn();
         var tw = 0.0;
-        while (_w.LastMotionApply is null && tw < 3600)
+        while (!reuse && _w.LastMotionApply is null && tw < 7200)
         {
             await Wait(1.0 / 30); tw += 1.0 / 30;
             if (provider == "kimodo" && Engine.GetFramesDrawn() - f0 == 30) Caption("٣) التوليد — …جاري التوليد (تم قص وقت الانتظار)");
         }
         GD.Print($"DEMO CUT {f0 + 30} {Engine.GetFramesDrawn()}"); // frames to drop from the video (Kimodo waiting time)
         GD.Print($"DEMO generation wall ms {Godot.Time.GetTicksMsec() - t0} provider={provider} applied={_w.LastMotionApply is not null}");
+        Mark("plan-end");
+        if (reuse) { dlg.Hide(); GD.Print("DEMO re-using " + SavePath + " opened=" + App.Open(SavePath!)); _w.Stage.FrameAll(); _w.Stage.Orbit(-70, 0); }
+        else if (SavePath is not null) GD.Print("DEMO saved " + SavePath + " ok=" + App.SaveAs(SavePath));
+        if (GenOnly) { GD.Print("DEMO DONE (gen only)"); App.ShutdownCleanly(); GetTree().Quit(0); return; }
         await Wait(2.0);
 
         Caption("٤) التشغيل");
@@ -134,12 +147,14 @@ public partial class Demo : Node
         var loops = dur < 6 ? 2 : 1;
         for (var l = 0; l < loops; l++)
         {
+            Mark("play-start");
             App.GoToFrame(0);
             App.Play();
             await Wait(dur + 0.2);
             App.Pause();
             await Wait(l == loops - 1 ? 1.5 : 0.5);
         }
+        Mark("done");
         GD.Print("DEMO DONE");
         App.ShutdownCleanly();
         GetTree().Quit(0);
