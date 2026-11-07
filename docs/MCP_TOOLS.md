@@ -89,7 +89,7 @@ No arguments.
 | [`clip_contacts`](#clip_contacts) | readonly | Detect foot-ground contacts in a clip (same rules as physics.analyze: a sole point within 'threshold' of the ground and slower than 'maxSpeed'). Returns spans per foot. Does not change anything. |
 | [`clip_create`](#clip_create) | mutating | Create an empty animation clip. Returns its clipId. |
 | [`clip_delete`](#clip_delete) | destructive | Delete a clip (undoable). |
-| [`clip_foot_lock`](#clip_foot_lock) | mutating | Lock feet during ground contacts: detects contacts, then keys the leg IK targets pinned on one anchor per contact (with knee poles from the motion) and eases on/off over blendFrames. Frames outside contact ± blendFrames keep exactly their original pose. Undoable. Returns spans, maxAnchorError (m) and maxUntouchedChange. |
+| [`clip_foot_lock`](#clip_foot_lock) | mutating | Lock feet during ground contacts: detects contacts, then keys the leg IK targets pinned on one anchor per contact (with knee poles from the motion) and eases on/off over blendFrames. Frames outside contact ± blendFrames keep exactly their original pose. Undoable. Returns spans, maxAnchorError (m: largest distance of a locked foot from its planned IK target) and maxUntouchedChange. |
 | [`clip_rename`](#clip_rename) | mutating | Rename a clip. |
 | [`clip_retarget`](#clip_retarget) | mutating | Retarget a clip from one character to another (rig → rig through the humanoid maps; differently proportioned or imported characters). Creates a NEW normal clip (undoable): mapped bones point the same way in the world, hip/root travel is scaled by the leg-length ratio, animated IK targets/poles are mapped, unmapped bones stay at rest (warning). With footLock (default true) the source's foot contacts are kept planted on the target. Returns clipId and a report. |
 | [`clip_set_duration`](#clip_set_duration) | mutating | Set a clip's length in frames. |
@@ -161,6 +161,7 @@ No arguments.
 | [`reaction_generate`](#reaction_generate) | mutating | Generate a procedural hit reaction as a NEW clip (undoable): the spine and head flinch away from the hit with a damped spring and recover to the base pose; optional knockback moves the root. Give 'direction' (side the hit comes from) or directionX/directionZ (push direction in the character's space), or pass the 'reactionArgs' of combat.hit_test. Base pose: a clip frame (baseClipId/baseFrame) or the working pose. Returns clipId. |
 | [`reaction_remove_rule`](#reaction_remove_rule) | mutating | Remove a hit-reaction rule. |
 | [`reaction_set_rule`](#reaction_set_rule) | mutating | Add or replace (ruleId) a hit-reaction rule of a character: which reaction (a clip, or procedural when clipId is omitted) a hit from a direction/height/strength range plays. Returns ruleId. |
+| [`rig_auto_map`](#rig_auto_map) | mutating | Re-run the automatic humanoid mapping on a rig (done on rig.import already): bone names from common conventions (Mixamo mixamorig:*, Unreal/UE5 pelvis/spine_01/thigh_l, Unity humanoid, Blender/Rigify DEF-*, 3ds Max Biped, VRM) and, for names that follow none (e.g. COLLADA 'Skeleton_arm_joint_L__4_'), the skeleton's shape: chains, heights and left/right by X sign. Replaces manual corrections; returns the report with a confidence level (high/medium/low). IK chains are rebuilt. |
 | [`rig_import`](#rig_import) | external | Import a rigged character from a .glb/.gltf file. The file is embedded in the project. Returns characterId, rigId and the bone-mapping report. |
 | [`rig_inspect`](#rig_inspect) | readonly | List a rig's bones (name, parent, standard name, rest), controls and IK chains. |
 | [`rig_map_bone`](#rig_map_bone) | mutating | Correct the humanoid mapping: give a bone a Blazma standard name (e.g. thigh_l), or omit 'standard' to unmap it. IK chains are rebuilt. |
@@ -236,7 +237,7 @@ Effect: **readonly**. Command id: `animation.export`.
 | `startFrame` | integer | no | First frame to export (default 0, or the loop start when the clip loops over part of its length); it becomes time 0 in the file. (min 0) |
 | `endFrame` | integer | no | Last frame to export, inclusive (default: clip length, or the loop end when the clip loops over part of its length). (min 0) |
 | `sidecar` | boolean | no | Also write '<name>.blazma.json' next to the .glb (default true). |
-| `overwrite` | boolean | no | Replace existing files (default false). Ignored for agents, which can only create new files. |
+| `overwrite` | boolean | no | Replace existing files (default false). Allowed for the user (app, blazma-anim CLI); ignored for MCP agents, which can only create new files. |
 | `validate` | boolean | no | Re-read the written file and validate it (default true). |
 
 ### `animation_validate`
@@ -322,7 +323,7 @@ Effect: **destructive**. Command id: `clip.delete`.
 
 ### `clip_foot_lock`
 
-Lock feet during ground contacts: detects contacts, then keys the leg IK targets pinned on one anchor per contact (with knee poles from the motion) and eases on/off over blendFrames. Frames outside contact ± blendFrames keep exactly their original pose. Undoable. Returns spans, maxAnchorError (m) and maxUntouchedChange.
+Lock feet during ground contacts: detects contacts, then keys the leg IK targets pinned on one anchor per contact (with knee poles from the motion) and eases on/off over blendFrames. Frames outside contact ± blendFrames keep exactly their original pose. Undoable. Returns spans, maxAnchorError (m: largest distance of a locked foot from its planned IK target) and maxUntouchedChange.
 
 Effect: **mutating**. Command id: `clip.foot_lock`.
 
@@ -405,7 +406,7 @@ Effect: **readonly**. Command id: `combat.hit_test`.
 | `defenderFacing` | number | no | Defender yaw in degrees (default 180 = facing the attacker). |
 | `startFrame` | integer | no | First frame (default 0). (min 0) |
 | `endFrame` | integer | no | Last frame (default: clip end). (min 0) |
-| `maxSubsteps` | integer | no | Most sub-steps between frames (1–64, default 8). (min 1) |
+| `maxSubsteps` | integer | no | Most sub-steps between frames (1–64). Default: chosen from the work budget (up to 64; sub-steps are adaptive, so only fast motion uses many). (min 1) |
 | `hitboxId` | string | no | Only this hitbox. (min length 1) |
 
 ### `combat_set_phases`
@@ -1320,6 +1321,16 @@ Effect: **mutating**. Command id: `reaction.set_rule`.
 | `maxStrength` | number | no | 0–1 (default 1). |
 | `clipId` | string | no | Reaction clip (omit for procedural). (min length 1) |
 | `durationSeconds` | number | no | Procedural reaction length (0.05–10 s, default 0.6). |
+
+### `rig_auto_map`
+
+Re-run the automatic humanoid mapping on a rig (done on rig.import already): bone names from common conventions (Mixamo mixamorig:*, Unreal/UE5 pelvis/spine_01/thigh_l, Unity humanoid, Blender/Rigify DEF-*, 3ds Max Biped, VRM) and, for names that follow none (e.g. COLLADA 'Skeleton_arm_joint_L__4_'), the skeleton's shape: chains, heights and left/right by X sign. Replaces manual corrections; returns the report with a confidence level (high/medium/low). IK chains are rebuilt.
+
+Effect: **mutating**. Command id: `rig.auto_map`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `rigId` | string | yes | Rig id. (min length 1) |
 
 ### `rig_import`
 

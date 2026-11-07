@@ -2,7 +2,7 @@
 Type=Application
 Name=Blazma Animation
 Comment=3D character animation editor
-Exec=BlazmaAnimation %f
+Exec=BlazmaAnimation.x86_64 %f
 Icon=blazma-animation
 Terminal=false
 Categories=Graphics;3DGraphics;

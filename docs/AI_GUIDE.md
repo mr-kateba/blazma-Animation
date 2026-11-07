@@ -79,7 +79,9 @@ You cannot run system commands or read arbitrary files through these tools. File
 | `no_project` | Headless: call `project_new` / `project_open` first. |
 | `project_locked` | Another process (the app, another agent) has the project open. |
 | `unsaved_changes` | Headless lifecycle call would drop edits: save first or pass `discard: true`. |
-| `file_exists` | `project_new` never overwrites. |
+| `file_exists` | `project_new` never overwrites; agents never replace an existing export (the user can, in the app or with `blazma-anim ... --arg overwrite=true`). |
+| `path_not_allowed` | Outside the allowed folders; the message names the `--allow-read` / `--allow-write` folder to add (headless). |
+| `read_only_folder`, `path_too_long`, `disk_full`, `io_error` | File errors (opening/saving a project): fix the location; not "open elsewhere" (that is `project_locked`). |
 | `not_latest`, `not_owner` | `edit_undo` only undoes your own newest change. |
 
 ## CLI quick reference
@@ -90,5 +92,7 @@ blazma-anim inspect demo.blazanim --json
 blazma-anim exec demo.blazanim pose.set_bone --arg characterId=ID --arg bone=head --arg rx=20 --arg ry=0 --arg rz=0
 blazma-anim run demo.blazanim script.jsonl
 ```
+
+Without `--json`, `inspect` prints a short summary (counts, names, durations) and other commands round numbers to 4 decimals for reading; `--json` is exact. Imported characters are mapped to the standard humanoid automatically (`rig_auto_map` re-runs it; the report has a `confidence`), and bone arguments accept standard names such as `hand_r`.
 
 `run` scripts are JSON lines. `${character}` is the first character, `${clip}` the last clip, and `"save":{"name":"field"}` captures a result field as `${name}`. Exit codes: 0 ok, 1 error or failed command, 3 internal error, 130 cancelled. See [CLI_REFERENCE.md](CLI_REFERENCE.md).

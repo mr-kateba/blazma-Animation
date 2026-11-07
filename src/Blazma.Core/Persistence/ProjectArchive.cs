@@ -24,6 +24,7 @@ public static class ProjectArchive
     public const string ProjectEntry = "project.json";
     public const string SceneEntry = "scenes/main.json";
 
+    /// <summary>Indented JSON (project.json, human-readable output). Reading accepts both forms.</summary>
     public static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -31,33 +32,56 @@ public static class ProjectArchive
         WriteIndented = true,
     };
 
-    public static void Write(Project project, Stream output)
-    {
-        var entries = new SortedDictionary<string, byte[]>(StringComparer.Ordinal);
-        foreach (var clip in project.Clips)
-            entries[$"clips/{clip.Id}.json"] = JsonSerializer.SerializeToUtf8Bytes(clip, JsonOptions);
-        foreach (var rig in project.Rigs)
-            entries[$"rigs/{rig.Id}.json"] = JsonSerializer.SerializeToUtf8Bytes(rig, JsonOptions);
-        foreach (var pose in project.PoseLibrary)
-            entries[$"poses/{pose.Id}.json"] = JsonSerializer.SerializeToUtf8Bytes(pose, JsonOptions);
-        foreach (var seq in project.Sequences)
-            entries[$"sequences/{seq.Id}.json"] = JsonSerializer.SerializeToUtf8Bytes(seq, JsonOptions);
-        foreach (var prop in project.Props)
-            entries[$"props/{prop.Id}.json"] = JsonSerializer.SerializeToUtf8Bytes(prop, JsonOptions);
-        foreach (var template in project.Templates)
-            entries[$"templates/{template.Id}.json"] = JsonSerializer.SerializeToUtf8Bytes(template, JsonOptions);
-        foreach (var combo in project.Combos)
-            entries[$"combos/{combo.Id}.json"] = JsonSerializer.SerializeToUtf8Bytes(combo, JsonOptions);
-        foreach (var asset in project.Assets)
-            entries[asset.ArchivePath] = asset.Data;
-        entries[SceneEntry] = JsonSerializer.SerializeToUtf8Bytes(new JsonObject
-        {
-            ["characters"] = JsonSerializer.SerializeToNode(project.Characters, JsonOptions),
-        }, JsonOptions);
+    /// <summary>Same as <see cref="JsonOptions"/> without indentation: used for clips, rigs and the other archive entries.</summary>
+    public static readonly JsonSerializerOptions CompactJsonOptions = new(JsonOptions) { WriteIndented = false };
 
-        var files = new JsonObject();
-        foreach (var (path, bytes) in entries)
-            files[path] = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+    /// <summary>Entries at least this large are compressed with <see cref="CompressionLevel.Fastest"/> (the bulk of a big
+    /// project: keyframe data), smaller ones with <see cref="CompressionLevel.Optimal"/>.</summary>
+    public const int FastCompressionThreshold = 64 * 1024;
+
+    /// <summary>
+    /// Takes a private copy of everything a save needs, on the thread that owns the project (cheap: clips are deep-copied with a
+    /// typed clone, the small collections are serialized right away, templates and embedded asset bytes are immutable and
+    /// shared). The result can then be written on any thread with <see cref="Write(ProjectSnapshot, Stream)"/>,
+    /// <see cref="ProjectFile.WriteSnapshot"/> or <see cref="RecoverySession.AutosaveSnapshot"/> while editing continues.
+    /// </summary>
+    public static ProjectSnapshot Snapshot(Project project) => Capture(project, copy: true);
+
+    public static void Write(Project project, Stream output) => Write(Capture(project, copy: false), output);
+
+    /// <summary>Writes a snapshot. Thread-safe: touches nothing but the snapshot.</summary>
+    public static void Write(ProjectSnapshot snapshot, Stream output) => WriteEntries(Serialize(snapshot), output);
+
+    internal static ProjectSnapshot Capture(Project project, bool copy)
+    {
+        var entries = new List<KeyValuePair<string, Func<byte[]>>>();
+        void Now<T>(string path, T value)
+        {
+            var bytes = JsonSerializer.SerializeToUtf8Bytes(value, CompactJsonOptions);
+            entries.Add(new(path, () => bytes));
+        }
+        foreach (var clip in project.Clips)
+        {
+            var c = copy ? clip.DeepClone() : clip;
+            entries.Add(new($"clips/{clip.Id}.json", () => JsonSerializer.SerializeToUtf8Bytes(c, CompactJsonOptions)));
+        }
+        foreach (var rig in project.Rigs) Now($"rigs/{rig.Id}.json", rig);
+        foreach (var pose in project.PoseLibrary) Now($"poses/{pose.Id}.json", pose);
+        foreach (var seq in project.Sequences) Now($"sequences/{seq.Id}.json", seq);
+        foreach (var prop in project.Props) Now($"props/{prop.Id}.json", prop);
+        foreach (var template in project.Templates)
+        {
+            // Templates are immutable once created (no command edits one in place; see SceneEdit), so the snapshot shares them.
+            var t = template;
+            entries.Add(new($"templates/{t.Id}.json", () => JsonSerializer.SerializeToUtf8Bytes(t, CompactJsonOptions)));
+        }
+        foreach (var combo in project.Combos) Now($"combos/{combo.Id}.json", combo);
+        foreach (var asset in project.Assets)
+        {
+            var data = asset.Data; // immutable once embedded
+            entries.Add(new(asset.ArchivePath, () => data));
+        }
+        Now(SceneEntry, new JsonObject { ["characters"] = JsonSerializer.SerializeToNode(project.Characters, JsonOptions) });
 
         var root = new JsonObject
         {
@@ -78,13 +102,85 @@ public static class ProjectArchive
             ["scene"] = SceneEntry,
             ["assets"] = JsonSerializer.SerializeToNode(project.Assets, JsonOptions),
             ["metadata"] = JsonSerializer.SerializeToNode(project.Metadata, JsonOptions),
-            ["files"] = files,
         };
+        return new ProjectSnapshot(project.Id, project.Name, root, entries);
+    }
 
+    sealed record Serialized(byte[] Root, SortedDictionary<string, byte[]> Entries, Dictionary<string, string> Hashes);
+
+    static Serialized Serialize(ProjectSnapshot snapshot)
+    {
+        var items = snapshot.Entries;
+        var bytes = new byte[items.Count][];
+        var hashes = new string[items.Count];
+        Parallel.For(0, items.Count, i =>
+        {
+            bytes[i] = items[i].Value();
+            hashes[i] = Convert.ToHexString(SHA256.HashData(bytes[i])).ToLowerInvariant();
+        });
+        var entries = new SortedDictionary<string, byte[]>(StringComparer.Ordinal);
+        var byPath = new Dictionary<string, string>(StringComparer.Ordinal);
+        for (var i = 0; i < items.Count; i++)
+        {
+            entries[items[i].Key] = bytes[i];
+            byPath[items[i].Key] = hashes[i];
+        }
+        var files = new JsonObject();
+        foreach (var path in entries.Keys) files[path] = byPath[path];
+        var root = (JsonObject)snapshot.Root.DeepClone();
+        root["files"] = files;
+        return new Serialized(JsonSerializer.SerializeToUtf8Bytes(root, JsonOptions), entries, byPath);
+    }
+
+    static void WriteEntries(Serialized s, Stream output)
+    {
         using var zip = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true);
-        AddEntry(zip, ProjectEntry, JsonSerializer.SerializeToUtf8Bytes(root, JsonOptions));
-        foreach (var (path, bytes) in entries)
+        AddEntry(zip, ProjectEntry, s.Root);
+        foreach (var (path, bytes) in s.Entries)
             AddEntry(zip, path, bytes);
+    }
+
+    /// <summary>Writes the archive and returns its manifest (entry path → SHA-256), for <see cref="VerifyIntegrity"/>.</summary>
+    internal static IReadOnlyDictionary<string, string> WriteWithManifest(ProjectSnapshot snapshot, Stream output)
+    {
+        var s = Serialize(snapshot);
+        WriteEntries(s, output);
+        return s.Hashes;
+    }
+
+    /// <summary>
+    /// Structural check of a written archive without materializing the project: the ZIP opens, project.json parses and
+    /// declares the format, every listed entry exists and matches its SHA-256, and (when given) the listed files are exactly
+    /// <paramref name="expected"/>. Throws <see cref="ProjectFormatException"/>.
+    /// </summary>
+    public static void VerifyIntegrity(Stream input, IReadOnlyDictionary<string, string>? expected = null)
+    {
+        ZipArchive zip;
+        try { zip = new ZipArchive(input, ZipArchiveMode.Read, leaveOpen: true); }
+        catch (InvalidDataException e) { throw new ProjectFormatException("not_a_project", "The file is not a valid .blazanim archive.", e); }
+        using (zip)
+        {
+            var root = ParseObject(ReadEntry(zip, ProjectEntry) ?? throw new ProjectFormatException("missing_entry", "project.json is missing."), ProjectEntry);
+            if ((string?)root["format"] != FormatName)
+                throw new ProjectFormatException("not_a_project", "project.json does not declare the blazanim format.");
+            var files = root["files"] as JsonObject ?? throw new ProjectFormatException("invalid_json", "project.json has no file list.");
+            if (expected is not null && (files.Count != expected.Count
+                || files.Any(f => !expected.TryGetValue(f.Key, out var h) || !string.Equals(h, (string?)f.Value, StringComparison.OrdinalIgnoreCase))))
+                throw new ProjectFormatException("integrity", "The written file list does not match what was saved.");
+            foreach (var (path, hashNode) in files)
+            {
+                var entry = zip.GetEntry(path) ?? throw new ProjectFormatException("missing_entry", $"'{path}' is listed in project.json but missing.");
+                string actual;
+                try
+                {
+                    using var es = entry.Open();
+                    actual = Convert.ToHexString(SHA256.HashData(es)).ToLowerInvariant();
+                }
+                catch (InvalidDataException e) { throw new ProjectFormatException("integrity", $"'{path}' is damaged.", e); }
+                if (!string.Equals(actual, (string?)hashNode, StringComparison.OrdinalIgnoreCase))
+                    throw new ProjectFormatException("integrity", $"Checksum mismatch for '{path}'. The file is damaged.");
+            }
+        }
     }
 
     public static Project Read(Stream input)
@@ -291,7 +387,7 @@ public static class ProjectArchive
 
     static void AddEntry(ZipArchive zip, string path, byte[] bytes)
     {
-        var entry = zip.CreateEntry(path, CompressionLevel.Optimal);
+        var entry = zip.CreateEntry(path, bytes.Length >= FastCompressionThreshold ? CompressionLevel.Fastest : CompressionLevel.Optimal);
         entry.LastWriteTime = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero); // reproducible archives
         using var s = entry.Open();
         s.Write(bytes);
@@ -326,6 +422,31 @@ public static class ProjectArchive
             throw new ProjectFormatException("invalid_json", $"'{path}' is not valid JSON: {e.Message}", e);
         }
     }
+}
+
+/// <summary>
+/// A private, immutable copy of a project taken by <see cref="ProjectArchive.Snapshot"/> on the thread that owns the project.
+/// Safe to write from any thread (e.g. autosave on a worker) while the project keeps changing.
+/// </summary>
+public sealed class ProjectSnapshot
+{
+    internal ProjectSnapshot(Ids.ObjectId projectId, string projectName, JsonObject root, List<KeyValuePair<string, Func<byte[]>>> entries)
+    {
+        ProjectId = projectId;
+        ProjectName = projectName;
+        Root = root;
+        Entries = entries;
+        TakenUtc = DateTimeOffset.UtcNow;
+    }
+
+    public Ids.ObjectId ProjectId { get; }
+    public string ProjectName { get; }
+
+    /// <summary>When the snapshot was taken (an autosave of a snapshot older than the last explicit save is skipped).</summary>
+    public DateTimeOffset TakenUtc { get; }
+
+    internal JsonObject Root { get; }
+    internal List<KeyValuePair<string, Func<byte[]>>> Entries { get; }
 }
 
 /// <summary>Raw JSON view of an archive, used by schema migrations.</summary>

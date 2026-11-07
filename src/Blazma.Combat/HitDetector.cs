@@ -19,6 +19,12 @@ public sealed record HitTestOptions
     /// <summary>Upper bound of sub-steps between two frames (adaptive below it; 1–<see cref="HitDetector.MaxSubstepsLimit"/>).</summary>
     public int MaxSubsteps { get; init; } = 8;
 
+    /// <summary>Choose the cap from the work budget instead: the largest cap (from <see cref="MaxSubsteps"/> up to
+    /// <see cref="HitDetector.MaxSubstepsLimit"/>) whose planned work fits <see cref="HitDetector.MaxPairWork"/> and
+    /// <see cref="HitDetector.MaxPoseWork"/>. Sub-steps stay adaptive (only what the motion needs is used), so a fast swing gets
+    /// enough sub-steps without a warning while slow motion costs nothing extra.</summary>
+    public bool AutoMaxSubsteps { get; init; }
+
     /// <summary>Only this hitbox (default: all).</summary>
     public ObjectId? Hitbox { get; init; }
 }
@@ -52,6 +58,9 @@ public sealed class HitTestReport
 
     /// <summary>Most sub-steps actually used in one frame interval (the shared grid).</summary>
     public int SubstepsUsed { get; set; }
+
+    /// <summary>The sub-step cap the test ran with (chosen from the work budget when <see cref="HitTestOptions.AutoMaxSubsteps"/>).</summary>
+    public int MaxSubsteps { get; set; }
 
     /// <summary>True when the sub-step cap was below what the step bound needed (or a refinement was cut short): a contact
     /// could have been missed where the motion between sub-steps is not a rigid swing (warning code may_have_missed_contacts).</summary>
@@ -146,6 +155,16 @@ public static class HitDetector
         if (start < 0 || start > end) throw new CombatException("invalid_args", $"The frame range must satisfy 0 ≤ startFrame ≤ endFrame ≤ {last}.");
         var frames = end - start + 1;
         if (frames > MaxFrames) throw new CombatException("too_large", $"{frames} frames to test (at most {MaxFrames:N0}).");
+        if (o.AutoMaxSubsteps)
+        {
+            var cap = o.MaxSubsteps;
+            while (cap < MaxSubstepsLimit
+                   && (double)frames * (cap + 1) * hitboxes.Count * hurtboxes.Count <= MaxPairWork
+                   && PlannedPoseWork(frames, cap + 1, hitboxes.Count, rigA.Bones.Count + rigD.Bones.Count) <= MaxPoseWork)
+                cap++;
+            o = o with { MaxSubsteps = cap };
+        }
+        report.MaxSubsteps = o.MaxSubsteps;
         var steps = (double)frames * o.MaxSubsteps;
         if (steps * hitboxes.Count * hurtboxes.Count > MaxPairWork)
             throw new CombatException("too_large", $"{frames} frames × {o.MaxSubsteps} sub-steps × {hitboxes.Count} hitboxes × {hurtboxes.Count} hurtboxes is more than {MaxPairWork:N0} tests.");

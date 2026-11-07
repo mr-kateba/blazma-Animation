@@ -68,6 +68,11 @@ public static partial class HumanoidMapper
         foreach (var side in new[] { Side.Left, Side.Right }) PickAndAssign(HumanoidStandard.Clavicle(side));
         PickAndAssign(HumanoidStandard.Root);
 
+        // Names that follow no known convention (COLLADA exports like CesiumMan's "Skeleton_arm_joint_L__4_", "leg_joint_R_2"):
+        // fill what is still missing from the skeleton's shape (chains, heights, left/right by X sign in model space).
+        if (HumanoidStandard.Required.Any(r => !assigned.ContainsKey(r)))
+            InferFromGeometry(g, assigned, used, Assign);
+
         AssignSpine(g, assigned, used, issues);
 
         return Finish(g, assigned.Select(kv => ToAssignment(g, kv.Key, kv.Value)).ToList(), issues);
@@ -305,6 +310,138 @@ public static partial class HumanoidMapper
         if (n > 3)
             issues.Add(new MappingIssue("spine_extra_bones_unmapped",
                 $"The spine has {n} bones; only the first, middle and last were mapped to spine_01/02/03."));
+    }
+
+    // ---- geometry ------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Shape-based inference for rigs whose names say nothing: the pelvis is the bone that splits into two downward chains on
+    /// opposite sides of X = 0 (the legs); the upper body is the pelvis branch that reaches highest; the chest is where it splits
+    /// into two lateral chains (the arms); above it the neck and head. Along a leg the knee is the joint nearest half the leg's
+    /// height and the ankle the first joint near the ground (toes are left unmapped); along an arm a short first segment is a clavicle. Character left
+    /// is +X (glTF faces +Z). Only standard names and bones that are still free are assigned (confidence Hierarchy).
+    /// </summary>
+    static void InferFromGeometry(Graph g, Dictionary<string, Assigned> assigned, HashSet<int> used, Action<string, int, MappingConfidence, string> assign)
+    {
+        if (g.Count < 8) return;
+        var kids = new List<int>[g.Count];
+        for (int i = 0; i < g.Count; i++) kids[i] = new List<int>();
+        for (int i = 0; i < g.Count; i++) if (g.Parent[i] >= 0) kids[g.Parent[i]].Add(i);
+        var minY = new double[g.Count];
+        var maxY = new double[g.Count];
+        var maxX = new double[g.Count];
+        var minX = new double[g.Count];
+        var sumX = new double[g.Count];
+        var size = new int[g.Count];
+        for (int i = 0; i < g.Count; i++)
+        {
+            var w = g.World[i];
+            minY[i] = maxY[i] = w.Y;
+            minX[i] = maxX[i] = sumX[i] = w.X;
+            size[i] = 1;
+        }
+        // Deepest first: when a bone is folded into its parent, its own subtree is complete.
+        foreach (int i in Enumerable.Range(0, g.Count).OrderByDescending(i => g.Depth[i]))
+        {
+            int parent = g.Parent[i];
+            if (parent < 0) continue;
+            minY[parent] = Math.Min(minY[parent], minY[i]); maxY[parent] = Math.Max(maxY[parent], maxY[i]);
+            minX[parent] = Math.Min(minX[parent], minX[i]); maxX[parent] = Math.Max(maxX[parent], maxX[i]);
+            sumX[parent] += sumX[i];
+            size[parent] += size[i];
+        }
+        double ground = g.World.Min(w => w.Y), top = g.World.Max(w => w.Y), height = top - ground;
+        if (!(height > 1e-6)) return;
+        double tol = 0.01 * height;
+        double AvgX(int i) => sumX[i] / size[i];
+        bool Free(string std) => !assigned.ContainsKey(std);
+        void Put(string std, int bone, string why)
+        {
+            if (Free(std) && !used.Contains(bone)) assign(std, bone, MappingConfidence.Hierarchy, "geometry: " + why);
+        }
+
+        // Legs: two child branches of one bone reaching the ground on opposite sides.
+        (int Left, int Right)? LegsOf(int b)
+        {
+            if (g.World[b].Y < ground + 0.35 * height) return null;
+            var down = kids[b].Where(c => minY[c] < ground + 0.25 * height && maxY[c] < g.World[b].Y + 0.1 * height).ToList();
+            var l = down.Where(c => AvgX(c) > tol).OrderBy(c => minY[c]).FirstOrDefault(-1);
+            var r = down.Where(c => AvgX(c) < -tol).OrderBy(c => minY[c]).FirstOrDefault(-1);
+            return l >= 0 && r >= 0 ? (l, r) : null;
+        }
+        int pelvis = assigned.TryGetValue(HumanoidStandard.Pelvis, out var pa) ? pa.Bone
+            : Enumerable.Range(0, g.Count).Where(b => LegsOf(b) is not null).OrderByDescending(b => g.Depth[b]).FirstOrDefault(-1);
+        if (pelvis < 0) return;
+        Put(HumanoidStandard.Pelvis, pelvis, "splits into the two legs");
+
+        if (LegsOf(pelvis) is var (legL, legR))
+            foreach (var (side, start) in new[] { (Side.Left, legL), (Side.Right, legR) })
+            {
+                var chain = Follow(start, c => -minY[c]);
+                if (chain.Count < 3) continue;
+                double hipY = g.World[chain[0]].Y, len = hipY - minY[chain[0]];
+                int knee = Enumerable.Range(1, chain.Count - 1).OrderBy(i => Math.Abs(g.World[chain[i]].Y - (hipY - 0.5 * len))).First();
+                int ankle = Enumerable.Range(knee + 1, Math.Max(0, chain.Count - knee - 1)).FirstOrDefault(i => g.World[chain[i]].Y < hipY - 0.75 * len, -1);
+                if (ankle < 0) continue;
+                Put(HumanoidStandard.Thigh(side), chain[knee - 1], "upper bone of the leg chain");
+                Put(HumanoidStandard.Calf(side), chain[knee], "knee: joint at about half the leg height");
+                Put(HumanoidStandard.Foot(side), chain[ankle], "ankle: first joint near the ground");
+                // The joint after the ankle is usually a toe/ball, but unnamed end joints are often just tips: toes stay unmapped
+                // (map them with rig.map_bone); the foot model then estimates the sole from the ankle.
+            }
+
+        // Upper body: the pelvis branch reaching highest; the chest is where two lateral branches (arms) leave it.
+        var up = kids[pelvis].Where(c => maxY[c] > g.World[pelvis].Y + 0.15 * height).OrderByDescending(c => maxY[c]).FirstOrDefault(-1);
+        if (up < 0) return;
+        (int Left, int Right)? ArmsOf(int b)
+        {
+            var side = kids[b].Where(c => Math.Max(Math.Abs(maxX[c]), Math.Abs(minX[c])) > Math.Abs(g.World[b].X) + 0.12 * height && maxY[c] < maxY[b] + tol).ToList();
+            var l = side.Where(c => AvgX(c) > g.World[b].X + tol).OrderByDescending(c => maxX[c]).FirstOrDefault(-1);
+            var r = side.Where(c => AvgX(c) < g.World[b].X - tol).OrderBy(c => minX[c]).FirstOrDefault(-1);
+            return l >= 0 && r >= 0 ? (l, r) : null;
+        }
+        var spine = Follow(up, c => maxY[c]);
+        int chestIdx = spine.FindIndex(b => ArmsOf(b) is not null);
+        if (chestIdx < 0) return;
+        int chest = spine[chestIdx];
+        var (armL, armR) = ArmsOf(chest)!.Value;
+        var head = kids[chest].Where(c => c != armL && c != armR).OrderByDescending(c => maxY[c]).FirstOrDefault(-1);
+        if (head >= 0)
+        {
+            var path = Follow(head, c => maxY[c]);
+            if (path.Count >= 2)
+            {
+                Put(HumanoidStandard.Neck, path[0], "first bone above the chest");
+                Put(HumanoidStandard.Head, path[1], "bone above the neck");
+            }
+            else Put(HumanoidStandard.Head, path[0], "top bone above the chest");
+        }
+        foreach (var (side, start) in new[] { (Side.Left, armL), (Side.Right, armR) })
+        {
+            double sign = side == Side.Left ? 1 : -1;
+            var chain = Follow(start, c => sign * (sign > 0 ? maxX[c] : minX[c]));
+            int i = 0;
+            if (chain.Count >= 4)
+            {
+                double first = (g.World[chain[1]] - g.World[chain[0]]).Length(), second = (g.World[chain[2]] - g.World[chain[1]]).Length();
+                if (first < 0.6 * second) { Put(HumanoidStandard.Clavicle(side), chain[0], "short first segment of the arm chain"); i = 1; }
+            }
+            if (chain.Count - i < 3) continue;
+            Put(HumanoidStandard.UpperArm(side), chain[i], "shoulder joint of the arm chain");
+            Put(HumanoidStandard.LowerArm(side), chain[i + 1], "elbow joint of the arm chain");
+            Put(HumanoidStandard.Hand(side), chain[i + 2], "wrist joint of the arm chain");
+        }
+
+        List<int> Follow(int start, Func<int, double> score)
+        {
+            var chain = new List<int> { start };
+            for (int cur = start; kids[cur].Count > 0 && chain.Count <= g.Count;)
+            {
+                cur = kids[cur].OrderByDescending(score).ThenBy(c => c).First();
+                chain.Add(cur);
+            }
+            return chain;
+        }
     }
 
     // ---- name → candidates ---------------------------------------------------------------------

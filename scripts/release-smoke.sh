@@ -27,12 +27,18 @@ chk "zip integrity (unzip -t)" unzip -tq "$Z"
 unzip -q "$Z" -d "$T/win"; W="$T/win/$P"
 isa "PE32+ executable.*x86-64" "$W/BlazmaAnimation.exe" && ok "BlazmaAnimation.exe is a PE32+ x86-64" || bad "BlazmaAnimation.exe not PE32+ x86-64"
 for t in blazma-mcp.exe blazma-anim.exe; do isa "PE32+ executable.*x86-64" "$W/tools/$t" && ok "tools/$t is PE32+ x86-64" || bad "tools/$t"; done
-for f in BlazmaAnimation.pck portable.txt VERSION.txt THIRD_PARTY_NOTICES.md GODOT_LICENSE.txt OFL-IBM-Plex.txt docs/AGENT_SETUP_AR.md docs/AI_INTEGRATION.md \
+for f in BlazmaAnimation.pck portable.txt VERSION.txt LICENSE.txt THIRD_PARTY_NOTICES.md legal/GODOT_LICENSE.txt legal/GODOT_COPYRIGHT.txt legal/OFL-IBM-Plex.txt \
+         legal/APACHE-2.0.txt legal/DOTNET_LICENSE.txt legal/DOTNET8_THIRD_PARTY_NOTICES.txt legal/DOTNET10_THIRD_PARTY_NOTICES.txt legal/MCP_CSHARP_SDK_LICENSE.txt \
+         legal/NVIDIA_KIMODO_LICENSE.txt legal/KIMODO_CPP_NOTICE.txt legal/GGML_LICENSE.txt legal/NLOHMANN_JSON_LICENSE.txt docs/AGENT_SETUP_AR.md docs/AI_INTEGRATION.md \
          data_Blazma.UI_windows_x86_64/Blazma.UI.dll data_Blazma.UI_windows_x86_64/Blazma.Core.dll data_Blazma.UI_windows_x86_64/GodotSharp.dll \
          data_Blazma.UI_windows_x86_64/coreclr.dll data_Blazma.UI_windows_x86_64/hostfxr.dll data_Blazma.UI_windows_x86_64/System.Private.CoreLib.dll; do
   [ -s "$W/$f" ] && ok "contains $f" || bad "missing $f"; done
 for d in Blazma.UI Blazma.Core GodotSharp; do isa "Mono/.Net assembly" "$W/data_Blazma.UI_windows_x86_64/$d.dll" && ok "$d.dll is a .NET assembly" || bad "$d.dll not a .NET assembly"; done
 [ -z "$(find "$W" -name '*.pdb')" ] && ok "no .pdb files shipped" || bad "pdb files in zip"
+# A runner was staged for this release (its own zip is published): then the app zip must carry it in tools/kimodo.
+if [ -f "$D/kimodo-runner-$V-win64.zip" ]; then
+  [ -s "$W/tools/kimodo/kimodo-runner.exe" ] && ok "tools/kimodo/kimodo-runner.exe present (runner staged)" || bad "runner staged but tools/kimodo/kimodo-runner.exe missing"
+else echo "  NOTE  no Windows kimodo-runner staged for $V (tools/kimodo not expected)"; fi
 
 echo "== Windows installer (structural)"
 S="$D/BlazmaAnimation-$V-setup.exe"
@@ -40,7 +46,15 @@ isa "PE32 executable" "$S" && ok "setup.exe is a PE executable" || bad "setup.ex
 file -b "$S" | grep -qi "Nullsoft" && ok "setup.exe is an NSIS installer" || bad "setup.exe is not NSIS"
 chk "setup.exe is larger than 50 MB (payload present)" test "$(stat -c %s "$S")" -gt 52428800
 if command -v 7z >/dev/null; then
-  7z l "$S" 2>/dev/null | grep -q "BlazmaAnimation.exe" && ok "installer payload lists BlazmaAnimation.exe" || bad "installer payload lacks BlazmaAnimation.exe"
+  7z l "$S" >"$T/setup-list.txt" 2>/dev/null
+  grep -q "BlazmaAnimation.exe" "$T/setup-list.txt" && ok "installer payload lists BlazmaAnimation.exe" || bad "installer payload lacks BlazmaAnimation.exe"
+  grep -q "portable.txt" "$T/setup-list.txt" && bad "installer payload contains portable.txt (installed copy would run portable)" || ok "installer payload has no portable.txt"
+  grep -q "LICENSE.txt" "$T/setup-list.txt" && ok "installer payload lists LICENSE.txt" || bad "installer payload lacks LICENSE.txt"
+  if [ -f "$D/kimodo-runner-$V-win64.zip" ]; then
+    grep -q "kimodo-runner.exe" "$T/setup-list.txt" && ok "installer payload has tools/kimodo/kimodo-runner.exe" || bad "runner staged but missing from the installer"
+  fi
+else
+  echo "  SKIP  7z not installed: installer payload not listed (portable.txt absence and runner not checked; apt-get install -y p7zip-full)"
 fi
 
 echo "== Linux tar.gz (really launched)"
@@ -48,6 +62,12 @@ export XDG_DATA_HOME="$T/xdg-data" XDG_CONFIG_HOME="$T/xdg-config" XDG_CACHE_HOM
 chk "tar.gz integrity" tar tzf "$D/BlazmaAnimation-$V-linux-x64.tar.gz"
 tar xzf "$D/BlazmaAnimation-$V-linux-x64.tar.gz" -C "$T"; L="$T/BlazmaAnimation-$V-linux-x64"
 isa "ELF 64-bit.*x86-64" "$L/BlazmaAnimation.x86_64" && ok "app is ELF x86-64" || bad "app not ELF"
+grep -q '^Exec=BlazmaAnimation.x86_64 ' "$L/blazma-animation.desktop" && ok ".desktop Exec names the real binary" || bad ".desktop Exec does not name BlazmaAnimation.x86_64"
+grep -q 'type="application/x-blazanim"' "$L/blazma-animation-mime.xml" && ok "shared-mime-info XML for application/x-blazanim shipped" || bad "mime XML missing"
+[ -s "$L/LICENSE.txt" ] && [ -s "$L/legal/GODOT_COPYRIGHT.txt" ] && ok "licence files in the tarball" || bad "licence files missing from the tarball"
+if [ -f "$D/kimodo-runner-$V-linux-x64.tar.gz" ]; then
+  [ -x "$L/tools/kimodo/kimodo-runner" ] && ok "tools/kimodo/kimodo-runner present (runner staged)" || bad "runner staged but tools/kimodo/kimodo-runner missing"
+fi
 timeout 90 "$L/BlazmaAnimation.x86_64" --headless --quit-after 60 >"$T/launch.log" 2>&1; RC=$?
 [ $RC -eq 0 ] && ok "headless launch exits cleanly (rc 0)" || { bad "headless launch rc=$RC"; tail -5 "$T/launch.log"; }
 grep -qE "SCRIPT ERROR|Failed to create an autoload|not compiling" "$T/launch.log" && bad "script errors at startup" || ok "no script/autoload errors at startup"

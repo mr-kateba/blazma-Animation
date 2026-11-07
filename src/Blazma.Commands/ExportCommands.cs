@@ -28,7 +28,7 @@ public static class ExportCommands
                  S.Int("startFrame", "First frame to export (default 0, or the loop start when the clip loops over part of its length); it becomes time 0 in the file.", false),
                  S.Int("endFrame", "Last frame to export, inclusive (default: clip length, or the loop end when the clip loops over part of its length).", false),
                  S.Bool("sidecar", "Also write '<name>.blazma.json' next to the .glb (default true).", false),
-                 S.Bool("overwrite", "Replace existing files (default false). Ignored for agents, which can only create new files.", false),
+                 S.Bool("overwrite", "Replace existing files (default false). Allowed for the user (app, blazma-anim CLI); ignored for MCP agents, which can only create new files.", false),
                  S.Bool("validate", "Re-read the written file and validate it (default true).", false)),
             a => new ExportAnimation(S.Id(a, "clipId"), S.OptId(a, "characterId"), S.Text(a, "path"), RootMotion(a),
                 Frame(a, "startFrame"), Frame(a, "endFrame"), (bool?)a["sidecar"] ?? true, (bool?)a["overwrite"] ?? false,

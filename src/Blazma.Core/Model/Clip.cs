@@ -33,6 +33,34 @@ public sealed class Clip
     public Dictionary<string, string> Metadata { get; set; } = new();
 
     public long DurationFrames => Duration.ToFrame(Fps);
+
+    /// <summary>Exact deep copy (typed, no JSON round trip for the tracks).</summary>
+    public Clip DeepClone()
+    {
+        var copy = CloneWithoutTracks();
+        copy.Tracks = new List<Track>(Tracks.Count);
+        foreach (var t in Tracks) copy.Tracks.Add(t.DeepClone());
+        return copy;
+    }
+
+    /// <summary>Deep copy of everything but the tracks (the copy has an empty track list).</summary>
+    public Clip CloneWithoutTracks() => new()
+    {
+        Id = Id,
+        Name = Name,
+        Fps = Fps,
+        Duration = Duration,
+        Skeleton = Skeleton,
+        Loop = new LoopSettings { Enabled = Loop.Enabled, Start = Loop.Start, End = Loop.End },
+        Tracks = new List<Track>(),
+        Events = Events.Select(e => new AnimationEvent { Id = e.Id, Time = e.Time, Name = e.Name, Kind = e.Kind, Data = new Dictionary<string, string>(e.Data) }).ToList(),
+        Markers = Markers.Select(m => new Marker { Id = m.Id, Time = m.Time, Name = m.Name, Phase = m.Phase }).ToList(),
+        Combat = Combat is null ? null
+            : System.Text.Json.JsonSerializer.Deserialize<ClipCombat>(
+                System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(Combat, Persistence.ProjectArchive.CompactJsonOptions), Persistence.ProjectArchive.CompactJsonOptions),
+        IsDraft = IsDraft,
+        Metadata = new Dictionary<string, string>(Metadata),
+    };
 }
 
 public sealed class LoopSettings
@@ -59,6 +87,31 @@ public sealed class Track
 
     /// <summary>Muted tracks are kept but not evaluated.</summary>
     public bool Muted { get; set; }
+
+    /// <summary>Exact deep copy.</summary>
+    public Track DeepClone()
+    {
+        var keys = new List<Keyframe>(Keys.Count);
+        foreach (var k in Keys)
+            keys.Add(new Keyframe
+            {
+                Time = k.Time,
+                Interp = k.Interp,
+                Value = (double[])k.Value.Clone(),
+                InTangent = (double[]?)k.InTangent?.Clone(),
+                OutTangent = (double[]?)k.OutTangent?.Clone(),
+            });
+        return new Track
+        {
+            Id = Id,
+            Target = new TrackTarget { Kind = Target.Kind, Id = Target.Id },
+            Channel = Channel,
+            Keys = keys,
+            Locked = Locked,
+            Group = Group,
+            Muted = Muted,
+        };
+    }
 }
 
 public static class TrackChannels

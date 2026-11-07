@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- shared-mime-info type for Blazma Animation projects. Install for the current user:
+       "xdg-mime install blazma-animation-mime.xml" as a normal user   (or copy to ~/.local/share/mime/packages/ and run
+       update-mime-database ~/.local/share/mime). The .desktop file declares MimeType=application/x-blazanim. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-blazanim">
+    <comment>Blazma Animation project</comment>
+    <comment xml:lang="ar">مشروع Blazma Animation</comment>
+    <sub-class-of type="application/zip"/>
+    <generic-icon name="blazma-animation"/>
+    <glob pattern="*.blazanim"/>
+  </mime-type>
+</mime-info>

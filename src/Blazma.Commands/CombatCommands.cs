@@ -213,7 +213,7 @@ public static class CombatCommands
                  S.Num("defenderX", "Defender X (m, default 0).", false), S.Num("defenderY", "Defender Y (m, default 0).", false), S.Num("defenderZ", "Defender Z (m, default 1).", false),
                  S.Num("defenderFacing", "Defender yaw in degrees (default 180 = facing the attacker).", false),
                  S.Int("startFrame", "First frame (default 0).", false), S.Int("endFrame", "Last frame (default: clip end).", false),
-                 S.Int("maxSubsteps", $"Most sub-steps between frames (1–{HitDetector.MaxSubstepsLimit}, default 8).", false, 1), S.Str("hitboxId", "Only this hitbox.", false)),
+                 S.Int("maxSubsteps", $"Most sub-steps between frames (1–{HitDetector.MaxSubstepsLimit}). Default: chosen from the work budget (up to {HitDetector.MaxSubstepsLimit}; sub-steps are adaptive, so only fast motion uses many).", false, 1), S.Str("hitboxId", "Only this hitbox.", false)),
             a => new HitTest(a)));
     }
 
@@ -1295,13 +1295,14 @@ public sealed class HitTest(JsonObject args) : ICommand
         var position = new Vec3(CombatCommands.Bounded(a, "defenderX", -1000, 1000, 0), CombatCommands.Bounded(a, "defenderY", -1000, 1000, 0),
             CombatCommands.Bounded(a, "defenderZ", -1000, 1000, 1));
         var facing = CombatCommands.Bounded(a, "defenderFacing", -3600, 3600, 180);
-        var maxSub = Args.OptLong(a, "maxSubsteps") ?? 8;
+        var given = Args.OptLong(a, "maxSubsteps");
+        var maxSub = given ?? 8;
         if (maxSub is < 1 or > HitDetector.MaxSubstepsLimit) throw new CommandException("invalid_args", $"'maxSubsteps' must be between 1 and {HitDetector.MaxSubstepsLimit}.");
         var options = new HitTestOptions
         {
             DefenderPlacement = CombatEvaluator.Placement(position, facing),
             StartFrame = CombatCommands.Long(a, "startFrame"), EndFrame = CombatCommands.Long(a, "endFrame"),
-            MaxSubsteps = (int)maxSub, Hitbox = S.OptId(a, "hitboxId"),
+            MaxSubsteps = (int)maxSub, Hitbox = S.OptId(a, "hitboxId"), AutoMaxSubsteps = given is null,
         };
         HitTestReport report;
         try { report = HitDetector.Run(p, attacker, attack, defender, defClip, options); }
@@ -1357,6 +1358,7 @@ public sealed class HitTest(JsonObject args) : ICommand
             ["endFrame"] = report.EndFrame,
             ["evaluations"] = report.Evaluations,
             ["substepsUsed"] = report.SubstepsUsed,
+            ["maxSubsteps"] = report.MaxSubsteps,
             ["substepsRequired"] = report.SubstepsRequired == int.MaxValue ? null : report.SubstepsRequired,
             ["mayHaveMissedContacts"] = report.MayHaveMissedContacts,
             ["reactionArgs"] = reactionArgs,

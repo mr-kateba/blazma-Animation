@@ -26,7 +26,7 @@ Every command except `new`, `commands` and `docs` also accepts `--attach` (omit 
 
 ## File access (headless)
 
-Commands read files (`rig_import`, `prop_import`, `animation_validate`) from the project folder, the current folder, `--allow-read DIR` (repeatable) or `BLAZMA_ALLOW_READ`, and the write folders. Commands that write files (`animation_export`) only create NEW files, in the project folder, the current folder (unless it is a filesystem root) and `--allow-write DIR` (repeatable) or `BLAZMA_ALLOW_WRITE`. Read folders never grant write. Environment lists use the OS path separator (`;` on Windows, `:` elsewhere). Symbolic links anywhere in a path are resolved before the check. Everything else fails with `path_not_allowed`.
+Commands read files (`rig_import`, `prop_import`, `animation_validate`) from the project folder, the current folder, `--allow-read DIR` (repeatable) or `BLAZMA_ALLOW_READ`, and the write folders. Commands that write files (`animation_export`) only create NEW files, in the project folder, the current folder (unless it is a filesystem root) and `--allow-write DIR` (repeatable) or `BLAZMA_ALLOW_WRITE`; as the user, `blazma-anim` may replace an existing export with `--arg overwrite=true` (MCP agents never can). Read folders never grant write. Environment lists use the OS path separator (`;` on Windows, `:` elsewhere). Symbolic links anywhere in a path are resolved before the check. Everything else fails with `path_not_allowed`, whose message names the `--allow-read` / `--allow-write` folder to add. Without `--json`, `inspect` prints a short summary and other results round numbers to 4 decimals; `--json` output is exact.
 
 ## Output and exit codes
 
@@ -58,7 +58,7 @@ Use as `blazma-anim exec <file> <id> --arg name=value ...`.
 | `clip.contacts` | readonly | `clipId`*:string, `characterId`:string, `threshold`:number, `maxSpeed`:number, `minFrames`:integer, `startFrame`:integer, `endFrame`:integer | Detect foot-ground contacts in a clip (same rules as physics.analyze: a sole point within 'threshold' of the ground and slower than 'maxSpeed'). Returns spans per foot. Does not change anything. |
 | `clip.create` | mutating | `name`*:string, `durationFrames`:integer, `fpsNumerator`:integer, `fpsDenominator`:integer | Create an empty animation clip. Returns its clipId. |
 | `clip.delete` | destructive | `clipId`*:string | Delete a clip (undoable). |
-| `clip.foot_lock` | mutating | `clipId`*:string, `characterId`:string, `threshold`:number, `maxSpeed`:number, `minFrames`:integer, `startFrame`:integer, `endFrame`:integer, `blendFrames`:integer | Lock feet during ground contacts: detects contacts, then keys the leg IK targets pinned on one anchor per contact (with knee poles from the motion) and eases on/off over blendFrames. Frames outside contact ± blendFrames keep exactly their original pose. Undoable. Returns spans, maxAnchorError (m) and maxUntouchedChange. |
+| `clip.foot_lock` | mutating | `clipId`*:string, `characterId`:string, `threshold`:number, `maxSpeed`:number, `minFrames`:integer, `startFrame`:integer, `endFrame`:integer, `blendFrames`:integer | Lock feet during ground contacts: detects contacts, then keys the leg IK targets pinned on one anchor per contact (with knee poles from the motion) and eases on/off over blendFrames. Frames outside contact ± blendFrames keep exactly their original pose. Undoable. Returns spans, maxAnchorError (m: largest distance of a locked foot from its planned IK target) and maxUntouchedChange. |
 | `clip.rename` | mutating | `clipId`*:string, `name`*:string | Rename a clip. |
 | `clip.retarget` | mutating | `clipId`*:string, `fromCharacterId`*:string, `toCharacterId`*:string, `name`:string, `footLock`:boolean, `reduceKeys`:boolean | Retarget a clip from one character to another (rig → rig through the humanoid maps; differently proportioned or imported characters). Creates a NEW normal clip (undoable): mapped bones point the same way in the world, hip/root travel is scaled by the leg-length ratio, animated IK targets/poles are mapped, unmapped bones stay at rest (warning). With footLock (default true) the source's foot contacts are kept planted on the target. Returns clipId and a report. |
 | `clip.set_duration` | mutating | `clipId`*:string, `frames`*:integer | Set a clip's length in frames. |
@@ -130,6 +130,7 @@ Use as `blazma-anim exec <file> <id> --arg name=value ...`.
 | `reaction.generate` | mutating | `characterId`*:string, `direction`:string, `directionX`:number, `directionZ`:number, `height`:string, `strength`:number, `knockback`:number, `durationSeconds`:number, `baseClipId`:string, `baseFrame`:integer, `name`:string | Generate a procedural hit reaction as a NEW clip (undoable): the spine and head flinch away from the hit with a damped spring and recover to the base pose; optional knockback moves the root. Give 'direction' (side the hit comes from) or directionX/directionZ (push direction in the character's space), or pass the 'reactionArgs' of combat.hit_test. Base pose: a clip frame (baseClipId/baseFrame) or the working pose. Returns clipId. |
 | `reaction.remove_rule` | mutating | `characterId`*:string, `ruleId`*:string | Remove a hit-reaction rule. |
 | `reaction.set_rule` | mutating | `characterId`*:string, `ruleId`:string, `name`*:string, `direction`:string, `height`:string, `minStrength`:number, `maxStrength`:number, `clipId`:string, `durationSeconds`:number | Add or replace (ruleId) a hit-reaction rule of a character: which reaction (a clip, or procedural when clipId is omitted) a hit from a direction/height/strength range plays. Returns ruleId. |
+| `rig.auto_map` | mutating | `rigId`*:string | Re-run the automatic humanoid mapping on a rig (done on rig.import already): bone names from common conventions (Mixamo mixamorig:*, Unreal/UE5 pelvis/spine_01/thigh_l, Unity humanoid, Blender/Rigify DEF-*, 3ds Max Biped, VRM) and, for names that follow none (e.g. COLLADA 'Skeleton_arm_joint_L__4_'), the skeleton's shape: chains, heights and left/right by X sign. Replaces manual corrections; returns the report with a confidence level (high/medium/low). IK chains are rebuilt. |
 | `rig.import` | external | `path`*:string, `name`:string | Import a rigged character from a .glb/.gltf file. The file is embedded in the project. Returns characterId, rigId and the bone-mapping report. |
 | `rig.inspect` | readonly | `rigId`:string, `characterId`:string | List a rig's bones (name, parent, standard name, rest), controls and IK chains. |
 | `rig.map_bone` | mutating | `rigId`*:string, `bone`*:string, `standard`:string | Correct the humanoid mapping: give a bone a Blazma standard name (e.g. thigh_l), or omit 'standard' to unmap it. IK chains are rebuilt. |
@@ -197,7 +198,7 @@ Export a clip as a .glb animation (glTF 2.0 binary) plus a '<name>.blazma.json' 
 | `startFrame` | integer | no | First frame to export (default 0, or the loop start when the clip loops over part of its length); it becomes time 0 in the file. (min 0) |
 | `endFrame` | integer | no | Last frame to export, inclusive (default: clip length, or the loop end when the clip loops over part of its length). (min 0) |
 | `sidecar` | boolean | no | Also write '<name>.blazma.json' next to the .glb (default true). |
-| `overwrite` | boolean | no | Replace existing files (default false). Ignored for agents, which can only create new files. |
+| `overwrite` | boolean | no | Replace existing files (default false). Allowed for the user (app, blazma-anim CLI); ignored for MCP agents, which can only create new files. |
 | `validate` | boolean | no | Re-read the written file and validate it (default true). |
 
 ### `animation.validate`
@@ -269,7 +270,7 @@ Delete a clip (undoable). (effect: destructive)
 
 ### `clip.foot_lock`
 
-Lock feet during ground contacts: detects contacts, then keys the leg IK targets pinned on one anchor per contact (with knee poles from the motion) and eases on/off over blendFrames. Frames outside contact ± blendFrames keep exactly their original pose. Undoable. Returns spans, maxAnchorError (m) and maxUntouchedChange. (effect: mutating)
+Lock feet during ground contacts: detects contacts, then keys the leg IK targets pinned on one anchor per contact (with knee poles from the motion) and eases on/off over blendFrames. Frames outside contact ± blendFrames keep exactly their original pose. Undoable. Returns spans, maxAnchorError (m: largest distance of a locked foot from its planned IK target) and maxUntouchedChange. (effect: mutating)
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
@@ -340,7 +341,7 @@ Test an attack clip's hitboxes against a defender's hurtboxes frame by frame, wi
 | `defenderFacing` | number | no | Defender yaw in degrees (default 180 = facing the attacker). |
 | `startFrame` | integer | no | First frame (default 0). (min 0) |
 | `endFrame` | integer | no | Last frame (default: clip end). (min 0) |
-| `maxSubsteps` | integer | no | Most sub-steps between frames (1–64, default 8). (min 1) |
+| `maxSubsteps` | integer | no | Most sub-steps between frames (1–64). Default: chosen from the work budget (up to 64; sub-steps are adaptive, so only fast motion uses many). (min 1) |
 | `hitboxId` | string | no | Only this hitbox. (min length 1) |
 
 ### `combat.set_phases`
@@ -1123,6 +1124,14 @@ Add or replace (ruleId) a hit-reaction rule of a character: which reaction (a cl
 | `maxStrength` | number | no | 0–1 (default 1). |
 | `clipId` | string | no | Reaction clip (omit for procedural). (min length 1) |
 | `durationSeconds` | number | no | Procedural reaction length (0.05–10 s, default 0.6). |
+
+### `rig.auto_map`
+
+Re-run the automatic humanoid mapping on a rig (done on rig.import already): bone names from common conventions (Mixamo mixamorig:*, Unreal/UE5 pelvis/spine_01/thigh_l, Unity humanoid, Blender/Rigify DEF-*, 3ds Max Biped, VRM) and, for names that follow none (e.g. COLLADA 'Skeleton_arm_joint_L__4_'), the skeleton's shape: chains, heights and left/right by X sign. Replaces manual corrections; returns the report with a confidence level (high/medium/low). IK chains are rebuilt. (effect: mutating)
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `rigId` | string | yes | Rig id. (min length 1) |
 
 ### `rig.import`
 

@@ -32,6 +32,10 @@ public interface IDisplayAdapterRegistry
 
     /// <summary>A value of one adapter key as the registry returns it (string, int, long, byte[]), or null.</summary>
     object? Value(string adapterKey, string name);
+
+    /// <summary>Whether the device behind the adapter key is present now: false for a removed (phantom) card whose class key
+    /// stays behind, null when it cannot be told (then the adapter is listed).</summary>
+    bool? IsPresent(string adapterKey) => null;
 }
 
 /// <summary>
@@ -134,7 +138,8 @@ public static class HardwareProbe
 
     // ------------------------------------------------------------------ Windows
 
-    /// <summary>Adapters from the display class key, skipping software adapters (Microsoft Basic Display/Render, remote and
+    /// <summary>Adapters from the display class key, skipping removed devices (<see cref="IDisplayAdapterRegistry.IsPresent"/>)
+    /// and software adapters (Microsoft Basic Display/Render, remote and
     /// virtual displays). VRAM: HardwareInformation.qwMemorySize (QWORD), else HardwareInformation.MemorySize (DWORD or binary).</summary>
     public static IReadOnlyList<GpuInfo> ReadWindowsAdapters(IDisplayAdapterRegistry reg)
     {
@@ -143,6 +148,7 @@ public static class HardwareProbe
         {
             var name = (reg.Value(key, "DriverDesc") as string)?.Trim();
             if (string.IsNullOrEmpty(name)) continue;
+            if (reg.IsPresent(key) == false) continue; // a card that was removed or replaced: its class key stays in the registry
             var matching = ((reg.Value(key, "MatchingDeviceId") as string) ?? "").Trim().ToLowerInvariant();
             if (IsSoftwareAdapter(name, matching)) continue;
             var vendor = VendorFromMatchingId(matching);
@@ -219,7 +225,61 @@ public static class HardwareProbe
             }
             catch (System.Security.SecurityException) { return null; } // "Properties" and some keys are not readable by users
         }
+
+        Dictionary<string, string>? _instances;
+
+        /// <summary>
+        /// The device instance whose Enum key has Driver = "{display class}\&lt;adapterKey&gt;" (PCI and ACPI buses), then
+        /// CM_Locate_DevNode with CM_LOCATE_DEVNODE_NORMAL, which only finds devices that are present (a removed card's devnode is
+        /// a phantom: CR_NO_SUCH_DEVNODE).
+        /// </summary>
+        public bool? IsPresent(string adapterKey)
+        {
+            try
+            {
+                _instances ??= DriverToInstance();
+                var driver = DisplayClassGuid + "\\" + adapterKey;
+                if (!_instances.TryGetValue(driver, out var instance)) return null;
+                return CM_Locate_DevNodeW(out _, instance, 0) == 0;
+            }
+            catch (Exception e) when (e is System.Security.SecurityException or UnauthorizedAccessException or IOException
+                or DllNotFoundException or EntryPointNotFoundException)
+            {
+                return null;
+            }
+        }
+
+        static Dictionary<string, string> DriverToInstance()
+        {
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var bus in new[] { "PCI", "ACPI" })
+            {
+                using var busKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Enum\" + bus);
+                if (busKey is null) continue;
+                foreach (var hw in busKey.GetSubKeyNames())
+                {
+                    using var hwKey = busKey.OpenSubKey(hw);
+                    if (hwKey is null) continue;
+                    foreach (var inst in hwKey.GetSubKeyNames())
+                    {
+                        try
+                        {
+                            using var instKey = hwKey.OpenSubKey(inst);
+                            if (instKey?.GetValue("Driver") is string d && d.StartsWith(DisplayClassGuid, StringComparison.OrdinalIgnoreCase))
+                                map[d] = bus + "\\" + hw + "\\" + inst;
+                        }
+                        catch (System.Security.SecurityException) { }
+                    }
+                }
+            }
+            return map;
+        }
+
+        [DllImport("cfgmgr32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+        static extern int CM_Locate_DevNodeW(out uint devInst, string deviceId, uint flags);
     }
+
+    const string DisplayClassGuid = "{4d36e968-e325-11ce-bfc1-08002be10318}";
 
     // ------------------------------------------------------------------ nvidia-smi
 

@@ -22,6 +22,7 @@ public sealed class ProjectSession
         public long Sequence { get; } = sequence;
         public List<ICommand> Commands { get; } = new();
         public TransactionInfo Info => new(Id, Label, Origin, Commands.Count);
+        public long Bytes => Commands.Sum(c => c.HistoryBytes);
     }
 
     readonly List<Transaction> _undo = new();
@@ -30,6 +31,23 @@ public sealed class ProjectSession
     Transaction? _open;
     long _nextSequence = 1;
     long _savedSequence;
+    long _baseSequence; // sequence of the newest step dropped from the bottom of the history (0: none)
+    long _undoBytes;
+
+    /// <summary>Default undo depth: older steps are dropped (the project keeps their result; they just cannot be undone).</summary>
+    public const int DefaultMaxHistorySteps = 500;
+
+    /// <summary>Default estimated memory budget for undo history (256 MB).</summary>
+    public const long DefaultMaxHistoryBytes = 256L * 1024 * 1024;
+
+    /// <summary>Maximum number of undo steps kept (at least 1).</summary>
+    public int MaxHistorySteps { get; set; } = DefaultMaxHistorySteps;
+
+    /// <summary>Estimated memory budget for undo steps (<see cref="ICommand.HistoryBytes"/>); the newest step is always kept.</summary>
+    public long MaxHistoryBytes { get; set; } = DefaultMaxHistoryBytes;
+
+    /// <summary>Estimated memory held by the undo steps.</summary>
+    public long HistoryBytes => _undoBytes;
 
     public ProjectSession(Project project, string? filePath = null, IOpLog? log = null)
     {
@@ -52,7 +70,7 @@ public sealed class ProjectSession
 
     public event Action<SessionChangedArgs>? Changed;
 
-    long TopSequence => _undo.Count == 0 ? 0 : _undo[^1].Sequence;
+    long TopSequence => _undo.Count == 0 ? _baseSequence : _undo[^1].Sequence;
 
     public CommandResult Execute(ICommand command, CommandOrigin origin)
     {
@@ -166,6 +184,7 @@ public sealed class ProjectSession
 
         var wasDirty = IsDirty;
         _undo.RemoveAt(_undo.Count - 1);
+        _undoBytes -= tx.Bytes;
         var changes = new List<Change>();
         for (var i = tx.Commands.Count - 1; i >= 0; i--) changes.AddRange(tx.Commands[i].Undo(Project));
         _redo.Add(tx);
@@ -184,6 +203,8 @@ public sealed class ProjectSession
         var changes = new List<Change>();
         foreach (var c in tx.Commands) changes.AddRange(c.Execute(Project).Changes);
         _undo.Add(tx);
+        _undoBytes += tx.Bytes;
+        Trim();
         Raise(changes, origin, wasDirty);
         _log?.Append(new OpLogEntry(DateTimeOffset.UtcNow, origin.ToString(), "edit.redo", tx.Label, true, null, tx.Id));
         return new CommandResult(true, null, changes, Array.Empty<Diagnostic>(), null, tx.Id);
@@ -218,6 +239,8 @@ public sealed class ProjectSession
         FilePath = filePath;
         _undo.Clear();
         _redo.Clear();
+        _undoBytes = 0;
+        _baseSequence = 0;
         _savedSequence = startDirty ? -1 : 0;
         Changed?.Invoke(new SessionChangedArgs(new[] { new Change(Change.ProjectReplaced) }, CommandOrigin.Ui));
     }
@@ -228,7 +251,26 @@ public sealed class ProjectSession
     void Push(Transaction tx)
     {
         _undo.Add(tx);
+        _undoBytes += tx.Bytes;
         _redo.Clear();
+        Trim();
+    }
+
+    /// <summary>Drop the oldest undo steps past the step/memory budget. The dirty state stays right: the saved position is a
+    /// sequence number, and undoing everything that is left now ends at the dropped step's sequence, not at 0.</summary>
+    void Trim()
+    {
+        var drop = 0;
+        var bytes = _undoBytes;
+        while (_undo.Count - drop > 1 && (_undo.Count - drop > Math.Max(1, MaxHistorySteps) || bytes > MaxHistoryBytes))
+        {
+            bytes -= _undo[drop].Bytes;
+            drop++;
+        }
+        if (drop == 0) return;
+        _baseSequence = _undo[drop - 1].Sequence;
+        _undo.RemoveRange(0, drop);
+        _undoBytes = bytes;
     }
 
     void Raise(IReadOnlyList<Change> changes, CommandOrigin origin, bool wasDirty, bool forceSaveState = false)

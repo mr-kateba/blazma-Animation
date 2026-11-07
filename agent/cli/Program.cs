@@ -69,7 +69,8 @@ static class Program
         Add --attach (and leave out <file>) to drive the running Blazma Animation window instead of a file.
         Headless file access: commands read files from the project folder, the current folder and --allow-read DIR
         (or BLAZMA_ALLOW_READ); they create new files (animation_export) only in the project folder, the current
-        folder and --allow-write DIR (or BLAZMA_ALLOW_WRITE). Read folders never grant write.
+        folder and --allow-write DIR (or BLAZMA_ALLOW_WRITE). Read folders never grant write. As the user, you may replace an
+        existing export with --arg overwrite=true (MCP agents never can).
         Exit codes: 0 ok, 1 user/input error or command failed, 2 validation failure, 3 internal error, 130 cancelled.
         """;
 
@@ -128,7 +129,7 @@ static class Program
     /// <summary>In-process backend with the folders from --allow-read / --allow-write (plus BLAZMA_ALLOW_READ / BLAZMA_ALLOW_WRITE).</summary>
     static HeadlessBackend Headless(Options o)
     {
-        var h = new HeadlessBackend();
+        var h = new HeadlessBackend(callerIsUser: true); // the person running blazma-anim is the user (exports may overwrite when asked)
         foreach (var d in o.Many("allow-read")) h.AllowRead(d);
         foreach (var d in o.Many("allow-write")) h.AllowWrite(d);
         return h;
@@ -213,7 +214,7 @@ static class Program
             saved = await Save(conn, ct);
         step["saved"] = saved;
 
-        if (ok || o.Has("json")) Print(o, step, Human(tool.Id, step, saved));
+        if (ok || o.Has("json")) Print(o, step, ok && tool.Id == "project.inspect" && step["data"] is JsonObject d ? InspectSummary(d) : Human(tool.Id, step, saved));
         else Console.Error.WriteLine(Human(tool.Id, step, saved));
         if (!ok && o.Has("json")) Console.Error.WriteLine($"blazma-anim: {tool.Id} failed: {step["error"]?["code"]}: {step["error"]?["message"]}");
         return ok ? Exit.Ok : Exit.UserError;
@@ -244,11 +245,61 @@ static class Program
             if (r["transactionId"] is { } tx) sb.Append("  (transaction ").Append((string?)tx).Append(')');
             if (saved) sb.Append("  [saved]");
             foreach (var w in r["warnings"] as JsonArray ?? new JsonArray()) sb.Append("\nwarning: ").Append((string?)w?["message"]);
-            if (r["data"] is { } d) sb.Append('\n').Append(d.ToJsonString(ResultText.Pretty));
+            if (r["data"] is { } d) sb.Append('\n').Append(RoundForDisplay(d)!.ToJsonString(ResultText.Pretty));
         }
         else sb.Append(ResultText.ForAgent(r));
         return sb.ToString();
     }
+
+    /// <summary>Human-mode "inspect": counts, names and durations (the full data, every key frame included, is in --json).</summary>
+    static string InspectSummary(JsonObject d)
+    {
+        var sb = new StringBuilder();
+        static string S(JsonNode? n) => n?.ToString() ?? "";
+        static JsonArray A(JsonNode? n) => n as JsonArray ?? new JsonArray();
+        sb.Append($"Project \"{S(d["name"])}\"  ({S(d["frameRate"])} fps, schema {S(d["schemaVersion"])}, id {S(d["projectId"])})");
+        var chars = A(d["characters"]);
+        sb.Append($"\nCharacters ({chars.Count}):");
+        foreach (var c in chars)
+        {
+            sb.Append($"\n  {S(c?["name"])}  rig \"{S(c?["rig"])}\"  id {S(c?["characterId"])}");
+            if ((int?)c?["hurtboxes"] is > 0 and var hb) sb.Append($"  {hb} hurtboxes");
+        }
+        var clips = A(d["clips"]);
+        sb.Append($"\nClips ({clips.Count}):");
+        foreach (var c in clips)
+        {
+            var frames = (long?)c?["durationFrames"] ?? 0;
+            var fps = S(c?["fps"]);
+            var secs = double.TryParse(fps.Split('/')[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var num) && num > 0
+                ? frames / (fps.Contains('/') && double.TryParse(fps.Split('/')[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var den) && den > 0 ? num / den : num)
+                : 0;
+            sb.Append($"\n  {S(c?["name"])}  {frames} frames @ {fps} fps ({secs.ToString("0.##", CultureInfo.InvariantCulture)} s)  {S(c?["trackCount"])} tracks  {A(c?["keyFrames"]).Count} key frames");
+            if ((bool?)c?["isDraft"] == true) sb.Append("  [draft]");
+            if ((int?)c?["eventCount"] is > 0 and var ev) sb.Append($"  {ev} events");
+            if ((int?)c?["hitboxCount"] is > 0 and var hx) sb.Append($"  {hx} hitboxes");
+            if (A(c?["markers"]).Count is > 0 and var mk) sb.Append($"  {mk} markers");
+            sb.Append($"  id {S(c?["clipId"])}");
+        }
+        foreach (var (key, label, idKey) in new[] { ("props", "Props", "propId"), ("sequences", "Sequences", "sequenceId"), ("poseLibrary", "Pose library", "poseId"),
+                     ("templates", "Templates", "templateId"), ("combos", "Combos", "comboId") })
+        {
+            var list = A(d[key]);
+            sb.Append($"\n{label} ({list.Count})");
+            if (list.Count > 0) sb.Append(": ").Append(string.Join(", ", list.Select(x => $"{S(x?["name"])}{(x?[idKey] is { } id ? $" ({id})" : "")}")));
+        }
+        sb.Append("\n(--json prints everything, including every key frame.)");
+        return sb.ToString();
+    }
+
+    /// <summary>A copy with every number rounded to 4 decimals, for reading (the --json output keeps exact values).</summary>
+    static JsonNode? RoundForDisplay(JsonNode? n) => n switch
+    {
+        JsonObject o => new JsonObject(o.Select(kv => KeyValuePair.Create(kv.Key, RoundForDisplay(kv.Value)))),
+        JsonArray a => new JsonArray(a.Select(RoundForDisplay).ToArray()),
+        JsonValue v when v.GetValueKind() == JsonValueKind.Number && v.TryGetValue<double>(out var x) && x != Math.Floor(x) => JsonValue.Create(Math.Round(x, 4)),
+        _ => n?.DeepClone(),
+    };
 
     static JsonObject BuildArgs(Options o, ToolInfo tool)
     {

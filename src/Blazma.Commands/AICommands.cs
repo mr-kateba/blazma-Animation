@@ -857,6 +857,7 @@ public sealed class CancelMotionJob(MotionJobService jobs, string jobId) : IOrig
 public sealed class ApplyMotionJob(MotionJobService jobs, string jobId, string? name) : IOriginAwareCommand
 {
     readonly ObjectId _clipId = ObjectId.New();
+    public long HistoryBytes => _clip is null ? 256 : ClipDelta.EstimateBytes(_clip);
     Clip? _clip;
     string _jobClipName = "";
     bool _jobClipDraft;

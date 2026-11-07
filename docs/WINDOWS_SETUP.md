@@ -131,8 +131,8 @@ dotnet test Blazma.slnx
 
 1. شغّل الملف. **لا يحتاج صلاحيات مدير**؛ يُثبَّت للمستخدم الحالي في `%LOCALAPPDATA%\Programs\BlazmaAnimation`.
 2. اختر المكوّنات: البرنامج (إلزامي)، ربط ملفات `.blazanim`، واختياريًا اختصار سطح المكتب. يُضاف اختصار في قائمة Start.
-3. للإزالة: Settings ← Apps، أو `uninstall.exe` في مجلد التثبيت.
-4. الإعدادات تبقى في `%APPDATA%\BlazmaAnimation` ولا تُحذف عند الإزالة.
+3. للإزالة: Settings ← Apps، أو `uninstall.exe` في مجلد التثبيت. إن كان البرنامج أو أدواته (`blazma-mcp`/`blazma-anim`) يعمل، يطلب المثبّت والمزيل إغلاقه أولًا (إعادة المحاولة/إلغاء). المثبّت يعمل على Windows ‏64 بت فقط.
+4. الإعدادات تبقى في `%APPDATA%\BlazmaAnimation` ولا تُحذف عند الإزالة. نماذج الذكاء الاصطناعي المنزّلة (`%LOCALAPPDATA%\BlazmaAnimation\models`، قد تكون عدة GB) يسألك المزيل عنها ويعرض حجمها، والافتراضي **الإبقاء** عليها.
 
 ### ب) المحمولة: `BlazmaAnimation-<الإصدار>-win64.zip`
 

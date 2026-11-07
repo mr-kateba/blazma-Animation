@@ -61,14 +61,18 @@ public class KhronosSampleTests
     }
 
     [Fact]
-    public void RiggedFigure_mapping_only_reports_what_the_names_support()
+    public void RiggedFigure_unconventional_names_are_mapped_from_the_skeleton_shape()
     {
         var res = Import("RiggedFigure");
-        // The names (torso_joint_1, leg_joint_L_1, ...) are not part of any known convention, so no
-        // required bone is guessed and the report asks for manual assignment.
-        Assert.False(res.Mapping.IsUsable);
-        Assert.Contains("pelvis", res.Mapping.MissingRequired);
-        Assert.Contains("hand_l", res.Mapping.MissingRequired);
+        // The names (torso_joint_1, leg_joint_L_1, ...) are not part of any known convention: the required bones are inferred
+        // from the hierarchy and rest positions (confidence Hierarchy), the same map the earlier tests assigned by hand.
+        Assert.True(res.Mapping.IsUsable);
+        Assert.Empty(res.Mapping.Issues);
+        var map = res.Mapping.Assignments.ToDictionary(a => a.Standard, a => a.BoneName);
+        Assert.Equal("torso_joint_1", map["pelvis"]);
+        Assert.Equal("arm_joint_L_3", map["hand_l"]);
+        Assert.Equal("leg_joint_R_2", map["calf_r"]);
+        Assert.All(res.Mapping.Assignments, a => Assert.Equal(MappingConfidence.Hierarchy, a.Confidence));
         Assert.Equal(res.Mapping.Assignments.Count, res.Rig.HumanoidMap.Count);
         Assert.Equal(res.Mapping.Assignments.Count, res.Mapping.Assignments.Select(a => a.Standard).Distinct().Count());
     }

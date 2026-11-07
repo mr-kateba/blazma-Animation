@@ -8,6 +8,30 @@ public class HardwareAndCatalogTests
     {
         public IEnumerable<string> AdapterKeys() => keys.Keys;
         public object? Value(string adapterKey, string name) => keys[adapterKey].GetValueOrDefault(name);
+        public HashSet<string> Removed { get; } = new();
+        public bool? IsPresent(string adapterKey) => Removed.Contains(adapterKey) ? false : adapterKey == "0009" ? null : true;
+    }
+
+    [Fact]
+    public void Windows_RemovedAdapters_AreNotListed_UnknownPresenceIsKept_AndNvidiaSmiWins()
+    {
+        var reg = new FakeRegistry(new()
+        {
+            ["0000"] = new() { ["DriverDesc"] = "NVIDIA GeForce GTX 1060", ["MatchingDeviceId"] = @"PCI\VEN_10DE&DEV_1C03" }, // old card, removed
+            ["0001"] = new() { ["DriverDesc"] = "AMD Radeon RX 7800 XT", ["MatchingDeviceId"] = @"PCI\VEN_1002&DEV_747E",
+                ["HardwareInformation.qwMemorySize"] = 16L * 1024 * 1024 * 1024 },
+            ["0009"] = new() { ["DriverDesc"] = "Intel(R) UHD Graphics 770", ["MatchingDeviceId"] = @"PCI\VEN_8086&DEV_4680" },
+        });
+        reg.Removed.Add("0000");
+        var gpus = HardwareProbe.ReadWindowsAdapters(reg);
+        Assert.Equal(new[] { "AMD Radeon RX 7800 XT", "Intel(R) UHD Graphics 770" }, gpus.Select(g => g.Name));
+        Assert.Equal("AMD Radeon RX 7800 XT", HardwareProbe.Best(gpus)!.Name);
+
+        // Removed NVIDIA card in the registry, but nvidia-smi reports the installed one: nvidia-smi's data is used.
+        reg.Removed.Clear();
+        var merged = HardwareProbe.MergeNvidiaSmi(HardwareProbe.ReadWindowsAdapters(reg), HardwareProbe.ParseNvidiaSmi("NVIDIA GeForce RTX 4070, 12282\n"));
+        Assert.DoesNotContain(merged, g => g.Name.Contains("1060"));
+        Assert.Contains(merged, g => g.Name == "NVIDIA GeForce RTX 4070" && g.Source == "nvidia-smi");
     }
 
     [Fact]

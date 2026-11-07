@@ -100,4 +100,8 @@ public interface ICommand
     /// represented by this command and can be dropped.
     /// </summary>
     bool TryMerge(ICommand next) => false;
+
+    /// <summary>Estimated memory this command keeps for undo/redo; the session drops the oldest steps past its budget
+    /// (<see cref="ProjectSession.MaxHistoryBytes"/>). Commands that keep clips or other large snapshots override it.</summary>
+    long HistoryBytes => 256;
 }

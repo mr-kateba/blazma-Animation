@@ -23,6 +23,8 @@ public abstract class AddClipCommand : ICommand
     public CommandEffect Effect => CommandEffect.Mutating;
     public abstract string Label { get; }
 
+    public long HistoryBytes => _clip is null ? 256 : ClipDelta.EstimateBytes(_clip);
+
     public CommandOutcome Execute(Project p)
     {
         if (_clip is null)
@@ -89,6 +91,11 @@ public abstract class SceneEdit : ICommand
 
     /// <summary>What views must refresh.</summary>
     protected abstract IReadOnlyList<Change> Changes { get; }
+
+    public long HistoryBytes => 256 + Size(_before) + Size(_after);
+
+    static long Size(State? s) => s is null ? 0
+        : (s.Sequences?.Length ?? 0) + (s.Props?.Length ?? 0) + (s.Combos?.Length ?? 0) + 8L * ((s.Templates?.Count ?? 0) + (s.Assets?.Count ?? 0));
 
     public CommandOutcome Execute(Project p)
     {

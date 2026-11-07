@@ -108,6 +108,7 @@ public static class KeyCommands
             if (ObjectId.TryParse(n, out var id) && (rig is null || rig.FindBone(id) is not null || rig.FindControl(id) is not null)) { set.Add(id); continue; }
             if (rig?.FindBoneByName(n) is { } b) { set.Add(b.Id); continue; }
             if (rig?.Controls.Find(c => c.Name == n) is { } c) { set.Add(c.Id); continue; }
+            if (rig is not null && PoseCommands.FindBone(rig, n) is { } std) { set.Add(std.Id); continue; } // standard name via the humanoid map
             throw new CommandException("not_found", $"'{n}' is not a bone or control of this clip's rig.");
         }
         return set;
@@ -175,20 +176,24 @@ public static class KeyCommands
 }
 
 /// <summary>
-/// Base for edits to one clip. The first Execute computes the result; undo/redo swap whole-clip
-/// snapshots, so redo is exact even if the pose it was recorded from has changed since.
+/// Base for edits to one clip. The first Execute computes the result on a private copy; the history keeps only what changed
+/// (<see cref="ClipDelta"/>: the clip's non-track fields plus the tracks that differ), so redo is exact even if the pose it was
+/// recorded from has changed since, and a one-bone edit on a long clip stays cheap in time and memory.
 /// Note: the Clip object in Project.Clips is replaced on every edit, undo and redo — UI code must
 /// look clips up by id after a clip.changed notification instead of keeping references.
 /// </summary>
 public abstract class ClipEdit(ObjectId clipId) : ICommand
 {
-    Clip? _before;
-    Clip? _after;
+    ClipDelta? _before;
+    ClipDelta? _after;
     protected ObjectId ClipId { get; } = clipId;
 
     public abstract string Id { get; }
     public CommandEffect Effect => CommandEffect.Mutating;
     public abstract string Label { get; }
+
+    /// <summary>Estimated memory the undo history holds for this edit.</summary>
+    public long HistoryBytes => (_before?.Bytes ?? 0) + (_after?.Bytes ?? 0) + 256;
 
     public CommandOutcome Execute(Project p)
     {
@@ -196,16 +201,15 @@ public abstract class ClipEdit(ObjectId clipId) : ICommand
         if (index < 0) throw new CommandException("not_found", $"Clip '{ClipId}' does not exist.");
         if (_after is not null)
         {
-            p.Clips[index] = CloneClip(_after);
+            p.Clips[index] = _after.ApplyTo(p.Clips[index]);
             return new(new[] { KeyCommands.ClipChanged(ClipId) });
         }
-        var before = CloneClip(p.Clips[index]);
+        var before = p.Clips[index];
         var work = CloneClip(before);
         var warnings = new List<Diagnostic>();
         var data = Apply(p, work, warnings);
         work.Tracks.RemoveAll(t => t.Keys.Count == 0);
-        _before = before;
-        _after = CloneClip(work);
+        (_before, _after) = ClipDelta.Between(before, work);
         p.Clips[index] = work;
         return new(new[] { KeyCommands.ClipChanged(ClipId) }, data, warnings);
     }
@@ -214,15 +218,111 @@ public abstract class ClipEdit(ObjectId clipId) : ICommand
     {
         var index = p.Clips.FindIndex(c => c.Id == ClipId);
         if (index < 0) throw new InvalidOperationException($"Clip '{ClipId}' disappeared before undo.");
-        p.Clips[index] = CloneClip(_before!);
+        p.Clips[index] = _before!.ApplyTo(p.Clips[index]);
         return new[] { KeyCommands.ClipChanged(ClipId) };
     }
 
     /// <summary>Edit <paramref name="clip"/> (a private copy). Throw CommandException to abort.</summary>
     protected abstract JsonNode? Apply(Project project, Clip clip, List<Diagnostic> warnings);
 
-    public static Clip CloneClip(Clip c) =>
-        JsonSerializer.Deserialize<Clip>(JsonSerializer.SerializeToUtf8Bytes(c, ProjectArchive.JsonOptions), ProjectArchive.JsonOptions)!;
+    /// <summary>Exact deep copy (typed; no JSON round trip for the tracks).</summary>
+    public static Clip CloneClip(Clip c) => c.DeepClone();
+}
+
+/// <summary>
+/// One side of a clip edit for the undo history: the clip's non-track fields, its track order (by track id) and copies of only
+/// the tracks that differ from the other side. Applying it to the clip as it is on the other side rebuilds this side exactly;
+/// unchanged tracks are taken from that clip (equal by construction, since history is applied in stack order).
+/// </summary>
+public sealed class ClipDelta
+{
+    Clip _shell = null!;
+    ObjectId[] _order = null!;
+    Dictionary<ObjectId, Track> _tracks = null!;
+    Clip? _full; // fallback when track ids are not unique
+    public long Bytes { get; private set; }
+
+    internal static (ClipDelta Before, ClipDelta After) Between(Clip before, Clip after)
+    {
+        if (!UniqueIds(before) || !UniqueIds(after))
+        {
+            var b = ClipEdit.CloneClip(before); var a = ClipEdit.CloneClip(after);
+            return (new ClipDelta { _full = b, Bytes = EstimateBytes(b) }, new ClipDelta { _full = a, Bytes = EstimateBytes(a) });
+        }
+        var beforeById = before.Tracks.ToDictionary(t => t.Id);
+        var afterById = after.Tracks.ToDictionary(t => t.Id);
+        return (Side(before, afterById), Side(after, beforeById));
+    }
+
+    static ClipDelta Side(Clip side, Dictionary<ObjectId, Track> other)
+    {
+        var d = new ClipDelta { _shell = CloneShell(side), _order = side.Tracks.Select(t => t.Id).ToArray(), _tracks = new() };
+        long bytes = 512 + 16L * d._order.Length;
+        foreach (var t in side.Tracks)
+        {
+            if (other.TryGetValue(t.Id, out var o) && SameTrack(t, o)) continue;
+            var copy = CloneTrack(t);
+            d._tracks[t.Id] = copy;
+            bytes += EstimateBytes(copy);
+        }
+        d.Bytes = bytes;
+        return d;
+    }
+
+    internal Clip ApplyTo(Clip current)
+    {
+        if (_full is not null) return ClipEdit.CloneClip(_full);
+        var clip = CloneShell(_shell);
+        var live = current.Tracks.GroupBy(t => t.Id).ToDictionary(g => g.Key, g => g.First());
+        clip.Tracks = new List<Track>(_order.Length);
+        foreach (var id in _order)
+        {
+            if (_tracks.TryGetValue(id, out var stored)) clip.Tracks.Add(CloneTrack(stored));
+            else if (live.TryGetValue(id, out var t)) clip.Tracks.Add(t);
+            else throw new InvalidOperationException($"Track '{id}' of clip '{current.Name}' disappeared before undo/redo.");
+        }
+        return clip;
+    }
+
+    static bool UniqueIds(Clip c) => c.Tracks.Select(t => t.Id).Distinct().Count() == c.Tracks.Count;
+
+    public static long EstimateBytes(Clip c) => 512 + c.Tracks.Sum(EstimateBytes);
+
+    static long EstimateBytes(Track t)
+    {
+        long b = 128;
+        foreach (var k in t.Keys)
+            b += 64 + 32 + 8L * (k.Value.Length + (k.InTangent?.Length ?? 0) + (k.OutTangent?.Length ?? 0))
+                + (k.InTangent is null ? 0 : 24) + (k.OutTangent is null ? 0 : 24);
+        return b;
+    }
+
+    static bool SameTrack(Track a, Track b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a.Id != b.Id || a.Target.Kind != b.Target.Kind || a.Target.Id != b.Target.Id || a.Channel != b.Channel
+            || a.Locked != b.Locked || a.Group != b.Group || a.Muted != b.Muted || a.Keys.Count != b.Keys.Count) return false;
+        for (var i = 0; i < a.Keys.Count; i++)
+        {
+            var x = a.Keys[i]; var y = b.Keys[i];
+            if (x.Time != y.Time || x.Interp != y.Interp || !Same(x.Value, y.Value) || !Same(x.InTangent, y.InTangent) || !Same(x.OutTangent, y.OutTangent))
+                return false;
+        }
+        return true;
+    }
+
+    static bool Same(double[]? a, double[]? b)
+    {
+        if (a is null || b is null) return a is null && b is null;
+        if (a.Length != b.Length) return false;
+        for (var i = 0; i < a.Length; i++)
+            if (BitConverter.DoubleToInt64Bits(a[i]) != BitConverter.DoubleToInt64Bits(b[i])) return false;
+        return true;
+    }
+
+    internal static Track CloneTrack(Track t) => t.DeepClone();
+
+    internal static Clip CloneShell(Clip c) => c.CloneWithoutTracks();
 }
 
 public sealed class SetKeys(ObjectId clipId, ObjectId? characterId, long frame, IReadOnlyList<string>? names, Interpolation? interp,

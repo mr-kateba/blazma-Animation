@@ -18,6 +18,24 @@ public static class AtomicFile
 {
     const int MaxAttempts = 6;
 
+    /// <summary>How long a save keeps retrying while another program (antivirus, indexer, sync client) holds the file.</summary>
+    internal static readonly TimeSpan SharingRetryBudget = TimeSpan.FromSeconds(10);
+
+    /// <summary>The OS calls a swap uses (replaceable in tests to simulate Windows and network-drive failures).</summary>
+    internal sealed class FileOps
+    {
+        public Func<bool> UseReplace = OperatingSystem.IsWindows;
+        public Action<string, string, string?> Replace = (src, dst, backup) => File.Replace(src, dst, backup, ignoreMetadataErrors: true);
+        public Action<string, string, bool> Move = File.Move;
+        public Action<int> Sleep = Thread.Sleep;
+    }
+
+    static readonly FileOps DefaultOps = new();
+    static readonly AsyncLocal<FileOps?> OpsOverride = new();
+
+    /// <summary>Per async flow, so a test's fake never leaks into other tests running in parallel.</summary>
+    internal static FileOps Ops { get => OpsOverride.Value ?? DefaultOps; set => OpsOverride.Value = value; }
+
     /// <param name="overwrite">False: the final rename fails if <paramref name="path"/> exists by then
     /// (even if it appeared while writing), with <see cref="FileAlreadyExistsException"/>; nothing is replaced.</param>
     public static void Write(string path, Action<Stream> write, Action<string>? verify = null, bool keepBackup = true, bool overwrite = true)
@@ -76,31 +94,60 @@ public static class AtomicFile
 
     static void Swap(string temp, string path, string? backup)
     {
-        // Antivirus scanners and indexers briefly hold files on Windows: retry with backoff.
+        var ops = Ops;
+        long slept = 0;
+        var replaceUnsupported = false;
         for (var attempt = 1; ; attempt++)
         {
             try
             {
                 if (!File.Exists(path))
-                    File.Move(temp, path, overwrite: true); // first save: nothing to replace (rename replaces a dangling link, never follows it)
-                else if (OperatingSystem.IsWindows())
-                    File.Replace(temp, path, backup, ignoreMetadataErrors: true);
-                else
+                    ops.Move(temp, path, true); // first save: nothing to replace (rename replaces a dangling link, never follows it)
+                else if (ops.UseReplace() && !replaceUnsupported)
                 {
-                    if (backup is not null) Backup(path, backup);
-                    File.Move(temp, path, overwrite: true); // rename(2): atomic on the same filesystem
+                    try { ops.Replace(temp, path, backup); }
+                    catch (Exception e) when (IsReplaceUnsupported(e))
+                    {
+                        // File.Replace (ReplaceFile) fails on many network shares and sync folders (SMB, OneDrive, Dropbox):
+                        // 1175/1176/1177 or "not supported". Fall back to backup copy + rename-over, which is still atomic for the
+                        // destination (MoveFileEx with MOVEFILE_REPLACE_EXISTING). After 1176 the original may already have been
+                        // moved to the backup name: then the destination is simply missing and the move below creates it.
+                        replaceUnsupported = true;
+                        CopyFallback(temp, path, backup, ops);
+                    }
                 }
+                else CopyFallback(temp, path, backup, ops);
                 return;
             }
-            catch (IOException) when (attempt < MaxAttempts)
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException && ShouldRetry(e, attempt, slept))
             {
-                Thread.Sleep(50 * (1 << attempt));
-            }
-            catch (UnauthorizedAccessException) when (attempt < MaxAttempts && OperatingSystem.IsWindows())
-            {
-                Thread.Sleep(50 * (1 << attempt));
+                var delay = Math.Min(1000, 50 * (1 << Math.Min(attempt, 5)));
+                ops.Sleep(delay);
+                slept += delay;
             }
         }
+    }
+
+    static void CopyFallback(string temp, string path, string? backup, FileOps ops)
+    {
+        if (backup is not null && File.Exists(path)) Backup(path, backup);
+        ops.Move(temp, path, true); // rename(2) / MoveFileEx(REPLACE_EXISTING): atomic on the same volume
+    }
+
+    /// <summary>Win32 1175 (unable to remove replaced), 1176 (unable to move replacement), 1177 (unable to move replacement 2),
+    /// or a share that does not implement ReplaceFile at all (ERROR_NOT_SUPPORTED 50, ERROR_INVALID_FUNCTION 1).</summary>
+    internal static bool IsReplaceUnsupported(Exception e) =>
+        e is PlatformNotSupportedException or NotSupportedException
+        || e is IOException io && (io.HResult & 0xFFFF0000) == 0x80070000 && (io.HResult & 0xFFFF) is 1175 or 1176 or 1177 or 50 or 1;
+
+    /// <summary>A sharing violation (antivirus, indexer, sync client; or "access denied" while a delete is pending on Windows)
+    /// is retried with backoff for up to <see cref="SharingRetryBudget"/>; other I/O errors a few times.</summary>
+    static bool ShouldRetry(Exception e, int attempt, long sleptMs)
+    {
+        var sharing = FileErrors.Classify(e) == FileErrors.SharingViolation
+            || (e is UnauthorizedAccessException && Ops.UseReplace());
+        if (sharing) return sleptMs < SharingRetryBudget.TotalMilliseconds;
+        return e is IOException && attempt < MaxAttempts && FileErrors.Classify(e) is FileErrors.IoError;
     }
 
     /// <summary>Copy to a fresh temporary file, then rename over the backup (a link named like the backup is replaced, not followed).</summary>

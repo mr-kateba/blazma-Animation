@@ -97,9 +97,17 @@ public static class PoseCommands
 
     public static string SerializePose(Pose pose) => JsonSerializer.Serialize(pose, ProjectArchive.JsonOptions);
 
+    /// <summary>A bone by id, by its name in the rig, or by a Blazma standard name through the humanoid map ("hand_r" finds
+    /// CesiumMan's "Skeleton_arm_joint_R__3_").</summary>
     internal static Bone ResolveBone(Rig rig, string idOrName) =>
+        FindBone(rig, idOrName)
+        ?? throw new CommandException("not_found", HumanoidStandard.IsStandard(idOrName.Trim())
+            ? $"Rig '{rig.Name}' has no bone mapped to the standard name '{idOrName}' (map one with rig.map_bone or rig.auto_map, or use the rig's own bone name)."
+            : $"Bone '{idOrName}' does not exist in rig '{rig.Name}' (use a bone name or id from the rig, or a standard name such as hand_r).");
+
+    internal static Bone? FindBone(Rig rig, string idOrName) =>
         (ObjectId.TryParse(idOrName, out var id) ? rig.FindBone(id) : null) ?? rig.FindBoneByName(idOrName)
-        ?? throw new CommandException("not_found", $"Bone '{idOrName}' does not exist in rig '{rig.Name}'.");
+        ?? (HumanoidStandard.IsStandard(idOrName.Trim()) ? rig.FindByStandardName(idOrName.Trim()) : null);
 
     internal static RigControl ResolveControl(Rig rig, string idOrName) =>
         (ObjectId.TryParse(idOrName, out var id) ? rig.FindControl(id) : null) ?? rig.Controls.Find(c => c.Name == idOrName)

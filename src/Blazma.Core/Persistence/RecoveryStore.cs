@@ -141,12 +141,19 @@ internal sealed class SessionMarker
     public DateTimeOffset? LastAutosaveUtc { get; set; }
 }
 
-/// <summary>Recovery bookkeeping for one open project. Call from the thread that owns the project.</summary>
+/// <summary>
+/// Recovery bookkeeping for one open project. <see cref="Autosave"/> takes the project, so call it from the thread that owns the
+/// project; <see cref="AutosaveSnapshot"/> may run on a worker thread. All methods are serialized internally, so a worker autosave
+/// never races <see cref="MarkSaved"/> or <see cref="EndCleanly"/>.
+/// </summary>
 public sealed class RecoverySession
 {
     readonly RecoveryStore _store;
     readonly SessionMarker _marker;
+    readonly object _gate = new();
     string _folder;
+    DateTimeOffset _savedUtc = DateTimeOffset.MinValue;
+    bool _ended;
 
     internal RecoverySession(RecoveryStore store, ObjectId projectId, string name, string? path)
     {
@@ -173,20 +180,41 @@ public sealed class RecoverySession
         RecoveryStore.WriteMarker(_folder, _marker);
     }
 
-    /// <summary>Writes an autosave to the older generation, then points the marker at it.</summary>
-    public void Autosave(Project project)
+    /// <summary>Writes an autosave to the older generation, then points the marker at it (synchronously, on the calling thread).</summary>
+    public void Autosave(Project project) => AutosaveSnapshot(ProjectArchive.Capture(project, copy: false));
+
+    /// <summary>
+    /// Writes a snapshot (<see cref="ProjectArchive.Snapshot"/>, taken on the main thread) as an autosave. Thread-safe; meant for
+    /// a worker thread. Returns false when it was skipped: the session ended, or the snapshot is older than the last explicit save
+    /// (the saved file is newer, so the autosave would only offer stale data for recovery).
+    /// </summary>
+    public bool AutosaveSnapshot(ProjectSnapshot snapshot)
     {
-        Directory.CreateDirectory(_folder);
-        var gen = RecoveryStore.NextGeneration(_marker.LastAutosave);
-        ProjectFile.Save(project, Path.Combine(_folder, gen), keepBackup: false);
-        _marker.LastAutosave = gen;
-        _marker.LastAutosaveUtc = DateTimeOffset.UtcNow;
-        _marker.ProjectName = project.Name;
-        RecoveryStore.WriteMarker(_folder, _marker);
+        lock (_gate)
+        {
+            if (_ended || snapshot.TakenUtc < _savedUtc) return false;
+            Directory.CreateDirectory(_folder);
+            var gen = RecoveryStore.NextGeneration(_marker.LastAutosave);
+            ProjectFile.WriteSnapshot(snapshot, Path.Combine(_folder, gen), keepBackup: false);
+            _marker.LastAutosave = gen;
+            _marker.LastAutosaveUtc = DateTimeOffset.UtcNow;
+            _marker.ProjectName = snapshot.ProjectName;
+            RecoveryStore.WriteMarker(_folder, _marker);
+            return true;
+        }
     }
 
     /// <summary>After an explicit save the file on disk is newest: drop autosaves, keep the marker.</summary>
     public void MarkSaved(string projectPath, Project project)
+    {
+        lock (_gate)
+        {
+            _savedUtc = DateTimeOffset.UtcNow;
+            MarkSavedLocked(projectPath, project);
+        }
+    }
+
+    void MarkSavedLocked(string projectPath, Project project)
     {
         var newFolder = _store.FolderFor(project.Id, projectPath);
         if (newFolder != _folder)
@@ -203,5 +231,12 @@ public sealed class RecoverySession
     }
 
     /// <summary>Clean close: nothing to recover.</summary>
-    public void EndCleanly() => RecoveryStore.DeleteFolder(_folder);
+    public void EndCleanly()
+    {
+        lock (_gate)
+        {
+            _ended = true;
+            RecoveryStore.DeleteFolder(_folder);
+        }
+    }
 }

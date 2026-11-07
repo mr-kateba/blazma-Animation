@@ -48,9 +48,11 @@ public sealed class HeadlessBackend : IAgentBackend, IAgentHostServices
     bool _hasProject;
     long _nextId;
 
-    public HeadlessBackend()
+    /// <param name="callerIsUser">True only for blazma-anim (the person running it is the user: exports may overwrite files when
+    /// asked); false for the MCP server, whose caller is an agent.</param>
+    public HeadlessBackend(bool callerIsUser = false)
     {
-        _host = new AgentHost(_registry, () => _session, userPresent: false);
+        _host = new AgentHost(_registry, () => _session, userPresent: false) { CallerIsUser = callerIsUser };
         _host.ProjectFolder = () => _session.FilePath is { } p ? Path.GetDirectoryName(Path.GetFullPath(p)) : null;
         // Headless agents may read: the project folder, the folder the tool was started in, the write
         // folders, and folders the user listed (--allow-read DIR, or BLAZMA_ALLOW_READ separated by the OS
@@ -109,14 +111,30 @@ public sealed class HeadlessBackend : IAgentBackend, IAgentHostServices
         if (_session.FilePath is null || Path.GetFullPath(_session.FilePath) != target)
         {
             // Save as: move the lock to the new file.
-            var newLock = SessionLock.TryAcquire(target)
-                ?? throw new AgentRpcException("project_locked", $"'{target}' is open in another Blazma process.");
+            var newLock = AcquireLock(target, $"'{target}' is open in another Blazma process.");
             _lock?.Dispose();
             _lock = newLock;
         }
         ProjectFile.Save(_session.Project, target);
         _session.MarkSaved(target);
         return target;
+    }
+
+    /// <summary>The project lock, or project_locked when another process holds it; other failures keep their file error code
+    /// (read_only_folder, path_too_long, not_found, disk_full, io_error) instead of being reported as "open elsewhere".</summary>
+    static SessionLock AcquireLock(string path, string lockedMessage)
+    {
+        try
+        {
+            return SessionLock.TryAcquire(path) ?? throw new AgentRpcException("project_locked", lockedMessage);
+        }
+        catch (FileAccessException e) { throw new AgentRpcException(e.Code, e.Message); }
+    }
+
+    static AgentRpcException FileError(Exception e)
+    {
+        var code = FileErrors.Classify(e);
+        return new AgentRpcException(code is "" ? "io_error" : code, e.Message);
     }
 
     static AgentRpcException NoProject() =>
@@ -146,7 +164,7 @@ public sealed class HeadlessBackend : IAgentBackend, IAgentHostServices
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
-                throw new AgentRpcException("io_error", e.Message);
+                throw FileError(e);
             }
             catch (ProjectFormatException e) { throw new AgentRpcException(e.Code, e.Message); }
             if (response["error"] is JsonObject err)
@@ -165,8 +183,7 @@ public sealed class HeadlessBackend : IAgentBackend, IAgentHostServices
         EnsureCanReplace(p);
         var dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-        var @lock = SessionLock.TryAcquire(path)
-            ?? throw new AgentRpcException("project_locked", $"'{path}' is open in another Blazma process.");
+        var @lock = AcquireLock(path, $"'{path}' is open in another Blazma process.");
         try
         {
             var project = Project.CreateNew(name);
@@ -177,7 +194,7 @@ public sealed class HeadlessBackend : IAgentBackend, IAgentHostServices
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             @lock.Dispose();
-            throw new AgentRpcException("io_error", e.Message);
+            throw FileError(e);
         }
         catch { @lock.Dispose(); throw; }
         return Describe();
@@ -190,8 +207,7 @@ public sealed class HeadlessBackend : IAgentBackend, IAgentHostServices
         EnsureCanReplace(p);
         if (_lock is not null && _session.FilePath is { } cur && Path.GetFullPath(cur) == path)
             throw new AgentRpcException("already_open", "That project is already open.");
-        var @lock = SessionLock.TryAcquire(path)
-            ?? throw new AgentRpcException("project_locked", $"'{path}' is open in another Blazma process (the app or another agent).");
+        var @lock = AcquireLock(path, $"'{path}' is open in another Blazma process (the app or another agent).");
         try
         {
             Project project;

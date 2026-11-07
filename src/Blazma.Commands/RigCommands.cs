@@ -25,6 +25,13 @@ public static class RigCommands
             S.Of(S.Str("rigId", "Rig id.", true), S.Str("bone", "Bone id or name.", true), S.Str("standard", "Standard bone name; omit to unmap.", false)),
             a => new MapBone(S.Id(a, "rigId"), S.Text(a, "bone"), (string?)a["standard"])));
 
+        r.Register(new("rig.auto_map", "Re-run the automatic humanoid mapping on a rig (done on rig.import already): bone names from common conventions " +
+            "(Mixamo mixamorig:*, Unreal/UE5 pelvis/spine_01/thigh_l, Unity humanoid, Blender/Rigify DEF-*, 3ds Max Biped, VRM) and, for names that follow none " +
+            "(e.g. COLLADA 'Skeleton_arm_joint_L__4_'), the skeleton's shape: chains, heights and left/right by X sign. Replaces manual corrections; " +
+            "returns the report with a confidence level (high/medium/low). IK chains are rebuilt.", CommandEffect.Mutating,
+            S.Of(S.Str("rigId", "Rig id.", true)),
+            a => new AutoMapRig(S.Id(a, "rigId"))));
+
         r.Register(new("rig.mapping_report", "Bone-mapping report for a rig: assignments, missing bones and issues.", CommandEffect.ReadOnly,
             S.Of(S.Str("rigId", "Rig id.", true)),
             a => new MappingReportCommand(S.Id(a, "rigId"))));
@@ -49,6 +56,8 @@ public static class RigCommands
     public static JsonObject ReportToJson(MappingReport r) => new()
     {
         ["usable"] = r.IsUsable,
+        ["confidence"] = r.ConfidenceLevel,
+        ["confidenceScore"] = Math.Round(r.ConfidenceScore, 3),
         ["coverage"] = Math.Round(r.Coverage, 3),
         ["missingRequired"] = new JsonArray(r.MissingRequired.Select(x => (JsonNode?)x).ToArray()),
         ["missingOptional"] = new JsonArray(r.MissingOptional.Select(x => (JsonNode?)x).ToArray()),
@@ -96,6 +105,9 @@ public sealed class ImportRig(string path, string? name) : ICommand
     public string Id => "rig.import";
     public CommandEffect Effect => CommandEffect.External;
     public string Label => "Import character";
+
+    /// <summary>The embedded file is kept for redo after an undo.</summary>
+    public long HistoryBytes => 4096 + (_asset?.Data.Length ?? 0);
 
     public CommandOutcome Execute(Project p)
     {
@@ -168,28 +180,50 @@ public sealed class ImportRig(string path, string? name) : ICommand
 }
 
 /// <summary>Manual mapping correction. Snapshots the rig's map, controls, chains and affected poses for undo.</summary>
-public sealed class MapBone(ObjectId rigId, string bone, string? standard) : ICommand
+public sealed class MapBone(ObjectId rigId, string bone, string? standard) : RigMapEdit(rigId)
+{
+    public override string Id => "rig.map_bone";
+    public override string Label => "Map bone";
+
+    protected override MappingReport Compute(Rig rig)
+    {
+        var b = PoseCommands.ResolveBone(rig, bone);
+        var std = string.IsNullOrWhiteSpace(standard) ? null : standard.Trim();
+        if (std is not null && !HumanoidStandard.IsStandard(std))
+            throw new CommandException("invalid_args", $"'{std}' is not a Blazma standard bone name.");
+        return HumanoidMapper.Reassign(rig, RigCommands.CurrentReport(rig), b.Id, std);
+    }
+}
+
+/// <summary>rig.auto_map: the automatic mapping again (names, then the skeleton's shape), replacing the current map.</summary>
+public sealed class AutoMapRig(ObjectId rigId) : RigMapEdit(rigId)
+{
+    public override string Id => "rig.auto_map";
+    public override string Label => "Auto-map bones";
+    protected override MappingReport Compute(Rig rig) => HumanoidMapper.AutoMap(rig);
+}
+
+/// <summary>Base for mapping edits: snapshots the rig's map, controls, chains and affected poses for undo; IK is rebuilt.</summary>
+public abstract class RigMapEdit(ObjectId rigId) : ICommand
 {
     List<BoneMapping>? _map;
     List<RigControl>? _controls;
     List<IkChain>? _chains;
     Dictionary<ObjectId, Pose>? _poses;
 
-    public string Id => "rig.map_bone";
+    public abstract string Id { get; }
     public CommandEffect Effect => CommandEffect.Mutating;
-    public string Label => "Map bone";
+    public abstract string Label { get; }
+
+    /// <summary>The new mapping for <paramref name="rig"/> (must not modify it; throw CommandException to abort).</summary>
+    protected abstract MappingReport Compute(Rig rig);
 
     public CommandOutcome Execute(Project p)
     {
         var rig = p.FindRig(rigId) ?? throw new CommandException("not_found", $"Rig '{rigId}' does not exist.");
         if (rig.Source.Kind == RigSourceKind.Builtin)
             throw new CommandException("builtin_rig", "The built-in mannequin's mapping cannot be changed.");
-        var b = PoseCommands.ResolveBone(rig, bone);
-        var std = string.IsNullOrWhiteSpace(standard) ? null : standard.Trim();
-        if (std is not null && !HumanoidStandard.IsStandard(std))
-            throw new CommandException("invalid_args", $"'{std}' is not a Blazma standard bone name.");
-
-        var report = HumanoidMapper.Reassign(rig, RigCommands.CurrentReport(rig), b.Id, std);
+        var report = Compute(rig);
 
         _map = rig.HumanoidMap.Select(m => new BoneMapping { Bone = m.Bone, Standard = m.Standard }).ToList();
         _controls = rig.Controls.ToList();

@@ -7,7 +7,8 @@
 #   GODOT          Godot .NET editor binary (default: /opt/godot/...)
 #   --from-git     build a clean copy of a commit (default HEAD) instead of the working tree: uncommitted or half-finished edits can't leak into a release
 #   BLAZMA_SRC     source tree to build (default: this repo). Use it to build a clean copy, e.g. `git archive HEAD | tar -x -C DIR`.
-#   APPIMAGETOOL   path to appimagetool (default: downloaded once into build/cache from the official AppImage GitHub releases)
+#   APPIMAGETOOL   path to appimagetool (default: release $APPIMAGETOOL_VERSION downloaded once into build/cache from the official
+#                  AppImage GitHub releases and checked against $APPIMAGETOOL_SHA256; a mismatch stops the build)
 #   SKIP_TESTS=1   same as --skip-tests
 #   KIMODO_RUNNER_WIN / KIMODO_RUNNER_LINUX   optional: folder (or .zip) with a kimodo-runner build (the artifacts of the manual
 #                  `kimodo-runner` workflow: kimodo-runner[.exe], GGML libraries, SHA256SUMS.txt). Default: build/cache/kimodo-runner-win64
@@ -18,7 +19,9 @@
 set -euo pipefail
 export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # tooling (packaging/, docs/reports) always comes from here
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"   # tooling (scripts, installer script, export presets) always comes from here
+APPIMAGETOOL_VERSION=1.9.0
+APPIMAGETOOL_SHA256=46fdd785094c7f6e545b61afcfb0f3d98d8eab243f644b4b17698c01d06083d1
 SRC="$(cd "${BLAZMA_SRC:-$ROOT}" && pwd)"                  # the code that gets built
 G="${GODOT:-/opt/godot/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64}"
 TPL="$HOME/.local/share/godot/export_templates/4.7.2.stable.mono"
@@ -71,7 +74,7 @@ export_preset() { # preset-name, out-dir, file-name
   [ -f "$2/$3" ] || die "export '$1' produced no $3 (see $WORK/export-$1.log)"
 }
 log "build C# (so the import can load the autoload scripts)"
-dotnet build "$SRC/app/godot" -v quiet -nologo 2>&1 | tail -2 || true
+dotnet build "$SRC/app/godot" -v quiet -nologo >"$WORK/build-app.log" 2>&1 || { tail -30 "$WORK/build-app.log"; die "the app's C# build failed (see $WORK/build-app.log)"; }
 log "godot import"
 "$G" --headless --path "$SRC/app/godot" --import >"$WORK/import.log" 2>&1 || true
 
@@ -125,15 +128,18 @@ else echo "NOTE: no Windows kimodo-runner at $RUNNER_WIN — the release will no
 if [ $SKIP_LINUX = 0 ] && [ -e "$RUNNER_LINUX" ]; then log "kimodo-runner (Linux)"; stage_runner "$RUNNER_LINUX" kimodo-runner "$WORK/runner-linux"; HAVE_RUNNER_LINUX=1; fi
 
 # ---------------------------------------------------------------- 4. assemble
+# Docs and legal texts come from the source that was built ($SRC: the git snapshot with --from-git), never from local edits.
 DOCS=(AGENT_SETUP_AR.md AI_INTEGRATION.md MCP_TOOLS.md CLI_REFERENCE.md AGENT_RECIPES.md)
 add_common() { # stage-dir
   local d="$1"
-  mkdir -p "$d/docs"
-  for f in "${DOCS[@]}"; do [ -f "$ROOT/docs/$f" ] && cp "$ROOT/docs/$f" "$d/docs/"; done
-  [ -d "$ROOT/docs/recipes" ] && cp -r "$ROOT/docs/recipes" "$d/docs/recipes"
-  cp "$ROOT/packaging/legal/THIRD_PARTY_NOTICES.md" "$ROOT/packaging/legal/GODOT_LICENSE.txt" "$d/"
-  cp "$ROOT/app/godot/assets/fonts/OFL-IBM-Plex.txt" "$d/"
-  [ -f "$ROOT/LICENSE" ] && cp "$ROOT/LICENSE" "$d/LICENSE.txt" || true
+  mkdir -p "$d/docs" "$d/legal"
+  for f in "${DOCS[@]}"; do [ -f "$SRC/docs/$f" ] && cp "$SRC/docs/$f" "$d/docs/"; done
+  [ -d "$SRC/docs/recipes" ] && cp -r "$SRC/docs/recipes" "$d/docs/recipes"
+  [ -f "$SRC/LICENSE" ] || die "LICENSE missing in $SRC"
+  cp "$SRC/LICENSE" "$d/LICENSE.txt"
+  cp "$SRC/packaging/legal/THIRD_PARTY_NOTICES.md" "$d/"
+  find "$SRC/packaging/legal" -maxdepth 1 -type f ! -name THIRD_PARTY_NOTICES.md -exec cp {} "$d/legal/" \;
+  cp "$SRC/app/godot/assets/fonts/OFL-IBM-Plex.txt" "$d/legal/"
   { echo "Blazma Animation $VERSION"; echo "Built $(date -u +%Y-%m-%dT%H:%M:%SZ) from $GITREV"; } > "$d/VERSION.txt"
 }
 
@@ -161,7 +167,12 @@ rm "$WSTAGE/portable.txt"
 
 if [ $SKIP_INSTALLER = 0 ]; then
   log "Windows installer (NSIS)"
-  makensis -V2 -DVERSION="$VERSION" -DNUMVER="$NUMVER" -DSRCDIR="$WSTAGE" -DREPO="$ROOT" \
+  # Exactly what the installer puts into $INSTDIR, so the uninstaller removes those names and nothing else.
+  UNLIST="$WORK/uninstall-list.nsh"
+  { find "$WSTAGE" -mindepth 1 -maxdepth 1 -type f -printf 'Delete "$INSTDIR\\%f"\n'
+    find "$WSTAGE" -mindepth 1 -maxdepth 1 -type d -printf 'RMDir /r "$INSTDIR\\%f"\n'; } | sort > "$UNLIST"
+  grep -q portable.txt "$UNLIST" && die "portable.txt must not be in the installer payload"
+  makensis -V2 -DVERSION="$VERSION" -DNUMVER="$NUMVER" -DSRCDIR="$WSTAGE" -DREPO="$ROOT" -DUNINSTLIST="$UNLIST" \
     -DOUTFILE="$OUT/BlazmaAnimation-$VERSION-setup.exe" "$ROOT/packaging/windows/installer.nsi" || die "makensis failed"
 fi
 
@@ -177,23 +188,31 @@ if [ $SKIP_LINUX = 0 ]; then
     tar --sort=name --owner=0 --group=0 --numeric-owner -C "$WORK" --transform "s|^runner-linux|kimodo-runner-$VERSION-linux-x64|" -czf "$OUT/kimodo-runner-$VERSION-linux-x64.tar.gz" runner-linux
   fi
   add_common "$LSTAGE"
-  cp "$ROOT/packaging/linux/blazma-animation.desktop" "$ROOT/packaging/assets/blazma.png" "$LSTAGE/"
+  cp "$SRC/packaging/linux/blazma-animation.desktop" "$SRC/packaging/linux/blazma-animation-mime.xml" "$SRC/packaging/assets/blazma.png" "$LSTAGE/"
   # AppImage first (it must not contain portable.txt), then the portable tarball
   if [ $SKIP_APPIMAGE = 0 ]; then
     log "AppImage"
-    AT="${APPIMAGETOOL:-$CACHE/appimagetool-x86_64.AppImage}"
-    if [ ! -x "$AT" ]; then
-      curl -sSfL -o "$AT" https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage && chmod +x "$AT" \
-        || { echo "WARNING: could not get appimagetool — AppImage skipped"; SKIP_APPIMAGE=1; }
+    AT="${APPIMAGETOOL:-$CACHE/appimagetool-$APPIMAGETOOL_VERSION-x86_64.AppImage}"
+    if [ -z "${APPIMAGETOOL:-}" ]; then
+      if [ ! -f "$AT" ] || ! echo "$APPIMAGETOOL_SHA256  $AT" | sha256sum -c --quiet - 2>/dev/null; then
+        rm -f "$AT"
+        curl -sSfL -o "$AT.part" "https://github.com/AppImage/appimagetool/releases/download/$APPIMAGETOOL_VERSION/appimagetool-x86_64.AppImage" \
+          || { rm -f "$AT.part"; echo "WARNING: could not download appimagetool $APPIMAGETOOL_VERSION — AppImage skipped"; SKIP_APPIMAGE=1; }
+        if [ $SKIP_APPIMAGE = 0 ]; then
+          echo "$APPIMAGETOOL_SHA256  $AT.part" | sha256sum -c --quiet - || { rm -f "$AT.part"; die "appimagetool download does not match the pinned SHA-256"; }
+          mv "$AT.part" "$AT"
+        fi
+      fi
+      [ $SKIP_APPIMAGE = 1 ] || chmod +x "$AT"
     fi
   fi
   if [ $SKIP_APPIMAGE = 0 ]; then
     AD="$WORK/AppDir"; mkdir -p "$AD/usr/bin"
     cp -r "$LSTAGE"/. "$AD/usr/bin/"
-    rm -f "$AD/usr/bin/blazma-animation.desktop" "$AD/usr/bin/blazma.png"
-    cp "$ROOT/packaging/linux/blazma-animation.desktop" "$AD/blazma-animation.desktop"
-    sed -i 's|^Exec=.*|Exec=BlazmaAnimation.x86_64 %F|' "$AD/blazma-animation.desktop"
-    cp "$ROOT/packaging/assets/blazma.png" "$AD/blazma-animation.png"; cp "$AD/blazma-animation.png" "$AD/.DirIcon"
+    rm -f "$AD/usr/bin/blazma-animation.desktop" "$AD/usr/bin/blazma-animation-mime.xml" "$AD/usr/bin/blazma.png"
+    cp "$SRC/packaging/linux/blazma-animation.desktop" "$AD/blazma-animation.desktop"
+    mkdir -p "$AD/usr/share/mime/packages"; cp "$SRC/packaging/linux/blazma-animation-mime.xml" "$AD/usr/share/mime/packages/blazma-animation.xml"
+    cp "$SRC/packaging/assets/blazma.png" "$AD/blazma-animation.png"; cp "$AD/blazma-animation.png" "$AD/.DirIcon"
     cat > "$AD/AppRun" <<'RUN'
 #!/bin/sh
 HERE="$(dirname "$(readlink -f "$0")")"
@@ -226,7 +245,7 @@ NOTES="$OUT/RELEASE_NOTES-$VERSION.md"
   echo "- تحقق من الملفات بـ \`SHA256SUMS.txt\`."
   echo
   echo "## ما تم إنجازه (من تقارير المراحل)"
-  for r in "$ROOT"/docs/reports/PHASE*.md; do
+  for r in "$SRC"/docs/reports/PHASE*.md; do
     [ -f "$r" ] || continue
     echo
     awk '

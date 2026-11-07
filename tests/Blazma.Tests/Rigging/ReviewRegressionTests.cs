@@ -140,7 +140,7 @@ public class ReviewRegressionTests
         Assert.True(imp.Ok, imp.Error?.Message);
         var rigId = (string)imp.Data!["rigId"]!;
         var id = (string)imp.Data["characterId"]!;
-        Assert.False((bool)imp.Data["mapping"]!["usable"]!);
+        Assert.True((bool)imp.Data["mapping"]!["usable"]!); // mapped from the skeleton's shape (the names follow no convention)
 
         foreach (var (bone, std) in new[]
         {

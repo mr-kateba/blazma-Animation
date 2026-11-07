@@ -41,6 +41,29 @@ public sealed class MappingReport
     /// <summary>True when every required bone is mapped.</summary>
     public bool IsUsable => MissingRequired.Count == 0;
 
+    /// <summary>
+    /// How much to trust the mapping, 0..1: the mean over the required bones of Exact/Manual 1, Synonym 0.95, Hierarchy (shape or
+    /// position inference) 0.75, missing 0; minus 0.1 per hierarchy/side issue.
+    /// </summary>
+    public double ConfidenceScore
+    {
+        get
+        {
+            var byStd = Assignments.GroupBy(a => a.Standard).ToDictionary(g => g.Key, g => g.First().Confidence);
+            var sum = HumanoidStandard.Required.Sum(r => byStd.TryGetValue(r, out var c) ? c switch
+            {
+                MappingConfidence.Exact or MappingConfidence.Manual => 1.0,
+                MappingConfidence.Synonym => 0.95,
+                _ => 0.75,
+            } : 0.0);
+            var penalty = 0.1 * Issues.Count(i => i.Code is "hierarchy_violation" or "side_mismatch" or "faces_negative_z");
+            return Math.Clamp(sum / HumanoidStandard.Required.Count - penalty, 0, 1);
+        }
+    }
+
+    /// <summary>"high" (≥ 0.9), "medium" (usable, ≥ 0.7: check the bones mapped from the shape), else "low" (map bones by hand).</summary>
+    public string ConfidenceLevel => ConfidenceScore >= 0.9 && IsUsable ? "high" : ConfidenceScore >= 0.7 && IsUsable ? "medium" : "low";
+
     /// <summary>Assigned standard bones divided by all standard bones, 0..1.</summary>
     public double Coverage => HumanoidStandard.Bones.Count == 0 ? 0 : (double)Assignments.Count / HumanoidStandard.Bones.Count;
 }

@@ -48,7 +48,11 @@ public static class AgentPaths
     /// (<see cref="FilePaths.Canonicalize"/>), so the returned path is the real location: the caller checks
     /// it against the allowed folders and must write to exactly this path.
     /// </summary>
-    public static string ValidateNewFileTarget(string? path, string? extension, string? currentProjectPath)
+    /// <param name="allowExisting">The caller is the user (headless CLI) and passed overwrite=true: an existing file may be
+    /// replaced (never the open project, never a folder).</param>
+    /// <param name="overwriteHint">How the caller can ask to replace an existing file (e.g. "pass --arg overwrite=true"); null for
+    /// agents, which only create new files.</param>
+    public static string ValidateNewFileTarget(string? path, string? extension, string? currentProjectPath, bool allowExisting = false, string? overwriteHint = null)
     {
         var full = Normalize(path);
         var name = Path.GetFileName(full);
@@ -62,8 +66,11 @@ public static class AgentPaths
         full = Path.Combine(ResolveLinks(dir), name);
         if (currentProjectPath is not null && SamePath(full, ResolveLinks(Path.GetFullPath(currentProjectPath))))
             throw new AgentRpcException("file_exists", "Agents cannot overwrite the open project with an export.");
-        if (File.Exists(full) || Directory.Exists(full) || new FileInfo(full).LinkTarget is not null)
-            throw new AgentRpcException("file_exists", $"'{full}' already exists. Agents only create new files; ask the user to overwrite it.");
+        if (Directory.Exists(full)) throw new AgentRpcException("file_exists", $"'{full}' is a folder.");
+        if (!allowExisting && (File.Exists(full) || new FileInfo(full).LinkTarget is not null))
+            throw new AgentRpcException("file_exists", overwriteHint is null
+                ? $"'{full}' already exists. Agents only create new files; ask the user to overwrite it, or pick a new file name."
+                : $"'{full}' already exists; {overwriteHint} to replace it, or pick a new file name.");
         return full;
     }
 

@@ -8,7 +8,8 @@
 - Godot 4.7.2 **.NET** لنظام Linux في `/opt/godot/Godot_v4.7.2-stable_mono_linux_x86_64/` (أو متغير `GODOT=...`).
 - قوالب التصدير الرسمية في `~/.local/share/godot/export_templates/4.7.2.stable.mono/`: ملفات `windows_*x86_64*` و`linux_*x86_64*` من
   `Godot_v4.7.2-stable_mono_export_templates.tpz` (من https://github.com/godotengine/godot/releases/tag/4.7.2-stable، وتحقق من `SHA512-SUMS.txt`).
-- لصنع AppImage يُحمَّل `appimagetool` تلقائيًا مرة واحدة إلى `build/cache` (يتخطى السكربت AppImage بتحذير إن تعذّر).
+- لصنع AppImage يُحمَّل `appimagetool` **الإصدار 1.9.0** (مثبَّت في السكربت مع SHA-256) مرة واحدة إلى `build/cache`؛ عدم تطابق البصمة يوقف البناء، وتعذّر التنزيل يتخطى AppImage بتحذير. `APPIMAGETOOL=...` لاستعمال نسخة محلية.
+- `7z` (‏`p7zip-full`) اختياري: به يتحقق `release-smoke.sh` من محتوى المثبّت (لا `portable.txt`، وجود `tools/kimodo` إن ضُمِّن الـrunner)؛ بدونه يُتخطى هذا الفحص مع ملاحظة.
 
 ## البناء
 
@@ -17,7 +18,7 @@ scripts/build-release.sh 0.9.0 --from-git
 scripts/release-smoke.sh 0.9.0
 ```
 
-الخيارات: `--from-git[=REV]` يبني نسخة نظيفة من commit (موصى به للإصدار الرسمي كي لا تتسرب تعديلات غير مكتملة)، `--skip-tests`، `--skip-linux`، `--skip-appimage`، `--skip-installer`.
+الخيارات: `--from-git[=REV]` يبني نسخة نظيفة من commit (موصى به للإصدار الرسمي كي لا تتسرب تعديلات غير مكتملة؛ التوثيق والتراخيص وملاحظات الإصدار تؤخذ أيضًا من تلك النسخة)، `--skip-tests`، `--skip-linux`، `--skip-appimage`، `--skip-installer`.
 `release-smoke.sh --full` يشغّل أيضًا اختبار الواجهة الكامل على نسخة Linux المصدّرة (~4 دقائق).
 
 ما يفعله البناء بالترتيب: اختبارات النواة (`-warnaserror`، أي فشل يوقف الإصدار) ← تصدير Godot لـ Windows وLinux ← نشر أدوات الوكلاء
@@ -27,11 +28,13 @@ scripts/release-smoke.sh 0.9.0
 
 | الملف | الاستخدام |
 |---|---|
-| `BlazmaAnimation-<v>-setup.exe` | مثبّت Windows للمستخدم الحالي (بدون مدير): قائمة Start، اختصار سطح مكتب اختياري، إزالة، ربط `.blazanim` في HKCU |
+| `BlazmaAnimation-<v>-setup.exe` | مثبّت Windows ‏64 بت للمستخدم الحالي (بدون مدير): قائمة Start، اختصار سطح مكتب اختياري، إزالة، ربط `.blazanim` في HKCU. يطلب إغلاق البرنامج وأدواته إن كانت تعمل (mutex ‏`BlazmaAnimation-Running` وأسماء العمليات) قبل التثبيت والإزالة. الإزالة تحذف بالضبط الملفات والمجلدات التي ثبّتها (قائمة يولدها السكربت)، وتحذف من الربط قيمتنا فقط (تبقى `OpenWithProgids` للبرامج الأخرى)، وتعرض (الافتراضي: لا) حذف النماذج المنزّلة في `%LOCALAPPDATA%\BlazmaAnimation\models` مع حجمها |
 | `BlazmaAnimation-<v>-win64.zip` | نسخة محمولة (فيها `portable.txt`) |
-| `BlazmaAnimation-<v>-linux-x64.tar.gz` | Linux محمولة |
+| `BlazmaAnimation-<v>-linux-x64.tar.gz` | Linux محمولة؛ فيها `blazma-animation.desktop` (‏Exec=`BlazmaAnimation.x86_64`) و`blazma-animation-mime.xml` لنوع `application/x-blazanim` (‏`xdg-mime install blazma-animation-mime.xml`) |
 | `BlazmaAnimation-<v>-x86_64.AppImage` | Linux ملف واحد |
 | `SHA256SUMS.txt` | بصمات كل الملفات |
+
+كل حزمة فيها `LICENSE.txt` (Blazma: ملكية خاصة، كل الحقوق محفوظة لـ mr-kateba) و`THIRD_PARTY_NOTICES.md` ومجلد `legal/` بالنصوص الكاملة: رخصة Godot وCOPYRIGHT.txt الخاص به، رخصة .NET وإشعارات الطرف الثالث لـ .NET 8 و10، Apache-2.0، رخصة MCP C# SDK، رخصة وNOTICE لـ kimodo.cpp، رخصة NVIDIA Kimodo (بيانات هيكل SOMA)، GGML وnlohmann/json (MIT)، وخطوط IBM Plex (OFL).
 | `RELEASE_NOTES-<v>.md` | ملاحظات الإصدار (تُلصق في وصف الـ Release) |
 
 ## المثبّت أم المحمولة؟

@@ -75,6 +75,13 @@ public sealed class AgentHost
     }
 
     public bool UserPresent { get; }
+
+    /// <summary>
+    /// The caller is the person at the keyboard, not an AI agent: the headless command-line tool (blazma-anim). Then commands may
+    /// replace existing files when asked (e.g. animation.export overwrite=true); the folder rules still apply. Never set for MCP
+    /// servers or the app's agent pipe, whose callers are agents.
+    /// </summary>
+    public bool CallerIsUser { get; set; }
     public AgentMode Mode { get; set; } = AgentMode.Assisted;
 
     /// <summary>Folders agents may read (import, validate) files from, besides the project's own folder and
@@ -149,8 +156,8 @@ public sealed class AgentHost
         if (!_registry.TryGet(commandId, out var descriptor))
             return Record(sessionId, commandId, args, CommandResult.Fail("unknown_command", $"Unknown command '{commandId}'."), track: false);
 
-        // Agents never replace existing files, whatever they ask for.
-        if (descriptor.FileArg?.OverwriteArgument is { } ow && args[ow] is not null)
+        // Agents never replace existing files, whatever they ask for; the headless CLI's user may (CallerIsUser).
+        if (!CallerIsUser && descriptor.FileArg?.OverwriteArgument is { } ow && args[ow] is not null)
         {
             args = (JsonObject)args.DeepClone();
             args[ow] = false;
@@ -292,8 +299,10 @@ public sealed class AgentHost
         string full;
         try
         {
+            var overwrite = CallerIsUser && file.OverwriteArgument is { } owArg && args[owArg] is JsonValue ov && ov.TryGetValue<bool>(out var b) && b;
             full = file.Write
-                ? AgentPaths.ValidateNewFileTarget((string?)args[file.Argument], file.Extension, _session().FilePath)
+                ? AgentPaths.ValidateNewFileTarget((string?)args[file.Argument], file.Extension, _session().FilePath, overwrite,
+                    CallerIsUser && file.OverwriteArgument is { } hintArg ? $"pass --arg {hintArg}=true" : null)
                 : AgentPaths.ResolveLinks(AgentPaths.Normalize((string?)args[file.Argument]));
         }
         catch (AgentRpcException e) { file = null; return new ErrorInfo(e.Code, e.Message); }
@@ -306,7 +315,9 @@ public sealed class AgentHost
             ? new ErrorInfo("approval_required", $"'{d.Id}' {verb} '{full}', outside the folders agents may {(file.Write ? "write to" : "read")}.")
             : new ErrorInfo("path_not_allowed", file.Write
                 ? $"'{full}' is outside the folders agents may write to (the project folder and the allowed write folders)."
-                : $"'{full}' is outside the folders agents may use (the project folder and the allowed folders).");
+                    + (UserPresent ? "" : $" Allow its folder with --allow-write \"{Path.GetDirectoryName(full)}\" (blazma-anim / blazma-mcp) or BLAZMA_ALLOW_WRITE.")
+                : $"'{full}' is outside the folders agents may use (the project folder and the allowed folders)."
+                    + (UserPresent ? "" : $" Allow its folder with --allow-read \"{Path.GetDirectoryName(full)}\" (blazma-anim / blazma-mcp) or BLAZMA_ALLOW_READ."));
     }
 
     /// <summary>True if agents may read <paramref name="fullPath"/> (a canonical path): project folder, read or write folders.</summary>
