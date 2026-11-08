@@ -15,7 +15,7 @@ Real product only: portrait recordings of the real app at 1080x1920 (UI scale 1.
 | 7 | 48-58 | 22.50-27.19 | FEATURE 3: combat hit + hit test | `v/p9-ar-dark-overlay-hit`, `combo-editor`, `hit-test-dialog` | 46 cut on hitboxes + title «تصادم وضربات», 50 combo editor, 53.5 hit-test dialog card | thud, click, pop |
 | 8 | 58-68 | 27.19-31.88 | FEATURE 4: AI on your device, GPU-ready | `v/reel-ar-models-installed` (real window, light tier installed), then `reel-ar-ai-settings` crop + `reel-ar-device-popup` (the 4 real device modes) | 56 dialog + title «ذكاء اصطناعي على جهازك», 60.5 device list, 61 «GPU» chip + «يدعم كرت الشاشة» (capability only; this machine has no GPU) | tick, bell, impact |
 | 9 | 68-74 | 31.88-34.69 | BUTTON: the fall in slow motion | recording, 0.7x | 66 slow-mo, «حرّك شخصيتك بكلمات» in two slams | sub, pops |
-| 10 | 74-82 | 34.69-38.44 | END CARD | `assets/logo.png` (Blazma icon), «حمّله من GitHub», github.com/mr-kateba/blazma-Animation, v0.12 pill, small credit «استوديو نخلة» (text placeholder, same slot as the intro logo) | 72 icon drops, 73 CTA, 74.5 version pill, 75.5 credit, hold 3 s | end hit, D major resolve, bell |
+| 10 | 74-82 | 34.69-38.44 | END CARD | Blazma icon, «حمّله من GitHub», repo URL, v0.12 pill, small Studio Nakhla credit (their real logo + «من استوديو نخلة») | 74 icon drops, 75.8 CTA, 77.5 version pill, 78.5 credit, hold 3 s | end hit, D major resolve, bell |
 
 Longest gap without a new event: beats 24-28 (1.9 s, the halftime hold after the fall).
 
