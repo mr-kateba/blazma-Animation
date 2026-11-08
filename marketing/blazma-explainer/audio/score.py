@@ -31,10 +31,7 @@ from scipy import signal
 def _skill_dir():
     if os.environ.get("MOTION_REEL_SKILL"):
         return Path(os.environ["MOTION_REEL_SKILL"])
-    found = sorted(Path(os.environ.get("MOTION_TOOLS_DIR", str(Path.home()))).glob("**/skills/motion-reel/scripts/dsp.py"))
-    if found:
-        return found[-1].parent.parent
-    sys.exit("set MOTION_REEL_SKILL to the folder that holds the motion-reel SKILL.md")
+    sys.exit("set MOTION_REEL_SKILL to the folder that holds the motion-reel toolkit (scripts/dsp.py)")
 
 
 sys.path.insert(0, str(_skill_dir() / "scripts"))
