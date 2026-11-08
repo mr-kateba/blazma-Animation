@@ -64,7 +64,7 @@ function headline(ctx, u, u0, str, sub, o = {}) {
 // ------------------------------------------------------------------ real assets
 let LOGO = null, BLUR = null;
 // Real app footage recorded natively at 1920x1080 / 60 fps (Godot --write-movie, UI scale 1.25), kept as JPEG q2 frames.
-let REC = null;
+let REC = null, NK = null;
 const SEQ = { h: 60 }, SQ = { h: {} };
 async function loadSeq() {
   REC = await (await fetch('assets/rec.json')).json(); SEQ.h = REC.fps;
@@ -275,6 +275,9 @@ function s13(ctx, u) {                                  // 116-128 end card
   slam(ctx, u, 116.5, 'Blazma Animation', XR, 480, 112, C.text, { fam: DISP, whole: true });
   slam(ctx, u, 117.8, 'حمّله الآن من GitHub', XR, 650, 96, C.accent, { maxW: 1100, delay: 0.3 });
   slam(ctx, u, 119, 'github.com/mr-kateba/blazma-Animation', XR, 780, 40, C.text2, { fam: UI, w: 400, whole: true, cfg: SPRING.snappy });
+  const kc = springU(u, 121, SPRING.gentle);                 // Studio Nakhla credit under the icon (their real logo)
+  if (kc > 0.001 && NK) { const lw = 200, lh = lw * NK.height / NK.width; ctx.save(); ctx.globalAlpha = Math.min(1, kc * 1.4); ctx.drawImage(NK, 350, 805 + (1 - kc) * 24, lw, lh); ctx.restore();
+    slam(ctx, u, 121.4, 'من استوديو نخلة', 350 + (lw + tw(ctx, 'من استوديو نخلة', 36, UI, 400)) / 2, 805 + lh + 52, 36, C.text2, { fam: UI, w: 400, maxW: 700, cfg: SPRING.snappy }); }
   const kp = springU(u, 120, SPRING.bouncy);
   if (kp > 0.001) { ctx.save(); ctx.translate(XR, 940); ctx.scale(kp, kp); ctx.translate(-XR, -940); pill(ctx, 'v0.12', XR, 880, 44, C.accent, C.onAccent, { fam: UI, w: 600, rtl: false }); ctx.restore(); }
 }
@@ -294,7 +297,7 @@ const HITS = [
   [86, 'cut', 'sub', { gain: 0.4 }], [86.3, 'Claude', 'pop', { pitch: 'D5' }], [87.6, 'MCP', 'pop', { pitch: 'A5', gain: 0.55 }], [89.6, 'sub', 'tick', { gain: 0.5 }], [92, 'keys', 'bell', { pitch: 'F6' }],
   [98, 'tile', 'pop', { pitch: 'D5' }], [100, 'tile', 'pop', { pitch: 'F5' }], [102, 'tile', 'pop', { pitch: 'A5' }], [104, 'tile', 'pop', { pitch: 'D6' }], [106, 'riser', 'riser', { len: 1.8 }],
   [108, 'close', 'sub', { gain: 0.45 }], [108.3, 'حرّك', 'pop', { pitch: 'D5' }], [109.7, 'بكلمات', 'pop', { pitch: 'A5' }],
-  [116, 'end card', 'impact'], [116.7, 'logo lands', 'thud', { gain: 0.9 }], [118, 'GitHub', 'bell', { pitch: 'D6', gain: 0.55 }], [120, 'v0.12', 'pop', { pitch: 'A5' }],
+  [116, 'end card', 'impact'], [116.7, 'logo lands', 'thud', { gain: 0.9 }], [118, 'GitHub', 'bell', { pitch: 'D6', gain: 0.55 }], [120, 'v0.12', 'pop', { pitch: 'A5' }], [121.2, 'credit', 'tick', { gain: 0.5 }],
 ];
 
 // A one-off blurred backdrop for the "problem" shot: the real sequence screenshot, downsampled then stretched
@@ -312,12 +315,12 @@ M.film({
     seq: 'assets/s/p8-ar-dark-sequence.png', tpl: 'assets/s/p8-ar-dark-templates.png', ret: 'assets/s/p8-ar-dark-retarget.png',
     hit: 'assets/s/p9-ar-dark-overlay-hit.png', combo: 'assets/s/p9-ar-dark-combo-editor.png', hitTest: 'assets/s/p9-ar-dark-hit-test-dialog.png',
     mInst: 'assets/s/reel-ar-models-installed.png', devSet: 'assets/s/reel-ar-ai-settings.png', devPop: 'assets/s/reel-ar-device-popup.png',
-    exp: 'assets/s/p4-ar-dark-export-dialog.png', gen: 'assets/s/p7-ar-dark-generated.png', logo: 'assets/logo.png',
+    exp: 'assets/s/p4-ar-dark-export-dialog.png', gen: 'assets/s/p7-ar-dark-generated.png', logo: 'assets/logo.png', nk: 'assets/nakhla/nakhla-logo-ondark.png',
   },
   hits: HITS, samples: () => 8,
   async init() { await loadSeq(); },
   draw(ctx, u, t, IMG) {
-    IMGS = IMG; LOGO = IMG.logo; if (!BLUR) BLUR = makeBlur(IMG.seq);
+    IMGS = IMG; LOGO = IMG.logo; NK = IMG.nk; if (!BLUR) BLUR = makeBlur(IMG.seq);
     const i = SCENES.findIndex(([a, b]) => u < b), idx = i < 0 ? SCENES.length - 1 : i;
     const fn = SCENES[idx][2];
     if (u > 11.35 && u < 12.75) {

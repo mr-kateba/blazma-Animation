@@ -31,7 +31,9 @@ spec.loader.exec_module(E)            # only definitions (instruments, phrases);
 from dsp import *  # noqa: E402,F403
 import dsp  # noqa: E402
 
-BPM, NB = 128, 80
+BPM, NB = 128, 82
+OFF = 2          # the studio intro (Nakhla, own footage + audio) takes beats 0-8; the old 0-6 sting + hook shift by 2 beats
+PB = 80          # beats of the original arrangement (before the shift)
 BEAT = 60 / BPM
 DUR = NB * BEAT
 N = int(SR * DUR)
@@ -49,23 +51,26 @@ def region(b):
 
 
 def main():
-    drums, perc, bass, lead, pad, fx = (Bus(DUR, BPM) for _ in range(6))
+    class SBus(Bus):                      # everything after the intro is placed OFF beats later
+        def add(self, sig, beat, gain=1.0, pan=0.0, at=None):
+            super().add(sig, beat + (OFF if at is None else 0), gain, pan, at)
+    drums, perc, bass, lead, pad, fx = (SBus(DUR, BPM) for _ in range(6))
     kick_t = []
 
     def K(b, g=0.95):
-        drums.add(kick(), b, g); kick_t.append(T(b))
+        drums.add(kick(), b, g); kick_t.append(T(b + OFF))
 
     # ---- studio sting 0-6
-    pad.add(pad_chord(["D3", "A3", "D4"], T(6), (450, 2400), attack=1.6, release=0.1), 0, 0.30)
-    lead.add(ney("A4", 3.0, 0.7), 0.4, 0.30, pan=0.15)
-    for off, nt, ln in TAQSIM[:8]:
-        lead.add(oud(nt, ln), off * 0.75, 0.5, pan=-0.12)
-    fx.add(riser(T(3.5)), 2.5, 0.42)
-    perc.add(dum(), 2, 0.4); perc.add(dum(), 4, 0.45)
-    for k, b in enumerate(np.arange(4.5, 5.75, 0.25)):
-        (perc.add(tek(), b, 0.2 + 0.05 * k, pan=0.1) if k % 2 == 0 else perc.add(ka(), b, 0.2 + 0.05 * k, pan=-0.1))
+    A = lambda b: dict(at=T(b))           # absolute placement (not shifted)
+    pad.add(pad_chord(["D3", "A3", "D4"], T(8), (450, 2400), attack=2.4, release=0.1), 0, 0.26, **A(0))
+    lead.add(ney("A4", 4.0, 0.7), 0.6, 0.26, pan=0.15, **A(0.6))
+    lead.add(ney("D5", 3.0, 0.7), 4.8, 0.22, pan=0.15, **A(4.8))
+    fx.add(riser(T(4.5)), 3.5, 0.40, **A(3.5))
+    perc.add(dum(), 4, 0.35, **A(4)); perc.add(dum(), 6, 0.42, **A(6))
+    for k, b in enumerate(np.arange(6.5, 7.75, 0.25)):
+        (perc.add(tek(), b, 0.2 + 0.05 * k, pan=0.1, **A(b)) if k % 2 == 0 else perc.add(ka(), b, 0.2 + 0.05 * k, pan=-0.1, **A(b)))
     # ---- bars
-    for b in range(6, NB):
+    for b in range(6, PB):
         pos, root, rg = b % 4, ROOTS[(b // 4) % 4], region(b)
         if rg == "full":
             if b != 23: K(b)
@@ -128,9 +133,14 @@ def main():
     bed = drums.x * 0.8 + perc.x * 0.85 + bass.x * pump * 0.8 + lead.x * (0.55 + 0.4 * pump) * 0.95 + pad.x * (0.5 + 0.5 * pump) + fx.x * 0.7 + wet * 0.5
     bed = np.stack([filt(ch, "highpass", 28) for ch in bed])[:, :N]
     g = np.ones(N)
-    for a, b in ((5.8, 5.995), (23.8, 23.995)):
+    for a, b in ((5.8 + OFF, 5.995 + OFF), (23.8 + OFF, 23.995 + OFF)):
         i0, i1 = int(T(a) * SR), int(T(b) * SR); g[i0:i1] = np.linspace(1, 0.0, i1 - i0) ** 0.5
     bed *= g
+    ia, isr = sf.read(HERE.parent / 'assets/nakhla/intro-audio.wav')
+    ia = ia.T[:, : int(3.5 * SR)] if ia.ndim > 1 else np.stack([ia, ia])[:, : int(3.5 * SR)]
+    ia = ia / (np.abs(ia).max() + 1e-9) * 0.55
+    fd = int(0.45 * SR); ia[:, -fd:] *= np.linspace(1, 0, fd) ** 2
+    bed[:, : ia.shape[1]] += ia   # the studio's own intro audio, blended into the opening
     bed /= np.abs(bed).max() + 1e-9
     bed *= 0.5
     fade = int(0.4 * SR); bed[:, -fade:] *= np.linspace(1, 0, fade) ** 2
@@ -140,8 +150,8 @@ def main():
     per_bar = [float(np.sqrt(np.mean(mono[int(T(4 * i) * SR):int(T(4 * i + 4) * SR)] ** 2))) for i in range(NB // 4)]
     mx = max(per_bar)
     grid.update({"downbeats": grid["beats"][::4], "bar_energy": [round(x / mx, 4) for x in per_bar], "duration": DUR,
-                 "sections": [{"name": "intro", "beat": 0}, {"name": "main", "beat": 6}, {"name": "half", "beat": 24}, {"name": "lift", "beat": 28},
-                              {"name": "half2", "beat": 66}, {"name": "end", "beat": 72}],
+                 "sections": [{"name": "intro", "beat": 0}, {"name": "main", "beat": 8}, {"name": "half", "beat": 26}, {"name": "lift", "beat": 30},
+                              {"name": "half2", "beat": 68}, {"name": "end", "beat": 74}],
                  "designed_bpm": BPM, "source": "blazma-tiktok/audio/score.py (explainer instruments, 80-beat cut)"})
     (FILM / "beats.json").write_text(json.dumps(grid, indent=1))
     print(f"beats: {grid['bpm']} bpm, offset {grid['offset'] * 1000:.1f} ms, {grid['fit_inliers']}/{len(grid['detected'])} inliers, rms {grid['fit_residual_ms']} ms")

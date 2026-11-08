@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # phase 1: real Kimodo generation of the hero prompt, saved once to hero.blazanim (re-used by every re-take)
-S=${WORK_DIR:-/tmp/blazma-work}
 G=/opt/godot/Godot_v4.7.2-stable_mono_linux_x86_64/Godot_v4.7.2-stable_mono_linux.x86_64
 O=/home/user/blazma-reel/xdg-gen; rm -rf $O; mkdir -p $O/d $O/c $O/k
 export XDG_DATA_HOME=$O/d XDG_CONFIG_HOME=$O/c XDG_CACHE_HOME=$O/k BLAZMA_DEMO=2 BLAZMA_DEMO_PROVIDER=kimodo BLAZMA_DEMO_GENONLY=1 BLAZMA_DEMO_SAVE=/home/user/blazma-reel/hero.blazanim
