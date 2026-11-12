@@ -34,6 +34,7 @@ public partial class MainWindow
     {
         PhysicsButton = ViewToggle("Balance", "Show the centre of mass, support polygon and contact points in the viewport, and the balance strip under the timeline.",
             "<circle cx='8' cy='5' r='2.6'/><path d='M8 8v3'/><path d='M2.5 13.5h11' stroke-width='1.6'/><path d='M4 11l8 0' />", on => App.SetShowPhysics(on));
+        ShortcutMap.Instance.Hint(PhysicsButton, "Show the centre of mass, support polygon and contact points in the viewport, and the balance strip under the timeline.", "view.balance");
         row.AddChild(PhysicsButton);
     }
 

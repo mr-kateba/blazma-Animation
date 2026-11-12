@@ -73,14 +73,14 @@ public partial class SelfTest
         // ---- a step that is not understood, fixed by editing; editing a length --------------------------------------------
         _w.OpenGenerateDialog();
         await Settle();
-        dlg.Prompt.Text = "يمشي ثم يتكلم في التلفون";
+        dlg.Prompt.Text = "يمشي ثم يطبخ الرز";
         dlg.Prompt.EmitSignal(TextEdit.SignalName.TextChanged);
         dlg.RefreshPlanNow();
         await Settle();
         Check("plan a step the dictionary does not know is flagged 'Not understood' with a hint", () =>
             dlg.PlanRows.Count == 2 && dlg.PlanRows[0].Understood && !dlg.PlanRows[1].Understood && dlg.PlanStatuses[1] == "Not understood" && dlg.PlanWarning.Length > 0
                 ? null : string.Join(",", dlg.PlanStatuses) + " / " + dlg.PlanWarning);
-        dlg.EditStep(1, caption: "a person talks on the phone");
+        dlg.EditStep(1, caption: "a person cooks rice");
         dlg.EditStep(0, seconds: 2.5);
         await Settle();
         Check("plan editing the English text marks the step 'Edited' (understood); editing a length updates the total", () =>

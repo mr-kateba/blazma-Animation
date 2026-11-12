@@ -86,6 +86,7 @@ public partial class AppController : Node
         StartupProject = FindStartupProject(OS.GetCmdlineArgs().Concat(OS.GetCmdlineUserArgs()));
         HoldRunningMutex();
         Settings.Load();
+        ShortcutMap.Instance.Attach(Settings);
         ApplyLocale(); // before the first project is named
         Recovery = new RecoveryStore(AppPaths.Combine("recovery"));
         var log = new JsonlOpLog(AppPaths.Combine(System.IO.Path.Combine("logs", "oplog.jsonl")));

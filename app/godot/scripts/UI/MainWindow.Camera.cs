@@ -37,24 +37,25 @@ public partial class MainWindow
         ViewPopup = new PopupPanel { Name = "ViewPopup" };
         var box = new VBoxContainer { CustomMinimumSize = new Vector2(250, 0) };
         box.AddThemeConstantOverride("separation", 2);
-        void Item(string text, string key, Action act)
+        void Item(string text, string action, Action act)
         {
             var r = new HBoxContainer { LayoutDirection = LayoutDirectionEnum.ApplicationLocale };
             var b = new Button { Text = text, Flat = true, Alignment = HorizontalAlignment.Left, FocusMode = FocusModeEnum.None, SizeFlagsHorizontal = SizeFlags.ExpandFill };
             b.Pressed += () => { ViewPopup.Hide(); act(); Stage.GrabFocus(); };
             r.AddChild(b);
-            var k = W.Label(key, "Dim", false);
+            var k = W.Label(Keys.Display(action), "Dim", false);
             k.LayoutDirection = LayoutDirectionEnum.Ltr;
+            if (action.Length > 0) _viewKeyLabels.Add((k, action));
             r.AddChild(k);
             box.AddChild(r);
         }
-        Item("Front view", "Num 1", () => Stage.SetView(0));
-        Item("Side view", "Num 3", () => Stage.SetView(1));
-        Item("Top view", "Num 7", () => Stage.SetView(2));
-        Item("Perspective / Orthographic", "Num 5", () => Stage.ToggleOrtho());
+        Item("Front view", "view.front", () => Stage.SetView(0));
+        Item("Side view", "view.side", () => Stage.SetView(1));
+        Item("Top view", "view.top", () => Stage.SetView(2));
+        Item("Perspective / Orthographic", "view.ortho", () => Stage.ToggleOrtho());
         box.AddChild(new HSeparator());
-        Item("Frame selection", "F / Num .", () => Stage.FrameFocus());
-        Item("Frame all", "Home", () => Stage.FrameAll());
+        Item("Frame selection", "view.frameSel", () => Stage.FrameFocus());
+        Item("Frame all", "view.frameAll", () => Stage.FrameAll());
         Item("Reset camera", "", () => Stage.ResetView());
         box.AddChild(new HSeparator());
         box.AddChild(W.Label("Camera speed"));

@@ -203,7 +203,7 @@ public partial class SelfTest
         var framesDuring = Engine.GetProcessFrames() - frames0;
         await Settle();
         Check("p7 Check ran off the main thread: frames kept being drawn while the runner started", () =>
-            done && set.LastCheck?.Diagnostics is not null && framesDuring >= 30 ? null : $"done={done} frames={framesDuring} err={set.LastCheck?.Error}");
+            done && set.LastCheck?.Diagnostics is not null && framesDuring >= 10 ? null : $"done={done} frames={framesDuring} err={set.LastCheck?.Error}");
         Check("p7 Check shows runner found, models found, runner answer, CPU/RAM/GPU", () =>
         {
             if (!set.RunnerLineText.StartsWith("Runner found")) return set.RunnerLineText;

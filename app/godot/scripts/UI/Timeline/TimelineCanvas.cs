@@ -5,32 +5,10 @@ using Godot;
 
 namespace Blazma.UI.Views;
 
-/// <summary>Shared keyboard handling for the transport (Space, arrows, Home/End, K).</summary>
+/// <summary>Keys that reach a timeline view while it has focus go through the shared shortcut map.</summary>
 public static class TransportKeys
 {
-    public static bool Handle(MainWindow host, InputEventKey k)
-    {
-        if (!k.Pressed || k.Echo || k.CtrlPressed || k.MetaPressed) return false;
-        var app = AppController.Instance;
-        switch (k.Keycode)
-        {
-            case Godot.Key.Space: app.TogglePlay(); return true;
-            case Godot.Key.Left when k.AltPressed: app.GoToPreviousKey(); return true;
-            case Godot.Key.Right when k.AltPressed: app.GoToNextKey(); return true;
-            case Godot.Key.Left: app.StepFrames(-1); return true;
-            case Godot.Key.Right: app.StepFrames(1); return true;
-            case Godot.Key.Up: app.GoToNextKey(); return true;
-            case Godot.Key.Down: app.GoToPreviousKey(); return true;
-            case Godot.Key.Home: app.GoToStart(); return true;
-            case Godot.Key.End: app.GoToEnd(); return true;
-            case Godot.Key.K:
-                if (k.AltPressed) host.DeleteKeyHere();
-                else if (k.ShiftPressed) host.KeySelected();
-                else host.KeyAll();
-                return true;
-        }
-        return false;
-    }
+    public static bool Handle(MainWindow host, InputEventKey k) => host.DispatchKey(k);
 }
 
 /// <summary>

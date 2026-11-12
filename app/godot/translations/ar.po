@@ -334,20 +334,18 @@ msgstr "عكس"
 msgid "Reset"
 msgstr "إعادة ضبط"
 
-msgid "Select (Q)"
-msgstr "تحديد (Q)"
 
-msgid "Rotate the selected bone (E)"
-msgstr "تدوير العظمة المحددة (E)"
+msgid "Rotate the selected bone"
+msgstr "تدوير العظمة المحددة"
 
-msgid "Move an IK control or the pelvis (W)"
-msgstr "تحريك نقطة تحكم IK أو الحوض (W)"
+msgid "Move an IK control or the pelvis"
+msgstr "تحريك نقطة تحكم IK أو الحوض"
 
-msgid "Pin or unpin the selected hand or foot (P)"
-msgstr "تثبيت اليد أو القدم المحددة أو إلغاء تثبيتها (P)"
+msgid "Pin or unpin the selected hand or foot"
+msgstr "تثبيت اليد أو القدم المحددة أو إلغاء تثبيتها"
 
-msgid "Mirror the pose left and right (M)"
-msgstr "عكس الوضعية بين اليسار واليمين (M)"
+msgid "Mirror the pose left and right"
+msgstr "عكس الوضعية بين اليسار واليمين"
 
 msgid "Reset the selected bone, or the whole pose when nothing is selected"
 msgstr "إعادة ضبط العظمة المحددة، أو الوضعية كلها إن لم يكن هناك تحديد"
@@ -661,23 +659,23 @@ msgstr "المقطع الذي تحرّكه الآن. تُضاف المفاتيح
 msgid "Add a marker at the playhead. Double-click a marker to rename it."
 msgstr "أضف علامة عند رأس التشغيل. انقر مرتين على العلامة لإعادة تسميتها."
 
-msgid "Go to the first frame (Home)"
-msgstr "الانتقال إلى الإطار الأول (Home)"
+msgid "Go to the first frame"
+msgstr "الانتقال إلى الإطار الأول"
 
-msgid "Previous key (Up or Alt+Left)"
-msgstr "المفتاح السابق (السهم لأعلى أو Alt+اليسار)"
+msgid "Previous key"
+msgstr "المفتاح السابق"
 
-msgid "Play or pause (Space)"
-msgstr "تشغيل أو إيقاف مؤقت (مسافة)"
+msgid "Play or pause"
+msgstr "تشغيل أو إيقاف مؤقت"
 
-msgid "Pause (Space)"
-msgstr "إيقاف مؤقت (مسافة)"
+msgid "Pause"
+msgstr "إيقاف مؤقت"
 
-msgid "Next key (Down or Alt+Right)"
-msgstr "المفتاح التالي (السهم لأسفل أو Alt+اليمين)"
+msgid "Next key"
+msgstr "المفتاح التالي"
 
-msgid "Go to the last frame (End)"
-msgstr "الانتقال إلى الإطار الأخير (End)"
+msgid "Go to the last frame"
+msgstr "الانتقال إلى الإطار الأخير"
 
 msgid "Loop the clip. Drag the handles on the ruler to set the loop range."
 msgstr "تكرار المقطع. اسحب المقبضين على المسطرة لتحديد نطاق التكرار."
@@ -688,11 +686,11 @@ msgstr "الإطار الحالي. اكتب رقمًا واضغط Enter للان
 msgid "When on, every pose change is keyed at the current frame automatically."
 msgstr "عند التفعيل يُسجَّل كل تغيير في الوضعية كمفتاح تلقائيًا عند الإطار الحالي."
 
-msgid "Delete all keys at this frame (Alt+K)."
-msgstr "حذف كل المفاتيح عند هذا الإطار (Alt+K)."
+msgid "Delete all keys at this frame."
+msgstr "حذف كل المفاتيح عند هذا الإطار."
 
-msgid "Key the whole pose at this frame (K). Shift+K keys only the selected bone or control."
-msgstr "تسجيل الوضعية كاملةً كمفتاح عند هذا الإطار (K). Shift+K يسجّل العظمة أو نقطة التحكم المحددة فقط."
+msgid "Key the whole pose at this frame."
+msgstr "تسجيل الوضعية كاملةً كمفتاح عند هذا الإطار."
 
 msgid "Unkeyed changes are lost when you change frame"
 msgstr "التغييرات غير المسجّلة كمفاتيح تضيع عند تغيير الإطار"
@@ -1329,8 +1327,8 @@ msgstr "أنشئ مقطعًا أولًا ثم صدّره."
 msgid "Add a character first, then export its animation."
 msgstr "أضف شخصية أولًا ثم صدّر حركتها."
 
-msgid "Export the clip as a .glb animation (Ctrl+E)."
-msgstr "تصدير المقطع كحركة بصيغة ‎.glb‎ (Ctrl+E)."
+msgid "Export the clip as a .glb animation."
+msgstr "تصدير المقطع كحركة بصيغة ‎.glb‎."
 
 msgid "Physics"
 msgstr "الفيزياء"
@@ -2451,8 +2449,8 @@ msgstr "معطّل: تقفز الأداة إلى العظمة. مفعّل: تب�
 msgid "Key prop"
 msgstr "مفتاح للأداة"
 
-msgid "Record the prop's position and rotation as a key at this frame (K)."
-msgstr "سجّل موضع الأداة وتدويرها كمفتاح عند هذا الإطار (K)."
+msgid "Record the prop's position and rotation as a key at this frame."
+msgstr "سجّل موضع الأداة وتدويرها كمفتاح عند هذا الإطار."
 
 msgid "Remove prop"
 msgstr "حذف الأداة"
@@ -3840,3 +3838,343 @@ msgstr "الخطوات في المقطع:"
 
 msgid "Plan a motion prompt"
 msgstr "تخطيط وصف الحركة"
+
+# First launch, tutorial and keyboard shortcuts
+msgid "File"
+msgstr "ملف"
+
+msgid "Playback"
+msgstr "التشغيل"
+
+msgid "Tools"
+msgstr "الأدوات"
+
+msgid "Posing"
+msgstr "التحريك"
+
+msgid "Help"
+msgstr "مساعدة"
+
+msgid "New project"
+msgstr "مشروع جديد"
+
+msgid "Open project"
+msgstr "فتح مشروع"
+
+msgid "Save as"
+msgstr "حفظ باسم"
+
+msgid "Delete selected prop or clip"
+msgstr "حذف الأداة أو المقطع المحدد"
+
+msgid "Duplicate clip"
+msgstr "تكرار المقطع"
+
+msgid "Select all keys"
+msgstr "تحديد كل المفاتيح"
+
+msgid "Next frame"
+msgstr "الإطار التالي"
+
+msgid "Previous frame"
+msgstr "الإطار السابق"
+
+msgid "Jump 10 frames forward"
+msgstr "قفز 10 إطارات للأمام"
+
+msgid "Jump 10 frames back"
+msgstr "قفز 10 إطارات للخلف"
+
+msgid "Loop on or off"
+msgstr "تفعيل التكرار أو إيقافه"
+
+msgid "Key the whole pose"
+msgstr "تسجيل الوضعية كاملة"
+
+msgid "Key only the selected bone or control"
+msgstr "تسجيل العظمة أو نقطة التحكم المحددة فقط"
+
+msgid "Delete keys at this frame"
+msgstr "حذف المفاتيح عند هذا الإطار"
+
+msgid "Auto-key on or off"
+msgstr "تفعيل التسجيل التلقائي أو إيقافه"
+
+msgid "Select tool"
+msgstr "أداة التحديد"
+
+msgid "Move tool (IK control, pelvis)"
+msgstr "أداة التحريك (نقطة IK أو الحوض)"
+
+msgid "Rotate tool"
+msgstr "أداة التدوير"
+
+msgid "Pin or unpin hand or foot"
+msgstr "تثبيت اليد أو القدم أو إلغاء تثبيتها"
+
+msgid "Reset the selected bone"
+msgstr "إعادة العظمة المحددة إلى وضعها الأصلي"
+
+msgid "Reset the whole pose"
+msgstr "إعادة الوضعية كاملةً إلى الأصل"
+
+msgid "Copy pose"
+msgstr "نسخ الوضعية"
+
+msgid "Paste pose mirrored"
+msgstr "لصق الوضعية معكوسة"
+
+msgid "Frame the selection"
+msgstr "إظهار المحدد في العرض"
+
+msgid "Frame everything"
+msgstr "إظهار كل شيء"
+
+msgid "Perspective or orthographic"
+msgstr "منظور أو متعامد"
+
+msgid "Show or hide the side panels"
+msgstr "إظهار اللوحات الجانبية أو إخفاؤها"
+
+msgid "Show or hide the inspector"
+msgstr "إظهار المفتش أو إخفاؤه"
+
+msgid "Switch Simple and Advanced"
+msgstr "التبديل بين البسيط والمتقدم"
+
+msgid "Full screen"
+msgstr "ملء الشاشة"
+
+msgid "Balance overlay"
+msgstr "طبقة التوازن"
+
+msgid "Motion paths"
+msgstr "مسارات الحركة"
+
+msgid "Keyboard shortcuts"
+msgstr "اختصارات لوحة المفاتيح"
+
+msgid "Tutorial"
+msgstr "الشرح التعليمي"
+
+msgid "Welcome"
+msgstr "الترحيب"
+
+msgid "Keyboard Shortcuts"
+msgstr "اختصارات لوحة المفاتيح"
+
+msgid "Search shortcuts…"
+msgstr "ابحث في الاختصارات…"
+
+msgid "Reset all to defaults"
+msgstr "إعادة الكل إلى الافتراضي"
+
+msgid "Import…"
+msgstr "استيراد…"
+
+msgid "Click a key, then press the new shortcut. Esc cancels. Shortcuts never fire while you type in a text field."
+msgstr "انقر على المفتاح ثم اضغط الاختصار الجديد. Esc يلغي. لا تعمل الاختصارات أثناء الكتابة في حقل نصي."
+
+msgid "Press a key…"
+msgstr "اضغط مفتاحًا…"
+
+msgid "Remove the shortcut"
+msgstr "إزالة الاختصار"
+
+msgid "Back to the default"
+msgstr "العودة إلى الافتراضي"
+
+msgid "{0} is already used by “{1}”. Replace it? That action will have no key until you give it a new one."
+msgstr "{0} مستخدم بالفعل في «{1}». هل تريد استبداله؟ ستبقى تلك العملية بلا اختصار حتى تعطيها اختصارًا جديدًا."
+
+msgid "Import shortcuts"
+msgstr "استيراد الاختصارات"
+
+msgid "Export shortcuts"
+msgstr "تصدير الاختصارات"
+
+msgid "This is not a shortcuts file."
+msgstr "هذا ليس ملف اختصارات."
+
+msgid "Imported. Warning: {0} is used by both “{1}” and “{2}”."
+msgstr "تم الاستيراد. تنبيه: {0} مستخدم في «{1}» وفي «{2}» معًا."
+
+msgid "Print…"
+msgstr "طباعة…"
+
+msgid "Customise…"
+msgstr "تخصيص…"
+
+msgid "Shortcuts do not fire while you type in a text field. F1 or ? closes this page."
+msgstr "لا تعمل الاختصارات أثناء الكتابة في حقل نصي. F1 أو ? يغلق هذه الصفحة."
+
+msgid "Continue"
+msgstr "متابعة"
+
+msgid "Pick your language and look. You can change both any time in Settings."
+msgstr "اختر لغتك ومظهرك. يمكنك تغييرهما في أي وقت من الإعدادات."
+
+msgid "Show me how it works"
+msgstr "أرِني كيف يعمل"
+
+msgid "Skip for now"
+msgstr "تخطَّ الآن"
+
+msgid "Welcome! Want a two-minute tour?"
+msgstr "أهلًا بك! هل تريد جولة سريعة من دقيقتين؟"
+
+msgid "A short guided tour shows the stage, posing, the timeline, templates, generating motion from a sentence, and exporting. You can open it again any time from the ? button."
+msgstr "جولة قصيرة تُريك منطقة العرض والتحريك والخط الزمني والقوالب وتوليد الحركة من جملة والتصدير. يمكنك فتحها مجددًا في أي وقت من زر ؟."
+
+msgid "Tutorial: how Blazma works"
+msgstr "الشرح: كيف يعمل بلازما"
+
+msgid "Keyboard Shortcuts…"
+msgstr "اختصارات لوحة المفاتيح…"
+
+msgid "Customise Shortcuts…"
+msgstr "تخصيص الاختصارات…"
+
+msgid "Shortcut: {0}"
+msgstr "الاختصار: {0}"
+
+msgid "Next"
+msgstr "التالي"
+
+msgid "Skip"
+msgstr "تخطَّ"
+
+msgid "Finish"
+msgstr "إنهاء"
+
+msgid "Apply the Walk template and play"
+msgstr "طبّق قالب المشي وشغّله"
+
+msgid "Done! The walk is playing. You can edit it like any other clip."
+msgstr "تم! المشية تعمل الآن. يمكنك تعديلها كأي مقطع آخر."
+
+msgid "That did not work. You can skip this step."
+msgstr "لم تنجح العملية. يمكنك تخطي هذه الخطوة."
+
+msgid "Optional: you can also press Next to skip this."
+msgstr "اختياري: يمكنك أيضًا الضغط على «التالي» لتخطيها."
+
+msgid "The plan Blazma reads from that sentence"
+msgstr "الخطة التي يفهمها بلازما من تلك الجملة"
+
+msgid "#"
+msgstr "#"
+
+msgid "Key only the selected bone or control."
+msgstr "سجّل العظمة أو نقطة التحكم المحددة فقط."
+
+msgid "How Blazma works"
+msgstr "كيف يعمل بلازما"
+
+msgid "In a few steps you will see how to look around, pose a character, record keys on the timeline, start from a template or from a sentence, and export. Press Esc at any time to leave the tour."
+msgstr "في بضع خطوات ستتعرّف على كيفية التجوّل في المشهد، وتحريك الشخصية، وتسجيل المفاتيح على الخط الزمني، والبدء من قالب أو من جملة، ثم التصدير. اضغط Esc في أي وقت للخروج من الجولة."
+
+msgid "The stage and the camera"
+msgstr "منطقة العرض والكاميرا"
+
+msgid "This is your stage. Hold the right mouse button and use W A S D to fly. Orbit with the middle mouse button or Alt + left drag, pan with Shift + drag, zoom with the wheel. Press F to frame what you selected and Home to see everything."
+msgstr "هذه منطقة العمل. اضغط زر الفأرة الأيمن مع الاستمرار واستخدم W A S D للتحليق. للدوران حول المشهد استخدم زر الفأرة الأوسط أو Alt مع السحب بالزر الأيسر، وللتحريك الجانبي Shift مع السحب، وللتقريب عجلة الفأرة. اضغط F لإظهار ما حددته وHome لرؤية كل شيء."
+
+msgid "Select and pose bones"
+msgstr "تحديد العظام وتحريكها"
+
+msgid "Click a bone to select it, then rotate it with E (FK: you turn each bone yourself). Move a hand or foot with W and Blazma bends the arm or leg for you (IK). Pin a hand or foot to keep it in place while the body moves."
+msgstr "انقر على عظمة لتحديدها ثم دوّرها بالمفتاح E (FK: أنت تدير كل عظمة بنفسك). حرّك اليد أو القدم بالمفتاح W ويثني بلازما الذراع أو الساق نيابةً عنك (IK). ثبّت اليد أو القدم ليبقيا في مكانهما أثناء حركة الجسم."
+
+msgid "Keys on the timeline"
+msgstr "المفاتيح على الخط الزمني"
+
+msgid "Pose the character, then press Key (K) to record that pose at the playhead. The diamonds on the timeline are keys: Blazma fills in the movement between them. Turn on Auto-key and every change is keyed for you."
+msgstr "حرّك الشخصية ثم اضغط «مفتاح» (K) لتسجيل الوضعية عند المؤشر. المعيّنات على الخط الزمني هي المفاتيح، ويملأ بلازما الحركة بينها. فعّل التسجيل التلقائي ليُسجَّل كل تغيير تلقائيًا."
+
+msgid "Play it back"
+msgstr "شغّل الحركة"
+
+msgid "Space plays and pauses. Left and Right step one frame, Shift + arrows jump ten, Up and Down jump between keys. Drag in the ruler to scrub."
+msgstr "المسافة تشغّل وتوقف. السهمان يمينًا ويسارًا يتنقلان إطارًا واحدًا، وShift مع السهم يقفز عشرة، والسهمان لأعلى ولأسفل يتنقلان بين المفاتيح. اسحب على المسطرة للتصفح."
+
+msgid "Start from a template"
+msgstr "ابدأ من قالب"
+
+msgid "Not sure where to start? Templates are ready-made motions: idle, walk, run, jump, wave, attack. Apply one to your character and it becomes a new clip you can edit."
+msgstr "لا تعرف من أين تبدأ؟ القوالب حركات جاهزة: سكون ومشي وجري وقفز ولوحة تحية وهجوم. طبّق واحدًا على شخصيتك فيصبح مقطعًا جديدًا يمكنك تعديله."
+
+msgid "Generate motion from a sentence"
+msgstr "ولّد حركة من جملة"
+
+msgid "Describe the movement in your own words, in Arabic or English, even several actions in a row. Example: “walk forward, then jump, then wave”. Blazma splits the sentence into steps, shows them in a plan table so you can fix any step, and joins them into one clip."
+msgstr "صف الحركة بكلماتك بالعربية أو الإنجليزية، حتى لو كانت عدة أفعال متتالية. مثال: «امشِ للأمام ثم اقفز ثم لوّح». يقسّم بلازما الجملة إلى خطوات ويعرضها في جدول الخطة لتصحح أي خطوة، ثم يدمجها في مقطع واحد."
+
+msgid "Drafts: accept or discard"
+msgstr "المسودات: اقبل أو تجاهل"
+
+msgid "A generated clip arrives as a draft. Play it, then press Accept to keep it or Discard to remove it. Ctrl+Z brings a discarded draft back, so you can experiment freely."
+msgstr "يصل المقطع المولَّد كمسودة. شغّله ثم اضغط «قبول» للاحتفاظ به أو «تجاهل» لحذفه. Ctrl+Z يعيد المسودة المحذوفة فجرّب بحرية."
+
+msgid "Check the balance"
+msgstr "افحص التوازن"
+
+msgid "Switch on Balance to see the centre of mass, the support polygon and the contacts. If the character would fall over, the Physics panel can fix the pose for you."
+msgstr "فعّل «التوازن» لترى مركز الكتلة ومضلع الارتكاز ونقاط التماس. إذا كانت الشخصية ستسقط فيمكن للوحة الفيزياء إصلاح الوضعية نيابةً عنك."
+
+msgid "When the clip looks right, Export writes it as a .glb animation for your game engine or 3D tool."
+msgstr "حين يبدو المقطع جيدًا، يكتبه «تصدير» كحركة بصيغة ‎.glb‎ لمحرك لعبتك أو أداة الثلاثي الأبعاد."
+
+msgid "Save your work"
+msgstr "احفظ عملك"
+
+msgid "Ctrl+S saves the project. Blazma also autosaves in the background and offers to recover your work if the app ever closes unexpectedly."
+msgstr "Ctrl+S يحفظ المشروع. ويحفظ بلازما تلقائيًا في الخلفية ويعرض استعادة عملك إذا أُغلق التطبيق فجأة."
+
+msgid "Try it"
+msgstr "جرّبها"
+
+msgid "Let's do it once: press the button to add a walking character with the Walk template and play it."
+msgstr "لنفعلها مرة: اضغط الزر لإضافة شخصية تمشي بقالب المشي وتشغيلها."
+
+msgid "You are ready"
+msgstr "أنت جاهز"
+
+msgid "That is all you need to begin. F1 shows every keyboard shortcut and you can change them in Settings. The ? button at the top opens this tour again."
+msgstr "هذا كل ما تحتاجه للبدء. F1 يعرض كل اختصارات لوحة المفاتيح ويمكنك تغييرها من الإعدادات. وزر ؟ في الأعلى يفتح هذه الجولة مجددًا."
+
+msgid "Welcome to Blazma Animation"
+msgstr "مرحبًا بك في بلازما أنيميشن"
+
+msgid "Physics polish"
+msgstr "صقل فيزيائي"
+
+msgid "Low confidence"
+msgstr "ثقة منخفضة"
+
+msgid "Corrected: “{0}” was read as {1}"
+msgstr "صُحّحت: قُرئت «{0}» كـ {1}"
+
+msgid "Use “{0}”"
+msgstr "استخدم «{0}»"
+
+msgid "wave"
+msgstr "يلوّح"
+
+msgid "walk"
+msgstr "يمشي"
+
+msgid "run"
+msgstr "يجري"
+
+msgid "jump"
+msgstr "يقفز"
+
+msgid "idle"
+msgstr "يقف"
+
+msgid "attack"
+msgstr "يهاجم"
+
+msgid "crouch"
+msgstr "ينحني"

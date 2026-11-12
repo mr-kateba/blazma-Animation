@@ -79,19 +79,6 @@ public partial class MainWindow
         m.AddSeparator();
         m.AddItem("Add Marker", MAddMarker);
         m.AddItem("Add Key-pose Phases", MAddPhases);
-        ShortcutOf(m, MKey, KeyCombo(Godot.Key.K));
-        ShortcutOf(m, MKeySel, KeyCombo(Godot.Key.K, shift: true));
-        ShortcutOf(m, MDelKey, KeyCombo(Godot.Key.K, alt: true));
-        ShortcutOf(m, MPlay, KeyCombo(Godot.Key.Space));
-        ShortcutOf(m, MStart, KeyCombo(Godot.Key.Home));
-        ShortcutOf(m, MEnd, KeyCombo(Godot.Key.End));
-    }
-
-    static Shortcut KeyCombo(Godot.Key key, bool shift = false, bool alt = false)
-    {
-        var sc = new Shortcut();
-        sc.Events.Add(new InputEventKey { Keycode = key, ShiftPressed = shift, AltPressed = alt });
-        return sc;
     }
 
     void BuildViewSettingsMenu()
