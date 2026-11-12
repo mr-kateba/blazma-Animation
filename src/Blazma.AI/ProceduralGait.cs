@@ -209,11 +209,26 @@ public sealed partial class ProceduralMotionProvider
     {
         var g = plan.G;
         var tau = 2 * Math.PI;
-        var pos = new Vec3(g.Sway * Math.Cos(tau * (phi - g.Duty / 2)), plan.Y0 - g.Bob * Math.Cos(2 * tau * (phi - g.BobLow)), g.Speed * t);
+        var bob = g.Duty < 0.5 ? SpringMassBob(g, plan.F, phi) : -g.Bob * Math.Cos(2 * tau * (phi - g.BobLow));
+        var pos = new Vec3(g.Sway * Math.Cos(tau * (phi - g.Duty / 2)), plan.Y0 + bob, g.Speed * t);
         var yaw = -g.Yaw * Math.Cos(tau * phi);
         var roll = g.Roll * Math.Cos(tau * (phi - 0.15));
         var tilt = g.Tilt + 1 * Math.Cos(2 * tau * (phi - g.BobLow));
         return (pos, (Ry(yaw) * Rz(roll) * Rx(tilt)).Normalized());
+    }
+
+    /// <summary>Pelvis height offset of a run (spring-mass model): during each flight the body is ballistic (−g, rising at take-off
+    /// and falling at touch-down with v = g·T_flight/2), during each stance the leg spring compresses and returns
+    /// (−C·sin(π·t/T_stance), C = v·T_stance/π), so height and vertical velocity are continuous at every touch-down and take-off.</summary>
+    static double SpringMassBob(Gait g, double f, double phi)
+    {
+        const double gravity = 9.81;
+        var q = Frac(phi * 2) / 2; // phase within the half cycle of one step
+        double ts = g.Duty / f, tf = (0.5 - g.Duty) / f, v = gravity * tf / 2, c = v * ts / Math.PI;
+        var t = q / f;
+        if (t < ts) return -c * Math.Sin(Math.PI * t / ts);
+        var tt = t - ts;
+        return v * tt - 0.5 * gravity * tt * tt;
     }
 
     /// <summary>One frame of a walk or run cycle (world space; the hips position is the root).</summary>

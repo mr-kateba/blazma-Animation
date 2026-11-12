@@ -319,7 +319,9 @@ public sealed class MotionJobService : IDisposable
             var motion = await provider.GenerateAsync(request, progress, job.Cts.Token).ConfigureAwait(false);
             job.Cts.Token.ThrowIfCancellationRequested();
             progress.Report(new GenerationProgress("retarget", 1, "converting to the character"));
-            var r = MotionRetargeter.Retarget(motion, rig, options);
+            var r = MotionRetargeter.Retarget(motion, rig, options.PhysicsPolish ? options with { ReduceKeys = false } : options);
+            var polishWarnings = r.Warnings.ToList();
+            var polished = options.PhysicsPolish ? PhysicsPolishCommands.PolishNew(r.Clip, rig, options.Cyclic, options.ReduceKeys, polishWarnings) : null;
             lock (_lock)
             {
                 if (job.State != MotionJobState.Running) return;
@@ -327,11 +329,12 @@ public sealed class MotionJobService : IDisposable
                 if (job.CancelRequested || job.Cts.IsCancellationRequested) { Finish(job, MotionJobState.Cancelled, null, "Cancelled."); return; }
                 job.Result = r.Clip;
                 job.Frames = (int)r.Clip.DurationFrames;
-                job.Warnings = r.Warnings.ToList();
+                job.Warnings = polishWarnings;
                 job.State = MotionJobState.Ready;
                 job.Stage = "ready";
                 job.Progress = 1;
-                job.Message = $"{r.Clip.DurationFrames} frames, {r.MappedBones.Count} bones driven, {r.KeyCount} keys" + (r.PinnedFrames > 0 ? $", feet pinned on {r.PinnedFrames} frames" : "") + ".";
+                job.Message = $"{r.Clip.DurationFrames} frames, {r.MappedBones.Count} bones driven, {r.Clip.Tracks.Sum(t => t.Keys.Count)} keys" + (r.PinnedFrames > 0 ? $", feet pinned on {r.PinnedFrames} frames" : "") +
+                    (polished is { Stages.Count: > 0 } ? $", physics polish: {string.Join(", ", polished.Stages)}" : "") + ".";
             }
         }
         catch (OperationCanceledException) when (job.CancelRequested || job.Cts.IsCancellationRequested)
@@ -405,13 +408,15 @@ public sealed class MotionJobService : IDisposable
         }
         ct.ThrowIfCancellationRequested();
         progress.Report(new GenerationProgress("assemble", 1, $"joining {n} steps"));
-        var clip = Assemble(rig, clips, parts, options, blend, warnings);
+        var clip = Assemble(rig, clips, parts, options.PhysicsPolish ? options with { ReduceKeys = false } : options, blend, warnings);
+        var polished = options.PhysicsPolish ? PhysicsPolishCommands.PolishNew(clip, rig, false, options.ReduceKeys, warnings) : null;
         clip.Metadata["source.provider"] = provider.Id;
         clip.Metadata["segments"] = n.ToString(CultureInfo.InvariantCulture);
         for (var i = 0; i < n; i++)
             clip.Metadata[$"segment.{i + 1}"] = $"{parts[i].Text} → {parts[i].Prompt} ({parts[i].DurationSeconds.ToString("0.##", CultureInfo.InvariantCulture)} s)";
         if (lastDevice is not null) clip.Metadata["kimodo.generatedOn"] = lastDevice;
-        var message = $"{clip.DurationFrames} frames from {n} steps: {string.Join(" → ", parts.Select(x => x.Action ?? x.Prompt))}.";
+        var message = $"{clip.DurationFrames} frames from {n} steps: {string.Join(" → ", parts.Select(x => x.Action ?? x.Prompt))}" +
+            (polished is { Stages.Count: > 0 } ? $"; physics polish: {string.Join(", ", polished.Stages)}" : "") + ".";
         return (clip, warnings, message);
     }
 
@@ -716,6 +721,7 @@ public static class AICommands
                  S.Bool("reduceKeys", "Remove keys that linear interpolation reproduces within 0.1° / 0.5 mm (default true).", false),
                  S.Bool("loop", "Ask for a loopable motion (procedural only; Kimodo ignores constraints).", false),
                  S.Bool("inPlace", "Remove travel (procedural only).", false),
+                 S.Bool("physicsPolish", "Run motion.physics_polish on the result (default true): planted feet, nothing below the ground, ballistic jumps, smooth step transitions, falls.", false),
                  ("segments", new JsonObject
                  {
                      ["type"] = "array",
@@ -737,6 +743,7 @@ public static class AICommands
                 (bool?)a["footCleanup"] ?? true, (bool?)a["reduceKeys"] ?? true, (bool?)a["loop"] ?? false, (bool?)a["inPlace"] ?? false)
             {
                 Segments = ParseSegments(a["segments"]),
+                PhysicsPolish = (bool?)a["physicsPolish"] ?? true,
             }));
 
         r.Register(new("motion.plan_prompt",
@@ -1043,6 +1050,9 @@ public sealed class GenerateMotion(MotionJobService jobs, ObjectId characterId, 
     /// <summary>Explicit plan (agents' 'segments', the dialog's edited plan); null = plan the prompt.</summary>
     public IReadOnlyList<SegmentInput>? Segments { get; init; }
 
+    /// <summary>Run the physics polish on the result (motion.physics_polish).</summary>
+    public bool PhysicsPolish { get; init; } = true;
+
     public CommandOutcome Execute(Project project)
     {
         var (character, rig) = PoseCommands.Resolve(project, characterId);
@@ -1081,6 +1091,7 @@ public sealed class GenerateMotion(MotionJobService jobs, ObjectId characterId, 
             FootCleanup = footCleanup,
             ReduceKeys = reduceKeys,
             Cyclic = loop,
+            PhysicsPolish = PhysicsPolish,
             Metadata = new Dictionary<string, string>
             {
                 ["provider"] = p.Id,

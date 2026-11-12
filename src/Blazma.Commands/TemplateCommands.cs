@@ -23,8 +23,10 @@ public static class TemplateCommands
             CommandEffect.Mutating,
             S.Of(S.Str("templateId", "Template id from template.list (e.g. builtin.walk_cycle).", true), S.Str("characterId", "Character to animate.", true),
                  S.Num("durationSeconds", "Length in seconds (default: the template's).", false), S.Str("name", "Clip name (default: the template name).", false),
-                 S.Int("fps", "Frame rate for built-in templates (default: the project frame rate).", false, 1)),
-            a => new ApplyTemplate(S.Text(a, "templateId"), S.Id(a, "characterId"), S.OptNumber(a, "durationSeconds"), S.OptName(a, "name"), Args.OptLong(a, "fps"))));
+                 S.Int("fps", "Frame rate for built-in templates (default: the project frame rate).", false, 1),
+                 S.Bool("physicsPolish", "Run motion.physics_polish on the new clip (default true).", false)),
+            a => new ApplyTemplate(S.Text(a, "templateId"), S.Id(a, "characterId"), S.OptNumber(a, "durationSeconds"), S.OptName(a, "name"), Args.OptLong(a, "fps"),
+                (bool?)a["physicsPolish"] ?? true)));
 
         r.Register(new("template.save_clip", "Save a clip as a template in the project's library (with a snapshot of its rig, so it can be applied to other characters later). Returns templateId.",
             CommandEffect.Mutating,
@@ -70,7 +72,7 @@ public sealed class ListTemplates : ICommand
     public IReadOnlyList<Change> Undo(Project p) => Array.Empty<Change>();
 }
 
-public sealed class ApplyTemplate(string templateId, ObjectId characterId, double? seconds, string? name, long? fps) : AddClipCommand
+public sealed class ApplyTemplate(string templateId, ObjectId characterId, double? seconds, string? name, long? fps, bool physicsPolish = true) : AddClipCommand
 {
     public override string Id => "template.apply";
     public override string Label => "Apply template";
@@ -93,6 +95,7 @@ public sealed class ApplyTemplate(string templateId, ObjectId characterId, doubl
             data["scale"] = PhysicsCommands.R(result.Scale);
             data["pinnedFrames"] = result.PinnedFrames;
             data["unmappedBones"] = new JsonArray(result.UnmappedBones.Select(b => (JsonNode?)b).ToArray());
+            Polish(result.Clip, rig, warnings, data);
             return result.Clip;
         }
 
@@ -121,7 +124,17 @@ public sealed class ApplyTemplate(string templateId, ObjectId characterId, doubl
         data["scale"] = PhysicsCommands.R(r.Scale);
         data["unmappedBones"] = new JsonArray(r.UnmappedBones.Select(b => (JsonNode?)b).ToArray());
         data["footLock"] = RetargetClip.LockSourceContacts(template.Clip, template.Rig, clip, rig, timeScale, warnings);
+        Polish(clip, rig, warnings, data);
         return clip;
+    }
+
+    void Polish(Clip clip, Blazma.Core.Model.Rig rig, List<Diagnostic> warnings, JsonObject data)
+    {
+        if (!physicsPolish || rig.FindByStandardName(Blazma.Rigging.HumanoidStandard.Pelvis) is null) return;
+        var notes = new List<string>();
+        var r = PhysicsPolishCommands.PolishNew(clip, rig, clip.Loop.Enabled, true, notes);
+        warnings.AddRange(notes.Select(w => new Diagnostic("physics_polish", w)));
+        if (r is not null) data["physicsPolish"] = new JsonArray(r.Stages.Select(s => (JsonNode?)s).ToArray());
     }
 }
 

@@ -70,6 +70,7 @@ public sealed class CommandRegistry
         AnimationEditCommands.Register(r);
         ExportCommands.Register(r);
         PhysicsCommands.Register(r);
+        PhysicsPolishCommands.Register(r);
         AICommands.Register(r, r.Motion);
         RetargetCommands.Register(r);
         SequenceCommands.Register(r);

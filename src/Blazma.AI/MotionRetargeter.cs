@@ -32,6 +32,10 @@ public sealed record RetargetOptions
     /// <summary>The motion is a seamless cycle (last frame = first frame + travel): root travel smoothing wraps around.</summary>
     public bool Cyclic { get; init; }
 
+    /// <summary>Run the physics polish (Blazma.Physics, applied by the command layer after retargeting / assembling, before key
+    /// reduction): planted feet, nothing below the ground, ballistic flights, smooth step transitions, falls and follow-through.</summary>
+    public bool PhysicsPolish { get; init; }
+
     public double RotationToleranceDegrees { get; init; } = 0.1;
     public double TranslationToleranceMetres { get; init; } = 0.0005;
 
