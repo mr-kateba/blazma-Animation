@@ -38,6 +38,14 @@ public sealed class AppSettings
     public bool CameraInvertY { get; set; }
     public bool CameraOrbitSelection { get; set; }
     public float CameraFov { get; set; } = 45f;
+    /// <summary>First launch: the welcome screen (language and theme) was shown and confirmed. False when there is no settings file yet.</summary>
+    public bool WelcomeDone { get; set; }
+    /// <summary>The interactive tutorial ("How Blazma works") was finished or skipped.</summary>
+    public bool TutorialDone { get; set; }
+    /// <summary>True when this run started without a settings file (the very first launch).</summary>
+    public bool IsFirstRun { get; private set; }
+    /// <summary>User keyboard shortcut overrides: action id to chords joined with "|" (empty = unbound). See <see cref="ShortcutMap"/>.</summary>
+    public Dictionary<string, string> Shortcuts { get; } = new();
     public List<string> RecentFiles { get; } = new();
     /// <summary>Folder of the last animation export (Phase 4).</summary>
     public string LastExportDir { get; set; } = "";
@@ -64,10 +72,27 @@ public sealed class AppSettings
     /// <summary>Free-form layout values (panel sizes, window size) owned by the views.</summary>
     public Dictionary<string, Variant> Layout { get; } = new();
 
+    /// <summary>"ar", "ar_SA", "ar-EG" ... give Arabic; everything else English.</summary>
+    public static string DetectLanguage(string? locale)
+    {
+        var l = (locale ?? "").Trim().ToLowerInvariant();
+        return l == "ar" || l.StartsWith("ar_", StringComparison.Ordinal) || l.StartsWith("ar-", StringComparison.Ordinal) ? "ar" : "en";
+    }
+
     public void Load()
     {
-        var cfg = new ConfigFile();
-        if (cfg.Load(Path) != Error.Ok) return;
+        using var cfg = new ConfigFile();
+        if (cfg.Load(Path) != Error.Ok)
+        {   // very first launch: start in the language of the operating system
+            IsFirstRun = true;
+            Language = DetectLanguage(OS.GetLocale());
+            return;
+        }
+        WelcomeDone = cfg.HasSectionKey("ui", "welcome_done") ? (bool)cfg.GetValue("ui", "welcome_done", false) : true; // settings from before the welcome screen existed
+        TutorialDone = (bool)cfg.GetValue("ui", "tutorial_done", TutorialDone);
+        if (cfg.HasSection("shortcuts"))
+            foreach (var key in cfg.GetSectionKeys("shortcuts"))
+                Shortcuts[key] = (string)cfg.GetValue("shortcuts", key, "");
         Language = (string)cfg.GetValue("ui", "language", Language) is "ar" ? "ar" : "en";
         Theme = (string)cfg.GetValue("ui", "theme", Theme) is "light" ? "light" : "dark";
         AdvancedMode = (bool)cfg.GetValue("ui", "advanced", AdvancedMode);
@@ -111,10 +136,13 @@ public sealed class AppSettings
 
     public void Save()
     {
-        var cfg = new ConfigFile();
+        using var cfg = new ConfigFile();
         cfg.SetValue("ui", "language", Language);
         cfg.SetValue("ui", "theme", Theme);
         cfg.SetValue("ui", "advanced", AdvancedMode);
+        cfg.SetValue("ui", "welcome_done", WelcomeDone);
+        cfg.SetValue("ui", "tutorial_done", TutorialDone);
+        foreach (var (k, v) in Shortcuts) cfg.SetValue("shortcuts", k, v);
         cfg.SetValue("ui", "show_skeleton", ShowSkeleton);
         cfg.SetValue("ui", "overlay_all", OverlayAll);
         cfg.SetValue("ui", "show_trail", ShowTrail);

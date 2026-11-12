@@ -365,19 +365,6 @@ public partial class ViewportView : SubViewportContainer
                 else Orbit(mm.Relative.X, mm.Relative.Y);
                 AcceptEvent();
                 break;
-            case InputEventKey { Pressed: true, Echo: false, CtrlPressed: false, AltPressed: false, ShiftPressed: false, Keycode: Key.F or Key.KpPeriod }:
-                FrameFocus();
-                AcceptEvent();
-                break;
-            case InputEventKey { Pressed: true, Echo: false, AltPressed: false, Keycode: Key.Home }:
-                FrameAll();
-                AcceptEvent();
-                break;
-            case InputEventKey { Pressed: true, Echo: false, AltPressed: false, Keycode: Key.Kp1 or Key.Kp3 or Key.Kp7 or Key.Kp5 } k:
-                if (k.Keycode == Key.Kp5) ToggleOrtho();
-                else SetView(k.Keycode == Key.Kp1 ? 0 : k.Keycode == Key.Kp3 ? 1 : 2, k.CtrlPressed);
-                AcceptEvent();
-                break;
         }
     }
 }

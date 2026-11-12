@@ -1,3 +1,4 @@
+using Blazma.UI.App;
 using Godot;
 
 namespace Blazma.UI.Views;
@@ -25,14 +26,19 @@ public partial class ToolRail : PanelContainer
         v.AddThemeConstantOverride("separation", 2);
         AddChild(W.Margin(v, 5, 5, 5, 5));
 
-        Select = Add(v, "Select", "Select (Q)", "<path d='M6 3l12 9-5.5 1 3 6-2.5 1-3-6L6 18z'/>", true);
-        Rotate = Add(v, "Rotate", "Rotate the selected bone (E)", "<path d='M19 12a7 7 0 1 1-2.5-5.4'/><path d='M19 4v4h-4'/>", true);
-        Move = Add(v, "Move", "Move an IK control or the pelvis (W)", "<path d='M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3'/>", true);
-        Pin = Add(v, "IK pin", "Pin or unpin the selected hand or foot (P)", "<path d='M12 14v7'/><path d='M8 21h8'/><circle cx='12' cy='8' r='4'/><circle cx='12' cy='8' r='1' fill='white'/>", false);
+        Select = Add(v, "Select", "Select", "<path d='M6 3l12 9-5.5 1 3 6-2.5 1-3-6L6 18z'/>", true);
+        Rotate = Add(v, "Rotate", "Rotate the selected bone", "<path d='M19 12a7 7 0 1 1-2.5-5.4'/><path d='M19 4v4h-4'/>", true);
+        Move = Add(v, "Move", "Move an IK control or the pelvis", "<path d='M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3'/>", true);
+        Pin = Add(v, "IK pin", "Pin or unpin the selected hand or foot", "<path d='M12 14v7'/><path d='M8 21h8'/><circle cx='12' cy='8' r='4'/><circle cx='12' cy='8' r='1' fill='white'/>", false);
         v.AddChild(new HSeparator());
-        Mirror = Add(v, "Mirror", "Mirror the pose left and right (M)", "<path d='M12 3v18' stroke-dasharray='2 2.5'/><path d='M9 7L3 12l6 5z'/><path d='M15 7l6 5-6 5z'/>", false);
+        Mirror = Add(v, "Mirror", "Mirror the pose left and right", "<path d='M12 3v18' stroke-dasharray='2 2.5'/><path d='M9 7L3 12l6 5z'/><path d='M15 7l6 5-6 5z'/>", false);
         Reset = Add(v, "Reset", "Reset the selected bone, or the whole pose when nothing is selected", "<path d='M4 12a8 8 0 1 0 2.5-5.8'/><path d='M4 4v4.5h4.5'/>", false);
 
+        var keys = ShortcutMap.Instance;
+        keys.Hint(Select, "Select", "tool.select"); keys.Hint(Rotate, "Rotate the selected bone", "tool.rotate");
+        keys.Hint(Move, "Move an IK control or the pelvis", "tool.move"); keys.Hint(Pin, "Pin or unpin the selected hand or foot", "tool.pin");
+        keys.Hint(Mirror, "Mirror the pose left and right", "tool.mirror");
+        keys.Hint(Reset, "Reset the selected bone, or the whole pose when nothing is selected", "pose.resetBone");
         Select.Pressed += () => sel.SetTool(StageTool.Select);
         Rotate.Pressed += () => sel.SetTool(StageTool.Rotate);
         Move.Pressed += () => sel.SetTool(StageTool.Move);

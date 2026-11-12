@@ -64,6 +64,16 @@ The motion-generation engine (`kimodo-runner.exe`) needs the *Microsoft Visual C
 
 ### First launch
 
+The very first time you run Blazma it looks at your computer's language and opens a **Welcome** screen. Arabic systems (any Arabic region) pre-select **العربية**, everything else pre-selects **English**; pick the language and the **Dark** or **Light** theme you prefer and press **Continue**. The choice is saved and the screen does not appear again. You can change language and theme at any time in the top bar or in **Settings**, and reopen the screen from **Settings > Welcome**.
+
+Next Blazma offers a two-minute **interactive tutorial** ("How Blazma works"). It dims the window and lights up the real buttons one at a time with a short card for each step: the stage and camera, selecting and posing bones (FK and IK), keys on the timeline, templates, **Generate motion…** with a multi-step sentence and the plan table, drafts (accept or discard), the balance view, export and saving. One optional step lets you try it: it adds the walk template and plays it. Use **Next** / **Back**, **Skip** to jump out, or **Esc**. The **?** button in the top bar and **Help > Tutorial** (Shift+F1) open it again whenever you like.
+
+<img src="screenshots/p11-en-dark-welcome.png" width="820" alt="The Welcome screen with the language and theme choice">
+
+<img src="screenshots/p11-en-dark-tutorial.png" width="820" alt="The tutorial lighting the Generate motion button, with the plan table card">
+
+#### The first project
+
 When the app opens you get a project with a built-in **Mannequin** character standing in a T-pose, an empty timeline, and the **Simple** interface. There is nothing to set up. Pose the mannequin and press **Key** (section 4), or press **Templates…** for an instant walk cycle (section 6).
 
 <img src="screenshots/p10-en-dark-camera-viewport.png" width="820" alt="Blazma Animation on first launch: the Mannequin in the 3D view, empty timeline below">
@@ -151,7 +161,7 @@ The **View** button in the strip above the stage lists the same commands with th
 
 ### IK: pinning hands and feet
 
-The small diamonds near the hands and feet are IK targets. Select a hand or foot and press **P** (or the **IK pin** tool, or Rigging > *Pin or Unpin Selected Hand or Foot*) to **pin** it: the limb now follows the target, so a planted foot stays planted while you move the pelvis. Move the target and the whole arm or leg follows (two-bone IK, with a pole target to steer the elbow or knee). **Rigging > Pin Both Feet** pins both feet in one go, and **Unpin All** releases them.
+The small diamonds near the hands and feet are IK targets. Select a hand or foot and press **Shift+P** (or the **IK pin** tool, or Rigging > *Pin or Unpin Selected Hand or Foot*) to **pin** it: the limb now follows the target, so a planted foot stays planted while you move the pelvis. Move the target and the whole arm or leg follows (two-bone IK, with a pole target to steer the elbow or knee). **Rigging > Pin Both Feet** pins both feet in one go, and **Unpin All** releases them.
 
 ### Mirror
 
@@ -608,25 +618,63 @@ Blazma Animation is proprietary software, all rights reserved by mr-kateba; see 
 
 ### Keyboard
 
-| Keys | Action |
-|---|---|
-| W A S D (with right mouse) | Fly forward, left, back, right |
-| Q / E (with right mouse) | Fly down / up |
-| Shift / Ctrl (while flying) | Faster / slower |
-| F, numpad . | Frame the selection |
-| Home | Frame all (in the 3D view) |
-| Numpad 1 / 3 / 7 | Front / side / top view |
-| Numpad 5 | Perspective / orthographic |
-| Q / W / E | Tools: Select / Move / Rotate |
-| P | Pin or unpin the selected hand or foot |
-| M | Mirror pose |
-| K / Shift+K / Alt+K | Key all / key selected / delete key |
-| Space | Play or pause |
-| Left / Right | Previous / next frame |
-| Up / Down (or Alt+Left / Right) | Next / previous key |
-| Home / End (timeline) | Go to start / end |
-| Ctrl+C / Ctrl+V | Copy / paste pose (or keys in the Dope Sheet) |
-| Ctrl+Z / Ctrl+Y | Undo / redo |
-| Ctrl+N / O / S / Shift+S | New / open / save / save as |
-| Ctrl+E | Export animation |
-| Delete | Delete the selected clip or prop (asks first) |
+Press **F1** (or **?**) at any time for the shortcut cheat sheet: every shortcut by category, searchable, with a **Print…** button for a one-page printable copy. Shortcuts never fire while you type in a text field. Everything below can be changed in **Settings > Keyboard Shortcuts…** (see "Customising shortcuts" after the tables).
+
+Some keys mean different things depending on where the focus is: **Home** frames everything while the 3D view has focus and jumps to the first frame everywhere else; **F** and the numpad views only work in the 3D view.
+
+| Category | Keys | Action |
+|---|---|---|
+| **File** | Ctrl+N / Ctrl+O | New / open |
+| | Ctrl+S / Ctrl+Shift+S | Save / save as |
+| | Ctrl+E | Export animation |
+| | Ctrl+Q | Quit |
+| **Edit** | Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) | Undo / redo |
+| | Delete | Delete the selected prop or clip (asks first) |
+| | Ctrl+D | Duplicate the clip |
+| | A or Ctrl+A | Select all keys (Dope Sheet) |
+| **Playback** | Space | Play or pause |
+| | Left / Right | Previous / next frame |
+| | Shift+Left / Shift+Right | Jump 10 frames |
+| | Down / Up (or Alt+Left / Alt+Right) | Previous / next key |
+| | Home / End | First / last frame (Home frames everything when the 3D view has focus) |
+| | L | Loop on or off |
+| **Keys** | I or K | Key the whole pose |
+| | Shift+K or Shift+I | Key only the selected bone or control |
+| | Alt+I or Alt+K | Delete the keys at this frame |
+| | Ctrl+K | Auto-key on or off |
+| **Tools** | Q / W / E | Select / Move (IK control, pelvis) / Rotate |
+| | M | Mirror pose |
+| | Shift+P | Pin or unpin the selected hand or foot |
+| **Posing** | Alt+R | Reset the selected bone |
+| | Alt+G | Reset the whole pose (asks first) |
+| | Ctrl+C / Ctrl+V | Copy / paste pose (or keys in the Dope Sheet) |
+| | Ctrl+Shift+V | Paste the pose mirrored |
+| **View** | F or numpad . | Frame the selection (3D view) |
+| | Home | Frame everything (3D view) |
+| | Numpad 1 / 3 / 7 | Front / side / top view |
+| | Numpad 5 | Perspective / orthographic |
+| | T | Show or hide the side panels |
+| | N | Show or hide the inspector |
+| | ` (backtick) or Tab | Switch Simple and Advanced |
+| | F11 | Full screen |
+| | B | Balance overlay |
+| | P | Motion paths (motion trail) |
+| | O | Onion skin |
+| **AI** | Ctrl+G | Generate motion… |
+| | Ctrl+T | Templates… |
+| **Help** | F1 or ? | Shortcut cheat sheet |
+| | Shift+F1 | Tutorial |
+| **Flying** (right mouse held) | W A S D / Q E | Fly forward, left, back, right / down, up |
+| | Shift / Ctrl | Faster / slower |
+
+> There is no Scale tool: the mannequin and imported rigs are posed by rotation, IK moves and the pelvis, not by scaling bones.
+
+### Customising shortcuts
+
+Open **Settings > Keyboard Shortcuts…** (or **Help > Customise Shortcuts…**).
+
+- **Search** by action name, category or key.
+- **Click** a key, then press the new shortcut. **Esc** cancels. **×** removes a shortcut and **↺** goes back to the default.
+- If the key is already used by another action in the same place, a **warning** names it and asks whether to **Replace** it (that action is left without a key) or **Cancel**. The same key may be used by two actions only when they work in different places (for example Home in the 3D view and on the timeline).
+- **Reset all to defaults**, **Export…** and **Import…** (a small JSON file) let you back up your keys or share them between computers.
+- Your choices are saved with your settings, so they follow the portable folder too. Menus, buttons and tooltips show your current keys.

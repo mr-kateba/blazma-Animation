@@ -198,22 +198,6 @@ public partial class MainWindow
 
     // ---- tool actions (rail, menu, keys) -------------------------------------------------------------------------------------
 
-    bool HandleToolKey(InputEvent e)
-    {
-        if (e is not InputEventKey { Pressed: true, Echo: false } k) return false;
-        if (k.CtrlPressed || k.AltPressed || k.MetaPressed || k.ShiftPressed) return false;
-        if (GetViewport().GuiGetFocusOwner() is LineEdit or TextEdit) return false;
-        switch (k.Keycode)
-        {
-            case Godot.Key.Q: Selection.SetTool(StageTool.Select); return true;
-            case Godot.Key.E: Selection.SetTool(StageTool.Rotate); return true;
-            case Godot.Key.W: Selection.SetTool(StageTool.Move); return true;
-            case Godot.Key.P: TogglePinSelected(); return true;
-            case Godot.Key.M: MirrorPose(); return true;
-        }
-        return false;
-    }
-
     public bool MirrorPose()
     {
         if (SelectedCharacter is not { } c) return false;
@@ -427,13 +411,6 @@ public partial class MainWindow
 
     // ---- Rigging menu --------------------------------------------------------------------------------------------------------------------------
 
-    static Shortcut Plain(Godot.Key key, bool ctrl = false)
-    {
-        var sc = new Shortcut();
-        sc.Events.Add(new InputEventKey { Keycode = key, CtrlPressed = ctrl, CommandOrControlAutoremap = ctrl });
-        return sc;
-    }
-
     void BuildRiggingMenu()
     {
         var m = _mRigging;
@@ -456,11 +433,6 @@ public partial class MainWindow
         m.AddItem("Frame Character", MFrame);
         m.AddCheckItem("Show Skeleton", MShowSkeleton);
         m.AddCheckItem("Skeleton on All Characters", MOverlayAll);
-        ShortcutOf(m, MMirror, Plain(Godot.Key.M));
-        ShortcutOf(m, MCopy, Plain(Godot.Key.C, true));
-        ShortcutOf(m, MPaste, Plain(Godot.Key.V, true));
-        ShortcutOf(m, MPinSelected, Plain(Godot.Key.P));
-        ShortcutOf(m, MFrame, Plain(Godot.Key.F));
         m.AboutToPopup += () => { UpdateRiggingMenu(); };
         m.IdPressed += id => OnMenu((int)id);
     }

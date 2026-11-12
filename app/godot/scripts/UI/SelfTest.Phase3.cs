@@ -194,8 +194,9 @@ public partial class SelfTest
         Check("p3 playback is not an edit and Space pauses on a whole frame", () =>
         {
             var steps = App.Session.UndoHistory.Count;
+            if (!App.Playing) { App.GoToFrame(15); App.Play(); } // a slow screenshot may have let the short clip run to its end
             PlainKey(Godot.Key.Space);
-            return !App.Playing && App.Session.UndoHistory.Count == steps && App.CurrentFrameExact == App.CurrentFrame ? null : "still playing or history changed";
+            return !App.Playing && App.Session.UndoHistory.Count == steps && App.CurrentFrameExact == App.CurrentFrame ? null : $"still playing or history changed: playing={App.Playing} hist={App.Session.UndoHistory.Count}/{steps} exact={App.CurrentFrameExact} frame={App.CurrentFrame} focus={GetViewport().GuiGetFocusOwner()?.GetType().Name}";
         });
         Check("p3 without loop, playback stops on the last frame", () =>
         {

@@ -54,6 +54,19 @@ public partial class GenerateMotionDialog : ConfirmationDialog
     readonly GridContainer _planGrid = new() { Columns = 5 };
     readonly Godot.Timer _planTimer = new() { OneShot = true, WaitTime = 0.35 };
     MotionPlan? _plan;
+    readonly VBoxContainer _suggestBox = new();
+    /// <summary>Typo hints of the current plan: the message, the word, the first candidate and whether the planner already applied it.</summary>
+    public IReadOnlyList<(string Message, string Word, string? Candidate, bool Applied)> Hints =>
+        _plan is null ? Array.Empty<(string, string, string?, bool)>()
+            : _plan.Segments.SelectMany(x => x.Suggestions).Select(g => (g.Message, g.Word, g.Candidates.FirstOrDefault(), g.Applied)).ToList();
+    public int SuggestButtonCount => _suggestBox.GetChildren().OfType<HBoxContainer>().Count(r => r.GetChildren().OfType<Button>().Any());
+    public void ApplySuggestion(string word, string candidate)
+    {
+        var i = Prompt.Text.IndexOf(word, StringComparison.Ordinal);
+        if (i < 0) return;
+        Prompt.Text = Prompt.Text.Remove(i, word.Length).Insert(i, candidate);
+        RefreshPlan();
+    }
     bool _planEdited, _settingDuration;
     readonly List<(LineEdit Caption, SpinBox Seconds, Label Status)> _planRows = new();
 
@@ -106,6 +119,7 @@ public partial class GenerateMotionDialog : ConfirmationDialog
         foreach (var l in new[] { _planSummary, _planHint, _planWarn }) { Wrap(l); l.TextDirection = Control.TextDirection.Auto; }
         _planBox.AddChild(_planSummary);
         _planBox.AddChild(_planGrid);
+        _planBox.AddChild(_suggestBox);
         _planBox.AddChild(_planWarn);
         _planBox.AddChild(_planHint);
         var stepsLabel = W.Label("Steps", "Dim");
@@ -480,6 +494,7 @@ public partial class GenerateMotionDialog : ConfirmationDialog
         var text = Prompt.Text.Trim();
         foreach (var c in _planGrid.GetChildren()) { _planGrid.RemoveChild(c); c.QueueFree(); }
         _planRows.Clear();
+        foreach (var c in _suggestBox.GetChildren()) { _suggestBox.RemoveChild(c); c.QueueFree(); }
         _plan = text.Length == 0 || text.Length > MotionRequest.MaxPromptLength ? null : MotionPromptPlanner.Plan(text, Duration.Value);
         _planBox.Visible = _plan is { Segments.Count: > 0 };
         if (_plan is null) return;
@@ -488,7 +503,7 @@ public partial class GenerateMotionDialog : ConfirmationDialog
         foreach (var seg in _plan.Segments)
         {
             var index = W.Label(AiText.Ltr((seg.Index + 1).ToString(CultureInfo.InvariantCulture)), "Dim", false);
-            var words = W.Label(seg.Text, null, false);
+            var words = W.Label(seg.Text + string.Concat(seg.Layers.Select(l => " + " + Tr(l))), null, false);
             words.AutoTranslateMode = Node.AutoTranslateModeEnum.Disabled;
             words.TextDirection = Control.TextDirection.Auto;
             words.CustomMinimumSize = new Vector2(100, 0);
@@ -512,6 +527,22 @@ public partial class GenerateMotionDialog : ConfirmationDialog
             seconds.ValueChanged += _ => { _planEdited = true; ShowPlanSummary(); };
             foreach (var c in new Control[] { index, words, caption, seconds, status }) _planGrid.AddChild(c);
             ShowStatus(row);
+            foreach (var g in seg.Suggestions)
+            {
+                var r = new HBoxContainer();
+                r.AddThemeConstantOverride("separation", 8);
+                var msg = W.Label(g.Applied ? string.Format(CultureInfo.InvariantCulture, Tr("Corrected: “{0}” was read as {1}"), g.Word, string.Join(", ", g.Candidates)) : g.Message, g.Applied ? "Faint" : "Dim", false);
+                msg.TextDirection = Control.TextDirection.Auto;
+                r.AddChild(msg);
+                if (!g.Applied && g.Candidates.Count > 0)
+                {
+                    var word = g.Word; var cand = g.Candidates[0];
+                    var b = new Button { Text = string.Format(CultureInfo.InvariantCulture, Tr("Use “{0}”"), cand), FocusMode = Control.FocusModeEnum.None, AutoTranslateMode = Node.AutoTranslateModeEnum.Disabled };
+                    b.Pressed += () => ApplySuggestion(word, cand);
+                    r.AddChild(b);
+                }
+                _suggestBox.AddChild(r);
+            }
         }
         ShowPlanSummary();
     }
@@ -524,6 +555,7 @@ public partial class GenerateMotionDialog : ConfirmationDialog
         var edited = caption.Text.Trim() != seg.Caption;
         var ok = seg.Understood || (edited && caption.Text.Trim().Length > 0);
         status.Text = edited ? Tr("Edited") : !seg.Understood ? Tr("Not understood") : seg.Action is null ? Tr("As written (English)") : Tr("Understood");
+        if (!edited && seg.Understood && seg.Confidence < 0.6) status.Text += " · " + Tr("Low confidence");
         status.AddThemeColorOverride("font_color", ok ? _host.Palette.Ok : _host.Palette.Warn);
         ShowPlanSummary();
     }

@@ -113,11 +113,13 @@ Get the latest build from the **[Releases page](https://github.com/mr-kateba/bla
 
 ### Quick start (5 steps)
 
-1. **Install** Blazma Animation and open it. A mannequin is waiting for you.
+1. **Install** Blazma Animation and open it. On the first launch it picks your system language (Arabic or English) and offers a two-minute interactive tutorial (the **?** button reopens it). A mannequin is waiting for you.
 2. **Pose it:** click a joint, rotate it with the gizmo, and press **Key**. Or press **Templates…** and apply *Walk cycle*.
 3. **Generate (optional):** open **Settings > AI Models…** and download a package, then press **Generate motion…** and type, for example, `يقفز ثم يجري للأمام ثم يقف` or `a person walks forward, then waves`. **Accept** the draft you like.
 4. **Polish:** use **Foot lock…**, the dope sheet or the graph editor, and the **Balance** view.
 5. **Export:** press **Ctrl+E**, pick *In place* root motion if your engine moves the character, and save the `.glb` (with its sidecar).
+
+**Shortcuts:** **F1** shows every keyboard shortcut (searchable, printable); change any of them in **Settings > Keyboard Shortcuts…**. Common keys: **Space** play, **K** key, **Ctrl+G** generate motion, **Ctrl+T** templates, **Ctrl+Z** undo, **F** frame, **Shift+F1** tutorial.
 
 ### Guides
 
@@ -184,11 +186,13 @@ Blazma Animation استوديو لتحريك الشخصيات ثلاثية ال�
 
 ### بداية سريعة (5 خطوات)
 
-1. **ثبّت** Blazma Animation وافتحه. المجسّم بانتظارك.
+1. **ثبّت** Blazma Animation وافتحه. في أول تشغيل يختار لغة نظامك (العربية أو الإنجليزية) ويعرض شرحًا تفاعليًا من دقيقتين (زر **؟** يعيد فتحه). المجسّم بانتظارك.
 2. **حرّكه:** انقر مفصلًا وأدِره بالمقبض واضغط **مفتاح**. أو اضغط **القوالب…** وطبّق *مشية*.
 3. **ولّد (اختياري):** افتح **الإعدادات ← نماذج الذكاء الاصطناعي…** ونزّل حزمة، ثم اضغط **توليد حركة…** واكتب مثلًا `يقفز ثم يجري للأمام ثم يقف` أو «في واحد وراك، اجري، وبعدها موت». **اقبل** المسودة التي تعجبك.
 4. **صقل:** استعمل **تثبيت القدمين…** أو ورقة المفاتيح أو الرسم البياني، وعرض **التوازن**.
 5. **صدّر:** اضغط **Ctrl+E**، واختر حركة الجذر «في المكان» إن كان محركك يحرّك الشخصية، واحفظ ملف `.glb` (مع ملفه المرافق).
+
+**الاختصارات:** **F1** يعرض كل اختصارات لوحة المفاتيح (مع بحث وطباعة)، ويمكنك تغيير أي منها من **الإعدادات ← اختصارات لوحة المفاتيح…**. أشهرها: **Space** تشغيل، **K** مفتاح، **Ctrl+G** توليد حركة، **Ctrl+T** القوالب، **Ctrl+Z** تراجع، **F** إظهار المحدد، **Shift+F1** الشرح.
 
 ### الأدلة
 

@@ -129,7 +129,7 @@ public partial class TimelinePanel : PanelContainer
         AddMarkerButton.Pressed += () => _host.AddMarkerAtPlayhead();
         head.AddChild(AddMarkerButton);
         ExportButton = new Button { Text = "Export", ThemeTypeVariation = "Transport", FocusMode = FocusModeEnum.None,
-            TooltipText = "Export the clip as a .glb animation (Ctrl+E)." };
+            TooltipText = "Export the clip as a .glb animation." };
         ExportButton.Pressed += () => _host.OpenExportDialog();
         head.AddChild(ExportButton);
         root.AddChild(head);
@@ -137,12 +137,12 @@ public partial class TimelinePanel : PanelContainer
         // transport (always LTR: time order)
         var tr = new HBoxContainer { LayoutDirection = LayoutDirectionEnum.Ltr };
         tr.AddThemeConstantOverride("separation", 5);
-        StartButton = Icon(tr, UiIcons.Start, "Go to the first frame (Home)", () => App.GoToStart());
-        PrevKeyButton = Icon(tr, UiIcons.PrevKey, "Previous key (Up or Alt+Left)", () => App.GoToPreviousKey());
-        PlayButton = Icon(tr, UiIcons.Play, "Play or pause (Space)", () => App.TogglePlay());
+        StartButton = Icon(tr, UiIcons.Start, "Go to the first frame", () => App.GoToStart());
+        PrevKeyButton = Icon(tr, UiIcons.PrevKey, "Previous key", () => App.GoToPreviousKey());
+        PlayButton = Icon(tr, UiIcons.Play, "Play or pause", () => App.TogglePlay());
         PlayButton.CustomMinimumSize = new Vector2(40, 30);
-        NextKeyButton = Icon(tr, UiIcons.NextKey, "Next key (Down or Alt+Right)", () => App.GoToNextKey());
-        EndButton = Icon(tr, UiIcons.End, "Go to the last frame (End)", () => App.GoToEnd());
+        NextKeyButton = Icon(tr, UiIcons.NextKey, "Next key", () => App.GoToNextKey());
+        EndButton = Icon(tr, UiIcons.End, "Go to the last frame", () => App.GoToEnd());
         LoopButton = Icon(tr, UiIcons.Loop, "Loop the clip. Drag the handles on the ruler to set the loop range.", () => ToggleLoop(), false);
         LoopButton.ToggleMode = true;
         tr.AddChild(new VSeparator());
@@ -171,7 +171,7 @@ public partial class TimelinePanel : PanelContainer
         };
         AutoKeyButton.Toggled += on => App.SetAutoKey(on);
         tr.AddChild(AutoKeyButton);
-        DeleteKeyButton = new Button { Text = "Delete key", ThemeTypeVariation = "Transport", FocusMode = FocusModeEnum.None, TooltipText = "Delete all keys at this frame (Alt+K)." };
+        DeleteKeyButton = new Button { Text = "Delete key", ThemeTypeVariation = "Transport", FocusMode = FocusModeEnum.None, TooltipText = "Delete all keys at this frame." };
         DeleteKeyButton.Pressed += () => _host.DeleteKeyHere();
         tr.AddChild(DeleteKeyButton);
         KeyButton = new Button { Text = "Key", ThemeTypeVariation = "KeyBtn", FocusMode = FocusModeEnum.None };
@@ -214,6 +214,17 @@ public partial class TimelinePanel : PanelContainer
         {
             if (a.Changes.Any(c => c.Kind is Change.ClipChanged or Change.ClipAdded or Change.ClipRemoved or Change.ProjectReplaced)) SyncClips();
         };
+        var keys = ShortcutMap.Instance;
+        keys.Hint(StartButton, "Go to the first frame", "play.start");
+        keys.Hint(PrevKeyButton, "Previous key", "play.prevKey");
+        keys.Hint(NextKeyButton, "Next key", "play.nextKey");
+        keys.Hint(EndButton, "Go to the last frame", "play.end");
+        keys.Hint(LoopButton, "Loop the clip. Drag the handles on the ruler to set the loop range.", "play.loop");
+        keys.Hint(AutoKeyButton, "When on, every pose change is keyed at the current frame automatically.", "key.autoKey");
+        keys.Hint(DeleteKeyButton, "Delete all keys at this frame.", "key.delete");
+        keys.Hint(ExportButton, "Export the clip as a .glb animation.", "file.export");
+        keys.Hint(TemplatesButton, "Start from a ready-made motion: idle, walk, run, jump, wave, attack. Apply it to a character as a new clip.", "ai.templates");
+        keys.Hint(GenerateButton, "Describe a movement in words and add it to your project as a draft clip.", "ai.generate");
         SelectTab(TabTimeline);
         SyncClips();
         Sync();
@@ -282,7 +293,7 @@ public partial class TimelinePanel : PanelContainer
     {
         var clip = App.ActiveClip;
         PlayButton.Icon = UiIcons.Make(App.Playing ? UiIcons.Pause : UiIcons.Play);
-        PlayButton.TooltipText = App.Playing ? "Pause (Space)" : "Play or pause (Space)";
+        PlayButton.TooltipText = ShortcutMap.Instance.Tip(Tr(App.Playing ? "Pause" : "Play or pause"), "play.toggle");
         LoopButton.SetPressedNoSignal(clip is { Loop.Enabled: true });
         LoopButton.Disabled = clip is null;
         AutoKeyButton.SetPressedNoSignal(App.AutoKey);
@@ -294,8 +305,8 @@ public partial class TimelinePanel : PanelContainer
         UnkeyedDot.Visible = dirty;
         UnkeyedDot.SetColor(_host.Palette.Warn);
         var propKey = _host.Selection.PropId is not null;
-        KeyButton.TooltipText = propKey ? Tr("Record the prop's position and rotation as a key at this frame (K).")
-            : Tr("Key the whole pose at this frame (K). Shift+K keys only the selected bone or control.")
+        KeyButton.TooltipText = propKey ? ShortcutMap.Instance.Tip(Tr("Record the prop's position and rotation as a key at this frame."), "key.insert")
+            : ShortcutMap.Instance.Tip(Tr("Key the whole pose at this frame."), "key.insert") + "\n" + ShortcutMap.Instance.Tip(Tr("Key only the selected bone or control."), "key.insertSel")
             + (dirty ? "\n" + Tr("Unkeyed changes are lost when you change frame") : "");
         KeyButton.Disabled = _host.SelectedCharacter is null && _host.Selection.PropId is null;
         KeyButton.Text = propKey ? "Key prop" : "Key";

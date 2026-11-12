@@ -361,6 +361,13 @@ public partial class SelfTest : Node
             return;
         }
 
+        if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_ONBOARD") == "1")
+        {
+            await RunOnboard();
+            Finish();
+            return;
+        }
+
         if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_P9") == "1")
         {
             // Development shortcut: only the Phase 9 scenario (it starts from a new project).
@@ -419,6 +426,9 @@ public partial class SelfTest : Node
 
         // Viewport camera: fly mode, framing, numpad views, camera settings.
         await RunCamera();
+
+        // First launch, tutorial and keyboard shortcuts.
+        await RunOnboard();
 
         // UI audit fixes: file association, translations, autosave thread, file errors.
         await RunPolish();

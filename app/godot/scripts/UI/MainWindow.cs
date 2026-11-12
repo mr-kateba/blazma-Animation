@@ -85,6 +85,7 @@ public partial class MainWindow : Control
         W.Fill(this);
         BuildUi();
         BuildDialogs();
+        BuildOnboardingUi();
 
         App.SessionChanged += OnSessionChanged;
         App.SettingsChanged += OnSettingsChanged;
@@ -133,6 +134,7 @@ public partial class MainWindow : Control
         var selfTest = SelfTest.TryCreate(this);
         if (selfTest is not null) AddChild(selfTest);
         else if (Demo.TryCreate(this) is { } demo) AddChild(demo);
+        else if (!App.Settings.WelcomeDone) WelcomeView.Open(); // very first launch
     }
 
     public override void _Process(double delta)
@@ -149,7 +151,7 @@ public partial class MainWindow : Control
     public override void _Notification(int what)
     {
         if (what == NotificationWMCloseRequest) RequestQuit();
-        else if (what == NotificationTranslationChanged && IsNodeReady()) { UpdateMenus(); UpdateStatus(); UpdateChip(); UpdateAgentUi(); }
+        else if (what == NotificationTranslationChanged && IsNodeReady()) { Keys.RefreshHints(); UpdateMenus(); UpdateStatus(); UpdateChip(); UpdateAgentUi(); }
     }
 
     /// <summary>Top-level menu popup by index (Project, Edit, Animation, Rigging, Settings); used by screenshot tests.</summary>
@@ -286,6 +288,7 @@ public partial class MainWindow : Control
         row.AddChild(BuildCombatPanelToggle());
         row.AddChild(BuildPhysicsPanelToggle());
         row.AddChild(BuildAiButton());
+        row.AddChild(BuildHelpButton());
 
         _chip = new PanelContainer { ThemeTypeVariation = "Chip", SizeFlagsVertical = SizeFlags.ShrinkCenter };
         var chipRow = new HBoxContainer();
@@ -335,23 +338,6 @@ public partial class MainWindow : Control
 
     // ---- menus -------------------------------------------------------------------------------
 
-    static Shortcut Combo(Godot.Key key, bool shift = false, Godot.Key? alt = null)
-    {
-        var sc = new Shortcut();
-        void Add(Godot.Key k, bool sh) =>
-            sc.Events.Add(new InputEventKey { Keycode = k, CtrlPressed = true, ShiftPressed = sh, CommandOrControlAutoremap = true });
-        Add(key, shift);
-        if (alt is { } a) Add(a, false);
-        return sc;
-    }
-
-    void ShortcutOf(PopupMenu m, int id, Shortcut sc)
-    {
-        var idx = m.GetItemIndex(id);
-        m.SetItemShortcut(idx, sc);
-        m.SetItemShortcutDisabled(idx, true); // shown only; MainWindow dispatches keys itself (skips text fields)
-    }
-
     void BuildMenus()
     {
         _menuBar = new MenuBar { Flat = true, PreferGlobalMenu = false, SizeFlagsVertical = SizeFlags.ShrinkCenter };
@@ -382,11 +368,6 @@ public partial class MainWindow : Control
         _mProject.AddSubmenuNodeItem("Open Recent", _mRecent);
         _mProject.AddSeparator();
         _mProject.AddItem("Quit", MQuit);
-        ShortcutOf(_mProject, MNew, Combo(Godot.Key.N));
-        ShortcutOf(_mProject, MOpen, Combo(Godot.Key.O));
-        ShortcutOf(_mProject, MSave, Combo(Godot.Key.S));
-        ShortcutOf(_mProject, MSaveAs, Combo(Godot.Key.S, true));
-        ShortcutOf(_mProject, MExport, Combo(Godot.Key.E));
         _mProject.AboutToPopup += RebuildRecent;
         _mProject.AboutToPopup += UpdateMenus;
         _mProject.IdPressed += id => OnMenu((int)id);
@@ -394,8 +375,6 @@ public partial class MainWindow : Control
 
         _mEdit.AddItem("Undo", MUndo);
         _mEdit.AddItem("Redo", MRedo);
-        ShortcutOf(_mEdit, MUndo, Combo(Godot.Key.Z));
-        ShortcutOf(_mEdit, MRedo, Combo(Godot.Key.Z, true, Godot.Key.Y));
         _mEdit.AboutToPopup += UpdateMenus;
         _mEdit.IdPressed += id => OnMenu((int)id);
 
@@ -436,6 +415,8 @@ public partial class MainWindow : Control
         BuildAgentMenu();
         BuildMotionSettingsMenu();
         BuildCameraSettingsMenu();
+        BuildHelpMenu();
+        BindMenuKeys();
     }
 
     void OnMenu(int id)
@@ -458,6 +439,8 @@ public partial class MainWindow : Control
             case MAgentAllow: App.SetAllowAgents(!App.Settings.AllowAgents); break;
             case MAgentFolders: ShowAgentFolders(); break;
             case MCameraSettings: CameraDlg.Sync(); CameraDlg.PopupCentered(); break;
+            case MKeyboardSettings: OpenShortcutSettings(); break;
+            case MWelcomeMenu: ShowWelcome(); break;
             case MClearRecent: App.Settings.RecentFiles.Clear(); App.Settings.Save(); break;
             case >= MAddMannequin and <= MPinSelected: OnRiggingMenu(id); break;
             case >= MPhysShow and <= MPhysSecondary: OnPhysicsMenu(id); break;
@@ -520,6 +503,7 @@ public partial class MainWindow : Control
         UpdateMotionMenu();
         UpdatePhase8Menu();
         UpdateCombatMenu();
+        _menuBar.SetMenuTitle(8, Tr("Help"));
     }
 
     static void SetItemText(PopupMenu m, int id, string text, bool disabled)
@@ -1054,73 +1038,5 @@ public partial class MainWindow : Control
         RecoveryDialogNode.PopupCentered(new Vector2I(600, 0));
     }
 
-    // ---- keyboard ---------------------------------------------------------------------------
-
-    /// <summary>
-    /// Transport keys (Space, arrows, Home/End, K) are taken here, before the GUI: Godot would otherwise use the arrow keys to
-    /// move the keyboard focus. Home keeps resetting the camera while the 3D view has focus, Home / F frame the graph while it has.
-    /// </summary>
-    public override void _Input(InputEvent e)
-    {
-        if (e is not InputEventKey { Pressed: true, Echo: false } k || k.IsCommandOrControlPressed()) return;
-        var owner = GetViewport().GuiGetFocusOwner();
-        if (owner is LineEdit or TextEdit or SpinBox) return;
-        if (owner is ViewportView && k.Keycode == Godot.Key.Home) return;
-        if (owner is GraphCanvas && k.Keycode is Godot.Key.Home or Godot.Key.F) return;
-        if (TransportKeys.Handle(this, k)) GetViewport().SetInputAsHandled();
-    }
-
-    public override void _ShortcutInput(InputEvent e)
-    {
-        if (e is not InputEventKey { Pressed: true, Echo: false } k) return;
-        var owner = GetViewport().GuiGetFocusOwner();
-        var inText = owner is LineEdit or TextEdit;
-        if (!k.IsCommandOrControlPressed() || k.AltPressed) return;
-        switch (k.Keycode)
-        {
-            case Godot.Key.C:
-                if (inText || k.ShiftPressed || GetViewport().GuiGetFocusOwner() is DopeSheetView) return;
-                CopyPose();
-                break;
-            case Godot.Key.V:
-                if (inText || k.ShiftPressed || GetViewport().GuiGetFocusOwner() is DopeSheetView) return;
-                PastePose();
-                break;
-            case Godot.Key.E:
-                if (k.ShiftPressed) return;
-                OpenExportDialog();
-                break;
-            case Godot.Key.N: RequestNew(); break;
-            case Godot.Key.O: RequestOpen(); break;
-            case Godot.Key.S:
-                if (k.ShiftPressed) PromptSaveAs(null); else RequestSave();
-                break;
-            case Godot.Key.Z:
-                if (inText) return; // let the text field undo its own typing
-                if (k.ShiftPressed) DoRedo(); else DoUndo();
-                break;
-            case Godot.Key.Y:
-                if (inText) return;
-                DoRedo();
-                break;
-            default: return;
-        }
-        GetViewport().SetInputAsHandled();
-    }
-
-    public override void _UnhandledKeyInput(InputEvent e)
-    {
-        if (HandleToolKey(e)) { GetViewport().SetInputAsHandled(); return; }
-        if (e is InputEventKey { Pressed: true, Echo: false, Keycode: Godot.Key.Delete } && Selection.PropId is { } propId)
-        {
-            RemovePropNow(propId);
-            GetViewport().SetInputAsHandled();
-            return;
-        }
-        if (e is InputEventKey { Pressed: true, Echo: false, Keycode: Godot.Key.Delete } && SelectedClipId is { } id)
-        {
-            ConfirmDeleteClip(id);
-            GetViewport().SetInputAsHandled();
-        }
-    }
+    // Keyboard handling lives in MainWindow.Shortcuts.cs.
 }
