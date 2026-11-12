@@ -1,0 +1,4 @@
+{"name":"Blazma Animation","source":"app/godot/scripts/UI/BlazmaTheme.cs (Palette.Dark)",
+"colors":{"bg":"#1d1b19","panel":"#252320","panel2":"#2c2a26","raised":"#34312c","line":"#3b3833","lineStrong":"#4a463f","text":"#ece7df","text2":"#b4ada2","text3":"#857e73","accent":"#c27a3e","onAccent":"#1d1b19","ok":"#7fa36b","warn":"#c9a24a","err":"#c0634f","iconOrange":"#ff8c32","iconNavy":"#181c26"},
+"fonts":{"display":"IBM Plex Sans Arabic SemiBold (fonts/display.ttf)","ui":"IBM Plex Sans Arabic Regular (fonts/ui.ttf)"},
+"logo":"assets/logo.png (packaging/assets/blazma.png, 256px app icon: orange B + bone chain)","version":"v0.12","repo":"github.com/mr-kateba/blazma-Animation"}
