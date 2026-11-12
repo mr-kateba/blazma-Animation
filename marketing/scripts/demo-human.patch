@@ -1,0 +1,167 @@
+--- a/app/godot/scripts/UI/Demo.cs
++++ b/app/godot/scripts/UI/Demo.cs
+@@ -65,10 +65,164 @@
+         catch (Exception e) { GD.Print("DEMO ERROR " + e); GetTree().Quit(1); }
+     }
+ 
++    static readonly bool Human = System.Environment.GetEnvironmentVariable("BLAZMA_DEMO_HUMAN") == "1";   // screen-recording look: visible mouse cursor, real clicks, human typing
++
++    /// <summary>A plain arrow pointer drawn over the window (the recorder does not capture the OS cursor).</summary>
++    sealed partial class Pointer : Control
++    {
++        public float Press;   // 0..1, small squash while the button is held
++        public Pointer() { MouseFilter = MouseFilterEnum.Ignore; ZIndex = 4090; Size = Vector2.Zero; }
++        public override void _Draw()
++        {
++            var k = 1.25f * (1f - 0.1f * Press);
++            Vector2[] pts = { new(0, 0), new(0, 24), new(5.5f, 19), new(9.5f, 28.5f), new(13, 27), new(9, 18), new(17, 18) };
++            for (var i = 0; i < pts.Length; i++) pts[i] *= k;
++            var sh = new Vector2[pts.Length]; for (var i = 0; i < pts.Length; i++) sh[i] = pts[i] + new Vector2(1.5f, 2.5f);
++            DrawColoredPolygon(sh, new Color(0, 0, 0, 0.35f));
++            DrawColoredPolygon(pts, Colors.White);
++            DrawPolyline(new List<Vector2>(pts) { pts[0] }.ToArray(), new Color(0.07f, 0.07f, 0.07f), 1.6f, true);
++        }
++    }
++    Pointer _ptr = null!;
++    Vector2 _cur = new(1500, 700);
++    readonly System.Random _rng = new(11);
++
++    void PutPointer(Vector2 p)
++    {
++        _cur = p; _ptr.Position = p; _ptr.QueueRedraw();
++        var ev = new InputEventMouseMotion { Position = p, GlobalPosition = p };
++        GetViewport().PushInput(ev, false);
++    }
++    async Task Glide(Vector2 to, double dur)                     // eased, slightly curved, a small overshoot and settle
++    {
++        var from = _cur; var d = to - from; var len = d.Length();
++        var nrm = len > 1 ? new Vector2(-d.Y, d.X) / len : Vector2.Zero;
++        var bend = nrm * len * (float)(0.05 + 0.08 * _rng.NextDouble()) * (_rng.Next(2) == 0 ? -1 : 1);
++        var over = len > 1 ? to + d / len * (float)(5 + 6 * _rng.NextDouble()) : to;
++        var d1 = dur * 0.86; var t = 0.0; var ph = _rng.NextDouble() * 6.28;
++        while (t < d1)
++        {
++            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); t += GetProcessDeltaTime();
++            var p = Math.Min(1.0, t / d1); var e = p < 0.5 ? 4 * p * p * p : 1 - Math.Pow(-2 * p + 2, 3) / 2;
++            var m = from.Lerp(over, (float)e) + bend * (float)Math.Sin(Math.PI * e);
++            m += new Vector2((float)Math.Sin(t * 23 + ph), (float)Math.Cos(t * 19 + ph)) * 0.7f * (float)(1 - e);
++            PutPointer(m);
++        }
++        var s0 = _cur; t = 0; var d2 = Math.Max(0.12, dur * 0.14);
++        while (t < d2)
++        {
++            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); t += GetProcessDeltaTime();
++            var p = Math.Min(1.0, t / d2); PutPointer(s0.Lerp(to, (float)(1 - Math.Pow(1 - p, 3))));
++        }
++        PutPointer(to);
++    }
++    async Task Click(bool real)                                  // press + release at the pointer; `real` sends the actual mouse events to the app
++    {
++        GD.Print($"DEMO pointer {_cur.X:F0},{_cur.Y:F0}"); Mark("click");
++        if (real) GetViewport().PushInput(new InputEventMouseButton { Position = _cur, GlobalPosition = _cur, ButtonIndex = MouseButton.Left, Pressed = true, ButtonMask = MouseButtonMask.Left }, false);
++        for (var i = 0; i < 5; i++) { _ptr.Press = (i + 1) / 5f; _ptr.QueueRedraw(); await Wait(1.0 / 60); }
++        await Wait(0.05);
++        if (real) GetViewport().PushInput(new InputEventMouseButton { Position = _cur, GlobalPosition = _cur, ButtonIndex = MouseButton.Left, Pressed = false }, false);
++        for (var i = 0; i < 5; i++) { _ptr.Press = 1f - (i + 1) / 5f; _ptr.QueueRedraw(); await Wait(1.0 / 60); }
++    }
++    static Vector2 Aim(Control c, float fx = 0.5f, float fy = 0.5f)   // controls inside the embedded dialog report window-local rects: add the window origin
++    { var r = c.GetGlobalRect(); var o = c.GetWindow() is { } w && w != c.GetTree().Root ? (Vector2)w.Position : Vector2.Zero; return o + r.Position + new Vector2(r.Size.X * fx, r.Size.Y * fy); }
++    async Task Drift(double seconds, Vector2 amp)                // the hand resting on the mouse: tiny wander
++    {
++        var c0 = _cur; var t = 0.0;
++        while (t < seconds) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); t += GetProcessDeltaTime(); PutPointer(c0 + new Vector2((float)Math.Sin(t * 1.7) * amp.X, (float)Math.Cos(t * 1.3) * amp.Y)); }
++    }
++
++    async Task RunHuman(string provider, string prompt)
++    {
++        _ptr = new Pointer(); _w.AddChild(_ptr); _ptr.Position = _cur;
++        GetWindow().GuiEmbedSubwindows = true;
++        await Wait(0.3);
++        App.SetLanguage("ar"); App.SetTheme("dark"); App.SetAdvancedMode(false);
++        _w.ShowAgentPanel(false);
++        _w.NewProjectNow();
++        await Wait(1.0);
++        _w.Stage.FrameAll(); _w.Stage.Orbit(-70, 0);
++        _target = new Vector3(0, 0.9f, 0); _follow = true;
++        Mark("start");
++        await Wait(0.9);
++        await Drift(0.5, new Vector2(6, 4));
++        await Glide(Aim(_w.Timeline.GenerateButton), 1.25);
++        await Wait(0.35);
++        await Click(true);                                        // a real click on «توليد حركة…»
++        await Wait(0.2);
++        if (!_w.GenerateDlg.Visible) _w.OpenGenerateDialog();
++        var dlg = _w.GenerateDlg;
++        await Wait(0.7);
++        dlg.SelectProvider(provider == "kimodo" ? AiText.KimodoId : AiText.ProceduralId);
++        dlg.Duration.Value = Seconds[_n - 1];
++        await Wait(0.5);
++        await Glide(Aim(dlg.Prompt, 0.62f, 0.45f), 1.0);
++        await Wait(0.25);
++        dlg.Prompt.GrabFocus();                                   // (events pushed into the embedded dialog land offset by its title bar, so the dialog is focused directly)
++        await Click(false);
++        await Wait(0.9);
++        Mark("typing-start");
++        // human typing: uneven rhythm, a longer beat after each word, one slip («اجرو») that is noticed and backspaced
++        var typed = new System.Text.StringBuilder();
++        async Task Put(string ch, double delay)
++        {
++            typed.Append(ch); dlg.Prompt.Text = typed.ToString(); dlg.Prompt.SetCaretColumn(typed.Length);
++            dlg.Prompt.EmitSignal(TextEdit.SignalName.TextChanged); await Wait(delay);
++        }
++        async Task Back(double delay) { typed.Length--; dlg.Prompt.Text = typed.ToString(); dlg.Prompt.SetCaretColumn(typed.Length); dlg.Prompt.EmitSignal(TextEdit.SignalName.TextChanged); await Wait(delay); }
++        double Gap(char c) => c == ' ' ? 0.20 + 0.18 * _rng.NextDouble() : c == '،' ? 0.34 + 0.22 * _rng.NextDouble() : 0.075 + 0.11 * _rng.NextDouble();
++        var slipAt = prompt.IndexOf("اجري") + 3;                  // the last letter of «اجري»
++        for (var i = 0; i < prompt.Length; i++)
++        {
++            if (i == slipAt)
++            {
++                await Put("و", 0.30);                              // wrong key
++                await Wait(0.42);                                  // spots it
++                await Back(0.22);
++            }
++            await Put(prompt[i].ToString(), Gap(prompt[i]));
++        }
++        Mark("typing-end");
++        await Wait(0.5);
++        dlg.RefreshPlanNow();
++        await Wait(0.4);
++        await Drift(3.0, new Vector2(5, 3));                      // the plan is on screen: the hand rests
++        Mark("plan-read");
++        await Glide(Aim(dlg.GetOkButton()), 1.1);
++        await Wait(0.4);
++        await Click(false);                                       // (the Kimodo generation itself is cut: the saved real result is opened)
++        Mark("plan-end");
++        var reuse = SavePath is not null && System.IO.File.Exists(SavePath);
++        dlg.Hide();
++        if (reuse) { GD.Print("DEMO re-using " + SavePath + " opened=" + App.Open(SavePath!)); _w.Stage.FrameAll(); _w.Stage.Orbit(-70, 0); }
++        await Glide(_cur + new Vector2(-260, 150), 0.9);
++        await Wait(1.2);
++        var clip = App.ActiveClip;
++        var dur = clip is null ? 4.0 : clip.DurationFrames / clip.Fps.FramesPerSecond;
++        GD.Print($"DEMO clip {clip?.Name} dur={dur:F2}s");
++        App.GoToFrame(0);
++        await Glide(Aim(_w.Timeline.PlayButton), 1.2);
++        await Wait(0.3);
++        Mark("play-start");
++        await Click(true);                                        // a real click on Play
++        await Wait(0.1);
++        if (!App.Playing) App.Play();                             // (safety net if the click did not toggle playback)
++        await Wait(dur + 0.2);
++        App.Pause();
++        await Glide(_cur + new Vector2(120, -60), 1.0);
++        await Wait(1.8);
++        Mark("done");
++        GD.Print("DEMO DONE");
++        App.ShutdownCleanly();
++        GetTree().Quit(0);
++    }
++
+     async Task Run()
+     {
+         var provider = System.Environment.GetEnvironmentVariable("BLAZMA_DEMO_PROVIDER") ?? "procedural";
+         var prompt = Prompts[_n - 1];
++        if (Human) { await RunHuman(provider, prompt); return; }
+         var bar = new PanelContainer { MouseFilter = Control.MouseFilterEnum.Ignore, ZIndex = 4000 };
+         bar.SetAnchorsPreset(Control.LayoutPreset.TopWide);
+         bar.AddThemeStyleboxOverride("panel", new StyleBoxFlat { BgColor = new Color(0, 0, 0, 0.72f), ContentMarginTop = 8, ContentMarginBottom = 8 });
