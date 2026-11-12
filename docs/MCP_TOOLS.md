@@ -131,6 +131,7 @@ No arguments.
 | [`motion_job_apply`](#motion_job_apply) | mutating | Add a finished generation job's motion to the project as a new DRAFT clip (undoable; undo makes the job ready again). Returns clipId. Review it, edit keys, then clip.accept_draft. Fails with job_stale when the project was replaced, or the character was removed, re-rigged or its rig/humanoid mapping changed since the job started; with job_applied when it was already applied. |
 | [`motion_job_cancel`](#motion_job_cancel) | readonly | Cancel a running generation job you started (stops the Kimodo runner). Does not change the project. |
 | [`motion_job_status`](#motion_job_status) | readonly | State of a generation job (running, ready, failed, cancelled, applied) with progress, warnings and, once applied, its clipId. Without jobId: all jobs. Agents see only the jobs they started. Headless only: waitSeconds blocks until the job finishes (at most 25 s per call; call again to keep waiting). |
+| [`motion_physics_polish`](#motion_physics_polish) | mutating | Make a clip physically believable (deterministic post-process, one undo step): feet in contact planted on the ground with leg IK (heel/toe roll kept), no body part below the ground and a lying body resting on it, flight phases on a ballistic COM parabola (g = 9.81) with take-off and landing (knees bend ≥ minLandingKneeFlex), smooth root velocity across step boundaries (the clip's markers), falls accelerating into the impact with a damped settle, spine/head/arm follow-through, and balance while standing. motion.generate and template.apply already run it unless physicsPolish=false. Bones and frames it does not need to change keep their exact values. Returns before/after numbers (footSlide, minBodyHeight, flightParabolaRms, boundaryVelocityJump, landingKneeFlex, restGap, comJerkRms…) and the stages that changed something. |
 | [`motion_plan_prompt`](#motion_plan_prompt) | readonly | Read-only: how motion.generate would split a prompt into steps, offline (no AI, no network): Arabic and English sequencing words (ثم، بعدين، وبعدها، then, after that…), punctuation and «و»/'and' between two different actions; per-step English caption, action, length (from 'for 3 seconds' / «لمدة 3 ثواني» or per-action defaults scaled to durationSeconds), and whether each step was understood (Arabic that is not understood should be rephrased). |
 | [`motion_providers`](#motion_providers) | readonly | List the motion generation providers and diagnostics: is kimodo-runner configured and found, are the model files there, CPU/RAM/GPU (best effort, offline). Never downloads anything. Agents see file names and found flags, not absolute paths. |
 | [`physics_analyze`](#physics_analyze) | readonly | Balance analysis of a clip, frame by frame: centre of mass (COM), foot contacts, support polygon (convex hull of the touching sole points, XZ), signed margin of the tested point to the polygon (inside positive, metres) and balanced/unbalanced/airborne. Returns {summary:{unbalancedRanges…}, frames:[…]}. Does not change anything. |
@@ -889,6 +890,7 @@ Effect: **readonly**. Command id: `motion.generate`.
 | `reduceKeys` | boolean | no | Remove keys that linear interpolation reproduces within 0.1° / 0.5 mm (default true). |
 | `loop` | boolean | no | Ask for a loopable motion (procedural only; Kimodo ignores constraints). |
 | `inPlace` | boolean | no | Remove travel (procedural only). |
+| `physicsPolish` | boolean | no | Run motion.physics_polish on the result (default true): planted feet, nothing below the ground, ballistic jumps, smooth step transitions, falls. |
 | `segments` | array | no | Optional explicit plan (at most 12 steps, in order): [{text, durationSeconds?, caption?}]. text may be Arabic or English (translated offline); caption overrides the English caption sent to Kimodo; steps without durationSeconds share the rest of durationSeconds. |
 
 ### `motion_job_apply`
@@ -922,6 +924,26 @@ Effect: **readonly**. Command id: `motion.job_status`.
 |---|---|---|---|
 | `jobId` | string | no | Job id from motion.generate (omit to list all jobs). (min length 1) |
 | `waitSeconds` | number | no | Wait up to this long for the job to finish (headless mode only, capped at 25 s; ignored in the app). |
+
+### `motion_physics_polish`
+
+Make a clip physically believable (deterministic post-process, one undo step): feet in contact planted on the ground with leg IK (heel/toe roll kept), no body part below the ground and a lying body resting on it, flight phases on a ballistic COM parabola (g = 9.81) with take-off and landing (knees bend ≥ minLandingKneeFlex), smooth root velocity across step boundaries (the clip's markers), falls accelerating into the impact with a damped settle, spine/head/arm follow-through, and balance while standing. motion.generate and template.apply already run it unless physicsPolish=false. Bones and frames it does not need to change keep their exact values. Returns before/after numbers (footSlide, minBodyHeight, flightParabolaRms, boundaryVelocityJump, landingKneeFlex, restGap, comJerkRms…) and the stages that changed something.
+
+Effect: **mutating**. Command id: `motion.physics_polish`.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `clipId` | string | yes | Clip id. (min length 1) |
+| `characterId` | string | no | Character to evaluate the clip on (default: the first character using the clip's rig). (min length 1) |
+| `groundContact` | boolean | no | Plant feet in contact (default true). |
+| `groundClamp` | boolean | no | Keep every body part above the ground; lying bodies rest on it (default true). |
+| `ballistic` | boolean | no | Flight phases follow a ballistic COM parabola, with landing compression (default true). |
+| `transitions` | boolean | no | Ease the root velocity across step boundaries (default true). |
+| `falls` | boolean | no | Falls accelerate into the impact and settle with a small bounce (default true). |
+| `secondary` | boolean | no | Spine, head and arm follow-through (default true). |
+| `balance` | boolean | no | Keep the COM inside the support polygon on standing frames (default true). |
+| `minLandingKneeFlex` | number | no | Knee flexion (deg) a landing must reach (default 15, 0–90). |
+| `reduceKeys` | boolean | no | Reduce the rewritten tracks' keys within tolerance (default false: a key on every frame, exact values). |
 
 ### `motion_plan_prompt`
 
@@ -1532,6 +1554,7 @@ Effect: **mutating**. Command id: `template.apply`.
 | `durationSeconds` | number | no | Length in seconds (default: the template's). |
 | `name` | string | no | Clip name (default: the template name). (min length 1) |
 | `fps` | integer | no | Frame rate for built-in templates (default: the project frame rate). (min 1) |
+| `physicsPolish` | boolean | no | Run motion.physics_polish on the new clip (default true). |
 
 ### `template_delete`
 

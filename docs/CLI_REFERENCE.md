@@ -96,10 +96,11 @@ Use as `blazma-anim exec <file> <id> --arg name=value ...`.
 | `marker.add` | mutating | `clipId`*:string, `frame`*:number, `name`*:string, `phase`:string | Add a named marker (optionally a key-pose phase) at a frame. Returns {markerId}. |
 | `marker.delete` | mutating | `clipId`*:string, `markerId`*:string | Delete a marker. |
 | `marker.update` | mutating | `clipId`*:string, `markerId`*:string, `frame`:number, `name`:string, `phase`:string | Change a marker's frame, name and/or phase (at least one). |
-| `motion.generate` | readonly | `characterId`*:string, `prompt`*:string, `durationSeconds`*:number, `fps`:integer, `seed`:integer, `provider`:string, `name`:string, `footCleanup`:boolean, `reduceKeys`:boolean, `loop`:boolean, `inPlace`:boolean, `segments`:array | Start generating a motion from a text prompt for a character. Runs in the background and returns a jobId; it does not change the project. Poll motion.job_status, then call motion.job_apply to add the result as a DRAFT clip (undoable), review it, and keep it with clip.accept_draft (or remove it with clip.delete). Provider: kimodo (local AI, must be installed by the user) by default; 'procedural' is a built-in keyword demo (walk, run, jump, wave, squat, idle, turn around, look back, fall, die, stop, punch), not AI. Body only: fingers and face are not generated. Multi-step prompts ("someone is behind you, run, then die"; Arabic or English) are split into steps by the offline planner (see motion.plan_prompt); each step is generated separately (Kimodo gets an English caption per step) and the steps are joined into ONE draft clip with a marker per step. Pass 'segments' for an explicit plan. The result's 'plan' is the plan used. |
+| `motion.generate` | readonly | `characterId`*:string, `prompt`*:string, `durationSeconds`*:number, `fps`:integer, `seed`:integer, `provider`:string, `name`:string, `footCleanup`:boolean, `reduceKeys`:boolean, `loop`:boolean, `inPlace`:boolean, `physicsPolish`:boolean, `segments`:array | Start generating a motion from a text prompt for a character. Runs in the background and returns a jobId; it does not change the project. Poll motion.job_status, then call motion.job_apply to add the result as a DRAFT clip (undoable), review it, and keep it with clip.accept_draft (or remove it with clip.delete). Provider: kimodo (local AI, must be installed by the user) by default; 'procedural' is a built-in keyword demo (walk, run, jump, wave, squat, idle, turn around, look back, fall, die, stop, punch), not AI. Body only: fingers and face are not generated. Multi-step prompts ("someone is behind you, run, then die"; Arabic or English) are split into steps by the offline planner (see motion.plan_prompt); each step is generated separately (Kimodo gets an English caption per step) and the steps are joined into ONE draft clip with a marker per step. Pass 'segments' for an explicit plan. The result's 'plan' is the plan used. |
 | `motion.job_apply` | mutating | `jobId`*:string, `name`:string | Add a finished generation job's motion to the project as a new DRAFT clip (undoable; undo makes the job ready again). Returns clipId. Review it, edit keys, then clip.accept_draft. Fails with job_stale when the project was replaced, or the character was removed, re-rigged or its rig/humanoid mapping changed since the job started; with job_applied when it was already applied. |
 | `motion.job_cancel` | readonly | `jobId`*:string | Cancel a running generation job you started (stops the Kimodo runner). Does not change the project. |
 | `motion.job_status` | readonly | `jobId`:string, `waitSeconds`:number | State of a generation job (running, ready, failed, cancelled, applied) with progress, warnings and, once applied, its clipId. Without jobId: all jobs. Agents see only the jobs they started. Headless only: waitSeconds blocks until the job finishes (at most 25 s per call; call again to keep waiting). |
+| `motion.physics_polish` | mutating | `clipId`*:string, `characterId`:string, `groundContact`:boolean, `groundClamp`:boolean, `ballistic`:boolean, `transitions`:boolean, `falls`:boolean, `secondary`:boolean, `balance`:boolean, `minLandingKneeFlex`:number, `reduceKeys`:boolean | Make a clip physically believable (deterministic post-process, one undo step): feet in contact planted on the ground with leg IK (heel/toe roll kept), no body part below the ground and a lying body resting on it, flight phases on a ballistic COM parabola (g = 9.81) with take-off and landing (knees bend ≥ minLandingKneeFlex), smooth root velocity across step boundaries (the clip's markers), falls accelerating into the impact with a damped settle, spine/head/arm follow-through, and balance while standing. motion.generate and template.apply already run it unless physicsPolish=false. Bones and frames it does not need to change keep their exact values. Returns before/after numbers (footSlide, minBodyHeight, flightParabolaRms, boundaryVelocityJump, landingKneeFlex, restGap, comJerkRms…) and the stages that changed something. |
 | `motion.plan_prompt` | readonly | `prompt`*:string, `durationSeconds`*:number | Read-only: how motion.generate would split a prompt into steps, offline (no AI, no network): Arabic and English sequencing words (ثم، بعدين، وبعدها، then, after that…), punctuation and «و»/'and' between two different actions; per-step English caption, action, length (from 'for 3 seconds' / «لمدة 3 ثواني» or per-action defaults scaled to durationSeconds), and whether each step was understood (Arabic that is not understood should be rephrased). |
 | `motion.providers` | readonly | `probe`:boolean | List the motion generation providers and diagnostics: is kimodo-runner configured and found, are the model files there, CPU/RAM/GPU (best effort, offline). Never downloads anything. Agents see file names and found flags, not absolute paths. |
 | `physics.analyze` | readonly | `clipId`*:string, `characterId`:string, `startFrame`:integer, `endFrame`:integer, `summaryOnly`:boolean, `maxFrames`:integer, `metric`:string, `minMargin`:number, `contactHeight`:number | Balance analysis of a clip, frame by frame: centre of mass (COM), foot contacts, support polygon (convex hull of the touching sole points, XZ), signed margin of the tested point to the polygon (inside positive, metres) and balanced/unbalanced/airborne. Returns {summary:{unbalancedRanges…}, frames:[…]}. Does not change anything. |
@@ -146,7 +147,7 @@ Use as `blazma-anim exec <file> <id> --arg name=value ...`.
 | `sequence.set_blend` | mutating | `sequenceId`*:string, `itemId`*:string, `blendFrames`:integer, `blendCurve`:string | Set an item's fade-in length (frames) and/or curve. |
 | `sequence.update` | mutating | `sequenceId`*:string, `name`:string, `alignRoot`:boolean, `alignYaw`:boolean | Rename a sequence and/or change its root alignment options. |
 | `sequence.update_item` | mutating | `sequenceId`*:string, `itemId`*:string, `startFrame`:integer, `inFrame`:integer, `outFrame`:integer, `speed`:number, `loops`:integer | Change an item's timing: startFrame, inFrame, outFrame, speed and/or loops (at least one). |
-| `template.apply` | mutating | `templateId`*:string, `characterId`*:string, `durationSeconds`:number, `name`:string, `fps`:integer | Create a NEW normal clip (not a draft; undoable) from a template on any humanoid-mapped character: built-in templates are generated and retargeted to its proportions; project templates are retargeted from the rig they were saved with (feet locked on contacts). Returns clipId. |
+| `template.apply` | mutating | `templateId`*:string, `characterId`*:string, `durationSeconds`:number, `name`:string, `fps`:integer, `physicsPolish`:boolean | Create a NEW normal clip (not a draft; undoable) from a template on any humanoid-mapped character: built-in templates are generated and retargeted to its proportions; project templates are retargeted from the rig they were saved with (feet locked on contacts). Returns clipId. |
 | `template.delete` | destructive | `templateId`*:string | Delete a project template (undoable). Built-in templates cannot be deleted. |
 | `template.list` | readonly | - | List clip templates: built-in ones (idle, walk/run cycles, jump, wave, attack swing) and the project's own (saved with template.save_clip). |
 | `template.save_clip` | mutating | `clipId`*:string, `name`*:string, `description`:string, `characterId`:string | Save a clip as a template in the project's library (with a snapshot of its rig, so it can be applied to other characters later). Returns templateId. |
@@ -758,6 +759,7 @@ Start generating a motion from a text prompt for a character. Runs in the backgr
 | `reduceKeys` | boolean | no | Remove keys that linear interpolation reproduces within 0.1° / 0.5 mm (default true). |
 | `loop` | boolean | no | Ask for a loopable motion (procedural only; Kimodo ignores constraints). |
 | `inPlace` | boolean | no | Remove travel (procedural only). |
+| `physicsPolish` | boolean | no | Run motion.physics_polish on the result (default true): planted feet, nothing below the ground, ballistic jumps, smooth step transitions, falls. |
 | `segments` | array | no | Optional explicit plan (at most 12 steps, in order): [{text, durationSeconds?, caption?}]. text may be Arabic or English (translated offline); caption overrides the English caption sent to Kimodo; steps without durationSeconds share the rest of durationSeconds. |
 
 ### `motion.job_apply`
@@ -785,6 +787,24 @@ State of a generation job (running, ready, failed, cancelled, applied) with prog
 |---|---|---|---|
 | `jobId` | string | no | Job id from motion.generate (omit to list all jobs). (min length 1) |
 | `waitSeconds` | number | no | Wait up to this long for the job to finish (headless mode only, capped at 25 s; ignored in the app). |
+
+### `motion.physics_polish`
+
+Make a clip physically believable (deterministic post-process, one undo step): feet in contact planted on the ground with leg IK (heel/toe roll kept), no body part below the ground and a lying body resting on it, flight phases on a ballistic COM parabola (g = 9.81) with take-off and landing (knees bend ≥ minLandingKneeFlex), smooth root velocity across step boundaries (the clip's markers), falls accelerating into the impact with a damped settle, spine/head/arm follow-through, and balance while standing. motion.generate and template.apply already run it unless physicsPolish=false. Bones and frames it does not need to change keep their exact values. Returns before/after numbers (footSlide, minBodyHeight, flightParabolaRms, boundaryVelocityJump, landingKneeFlex, restGap, comJerkRms…) and the stages that changed something. (effect: mutating)
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `clipId` | string | yes | Clip id. (min length 1) |
+| `characterId` | string | no | Character to evaluate the clip on (default: the first character using the clip's rig). (min length 1) |
+| `groundContact` | boolean | no | Plant feet in contact (default true). |
+| `groundClamp` | boolean | no | Keep every body part above the ground; lying bodies rest on it (default true). |
+| `ballistic` | boolean | no | Flight phases follow a ballistic COM parabola, with landing compression (default true). |
+| `transitions` | boolean | no | Ease the root velocity across step boundaries (default true). |
+| `falls` | boolean | no | Falls accelerate into the impact and settle with a small bounce (default true). |
+| `secondary` | boolean | no | Spine, head and arm follow-through (default true). |
+| `balance` | boolean | no | Keep the COM inside the support polygon on standing frames (default true). |
+| `minLandingKneeFlex` | number | no | Knee flexion (deg) a landing must reach (default 15, 0–90). |
+| `reduceKeys` | boolean | no | Reduce the rewritten tracks' keys within tolerance (default false: a key on every frame, exact values). |
 
 ### `motion.plan_prompt`
 
@@ -1301,6 +1321,7 @@ Create a NEW normal clip (not a draft; undoable) from a template on any humanoid
 | `durationSeconds` | number | no | Length in seconds (default: the template's). |
 | `name` | string | no | Clip name (default: the template name). (min length 1) |
 | `fps` | integer | no | Frame rate for built-in templates (default: the project frame rate). (min 1) |
+| `physicsPolish` | boolean | no | Run motion.physics_polish on the new clip (default true). |
 
 ### `template.delete`
 

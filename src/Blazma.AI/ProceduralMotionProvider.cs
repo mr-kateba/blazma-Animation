@@ -160,7 +160,7 @@ public sealed partial class ProceduralMotionProvider : IMotionGenerationProvider
             switch (kind)
             {
                 case Kind.Walk or Kind.Run: GaitFrame(f, gait!, t); break;
-                case Kind.Jump: Jump(f, t / duration, vary); break;
+                case Kind.Jump: Jump(f, t, duration, vary); break;
                 case Kind.Wave: Wave(f, t, vary, phase0); break;
                 case Kind.Squat: Squat(f, t / duration, vary); break;
                 case Kind.Attack: Attack(f, t, t / duration, vary, phase0); break;
@@ -219,24 +219,6 @@ public sealed partial class ProceduralMotionProvider : IMotionGenerationProvider
     }
 
     static double Smooth(double x) { x = Math.Clamp(x, 0, 1); return x * x * (3 - 2 * x); }
-
-    static void Jump(Frame f, double u, double vary)
-    {
-        var standD = LegLength - 1e-3;
-        double drop, air = 0, armSwing;
-        if (u < 0.15) { drop = 0; armSwing = 0; }
-        else if (u < 0.35) { var k = Smooth((u - 0.15) / 0.2); drop = 0.25 * k; armSwing = 50 * k; }       // crouch, arms back
-        else if (u < 0.42) { var k = Smooth((u - 0.35) / 0.07); drop = 0.25 * (1 - k); armSwing = 50 - 200 * k; } // push off, arms up
-        else if (u < 0.62) { var k = (u - 0.42) / 0.2; drop = 0.08; air = 4 * 0.35 * vary * k * (1 - k); armSwing = -150 + 60 * k; } // flight
-        else if (u < 0.72) { var k = Smooth((u - 0.62) / 0.1); drop = 0.08 + 0.17 * k; armSwing = -90 + 120 * k; } // landing
-        else { var k = Smooth((u - 0.72) / 0.28); drop = 0.25 * (1 - k); armSwing = 30 * (1 - k); }   // recover
-        var (a, k2) = LegForHeight(standD - drop);
-        SetLeg(f, LLeg, LShin, LFoot, a, k2);
-        SetLeg(f, RLeg, RShin, RFoot, a, k2);
-        ArmsDown(f, armSwing, armSwing, 20);
-        f.R[Spine1] = Rx(30 * drop / 0.25);
-        f.Root = new Vec3(0, air, 0.04 * drop / 0.25);
-    }
 
     static void Squat(Frame f, double u, double vary)
     {
