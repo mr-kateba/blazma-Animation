@@ -812,6 +812,7 @@ public static class AICommands
         ["totalSeconds"] = plan.TotalSeconds,
         ["segmentCount"] = plan.Segments.Count,
         ["allUnderstood"] = plan.AllUnderstood,
+        ["confidence"] = plan.Confidence,
         ["segments"] = new JsonArray(plan.Segments.Select(x => (JsonNode?)new JsonObject
         {
             ["index"] = x.Index,
@@ -824,6 +825,16 @@ public static class AICommands
             ["language"] = x.IsArabic ? "ar" : "en",
             ["procedural"] = x.ProceduralPrompt,
             ["unrecognized"] = new JsonArray(x.Unrecognized.Select(w => (JsonNode?)w).ToArray()),
+            ["confidence"] = x.Confidence,
+            ["layers"] = new JsonArray(x.Layers.Select(w => (JsonNode?)w).ToArray()),
+            ["suggestions"] = new JsonArray(x.Suggestions.Select(g => (JsonNode?)new JsonObject
+            {
+                ["word"] = g.Word,
+                ["candidates"] = new JsonArray(g.Candidates.Select(c => (JsonNode?)c).ToArray()),
+                ["applied"] = g.Applied,
+                ["confidence"] = g.Confidence,
+                ["message"] = g.Message,
+            }).ToArray()),
         }).ToArray()),
         ["warnings"] = new JsonArray(plan.Warnings.Select(w => (JsonNode?)w).ToArray()),
     };
