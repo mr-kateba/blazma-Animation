@@ -258,7 +258,7 @@ certutil -hashfile BlazmaAnimation-<الإصدار>-setup.exe SHA256
 2. اقرأ تراخيص النماذج ووافق عليها (رخصة NVIDIA Open Model لنموذج الحركة، ورخصة Meta Llama 3 المجتمعية لمُرمِّز النص). لا يبدأ Blazma أي تنزيل قبل تأكيدك.
 3. انتظر شريط التقدم. التنزيل **يُستأنف** إن انقطع: اضغط «تنزيل» مرة أخرى فيكمل من حيث توقف. ويُتحقق من بصمة SHA-256 لكل ملف بعد التنزيل.
 
-<img src="screenshots/p10-ar-dark-models-downloading.png" width="420" alt="التنزيل جارٍ"> <img src="screenshots/p10-ar-dark-models-done.png" width="420" alt="اكتمل التنزيل">
+<img src="screenshots/p10-ar-dark-models-downloading.png" width="420" alt="التنزيل جارٍ">
 
 تُحفظ الملفات في `%LOCALAPPDATA%\BlazmaAnimation\models` (أو `userdata\models` في الوضع المحمول). حجمها كبير، لذلك لا توضع في الملف الشخصي المتجوّل.
 

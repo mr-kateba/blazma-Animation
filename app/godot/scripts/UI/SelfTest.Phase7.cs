@@ -255,7 +255,7 @@ public partial class SelfTest
 
         dlg.Open();
         await Settle();
-        dlg.Prompt.Text = "please hang forever";
+        dlg.Prompt.Text = "a person hangs from a ledge";
         dlg.Prompt.EmitSignal(TextEdit.SignalName.TextChanged);
         clipsBefore = Proj.Clips.Count;
         var jobsBefore = App.MotionJobs.List().Count;
@@ -313,7 +313,7 @@ public partial class SelfTest
         _w.OpenGenerateDialog();
         await Settle();
         dlg.SelectProvider(AiText.ProceduralId);
-        dlg.Prompt.Text = "xyzzy";
+        dlg.Prompt.Text = "juggle three balls";
         dlg.Prompt.EmitSignal(TextEdit.SignalName.TextChanged);
         dlg.PressGenerate();
         await WaitFor(() => App.MotionJobs.Get(dlg.CurrentJobId ?? "")?.State == MotionJobState.Failed, 15);

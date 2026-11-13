@@ -258,7 +258,7 @@ All three use the same motion model; they differ in the size of the text encoder
 2. Read and accept the model licences (NVIDIA Open Model License for the motion model, Meta Llama 3 Community License for the text encoder). Blazma will not download anything until you confirm.
 3. Wait for the progress bar. Downloads **resume** if interrupted: press **Download** again and it continues from where it stopped. Each file is checked against its SHA-256 hash.
 
-<img src="screenshots/p10-en-dark-models-downloading.png" width="420" alt="Download in progress"> <img src="screenshots/p10-en-dark-models-done.png" width="420" alt="Download complete">
+<img src="screenshots/p10-en-dark-models-downloading.png" width="420" alt="Download in progress: progress bar, size, speed and time left">
 
 Files go to `%LOCALAPPDATA%\BlazmaAnimation\models` (or `userdata\models` in portable mode). They are large, so they are not placed in the roaming profile.
 
