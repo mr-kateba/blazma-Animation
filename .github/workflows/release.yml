@@ -76,7 +76,9 @@ jobs:
           [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "kimodo_runner_run_id must be a number"; exit 1; }
           mkdir -p build/cache
           # One multi-backend runner (CPU variants + Vulkan, DECISIONS D44) plus, when built, the CUDA backend and its runtime DLLs
-          # in the same folder (scripts/build-release.sh picks these folders up and checks every SHA256SUMS*.txt).
+          # in the same folder (scripts/build-release.sh picks these folders up and checks every SHA256SUMS*.txt). The CUDA files are
+          # NOT bundled: build-release.sh moves them into the separate asset blazma-cuda-backend-<version>-win-x64.zip and writes
+          # tools/kimodo/cuda-backend.json (its URL, size, SHA-256) so the app can offer it as an optional download (DECISIONS D47).
           gh run download "$RUN_ID" -n kimodo-runner-windows-x64 -D build/cache/kimodo-runner-win64
           gh run download "$RUN_ID" -n kimodo-runner-windows-x64-cuda -D build/cache/kimodo-runner-win64 || echo "no CUDA backend in run $RUN_ID (NVIDIA cards use Vulkan)"
           gh run download "$RUN_ID" -n kimodo-runner-linux-x64 -D build/cache/kimodo-runner-linux-x64 || echo "no Linux runner in run $RUN_ID"
@@ -85,8 +87,11 @@ jobs:
       - name: Build release (tests, exports, tools, zip, installer, tar.gz, AppImage, checksums)
         run: scripts/build-release.sh "${{ inputs.version }}"
 
-      - name: Smoke test the artifacts
+      - name: Smoke test the artifacts (incl. the optional CUDA asset and the installer size)
         run: scripts/release-smoke.sh "${{ inputs.version }}"
+
+      - name: Artifact sizes
+        run: ls -l --block-size=M "build/release/${{ inputs.version }}/" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:

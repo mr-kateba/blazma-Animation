@@ -38,6 +38,31 @@ public partial class AiSettingsDialog : ConfirmationDialog
     readonly Label _notes = W.Label("", "Faint", false);
     readonly Label _checking = W.Label("", "Dim", false);
     readonly Dot _runnerDot = new(), _modelsDot = new();
+
+    // optional CUDA backend (DECISIONS D47): downloaded only when the user presses CudaButton
+    readonly VBoxContainer _cudaBox = new() { Visible = false };
+    readonly Label _cudaLine = W.Label("", null, false);
+    readonly Label _cudaNote = W.Label("", "Faint", false);
+    readonly Label _cudaProgress = W.Label("", "Dim", false);
+    public Button CudaButton { get; } = new() { FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin, AutoTranslateMode = AutoTranslateModeEnum.Disabled };
+    public Button CudaRemoveButton { get; } = new() { Text = "Remove GPU acceleration", FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin };
+    public Button CudaCancelButton { get; } = new() { Text = "Cancel", FocusMode = Control.FocusModeEnum.None, Visible = false };
+    public ProgressBar CudaBar { get; } = new() { MinValue = 0, MaxValue = 100, ShowPercentage = true, Visible = false, CustomMinimumSize = new Vector2(0, 20), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+    /// <summary>Test hooks: the downloader and the hardware the CUDA section looks at.</summary>
+    public Func<ModelDownloader> CudaDownloaderFactory { get; set; } = () => new ModelDownloader(ModelDownloaderOptions.GitHubReleases());
+    public Func<HardwareReport> CudaHardwareFn { get; set; } = () => HardwareProbe.Probe();
+    Task<CudaBackendState>? _cudaTask;
+    CancellationTokenSource? _cudaCts;
+    ModelDownloader? _cudaDl;
+    volatile DownloadProgress? _cudaLatest;
+    public bool CudaDownloading => _cudaTask is { IsCompleted: false };
+    public bool CudaSectionVisible => _cudaBox.Visible;
+    public string CudaLineText => _cudaLine.Text;
+    public string CudaProgressText => _cudaProgress.Text;
+    public string? CudaLastError { get; private set; }
+    public bool CudaLastCancelled { get; private set; }
+    /// <summary>Finished CUDA downloads (success, error or cancel); tests wait for it to change.</summary>
+    public int CudaRunsDone { get; private set; }
     readonly FileDialog _runnerPicker, _modelsPicker;
     bool _logOpen;
     int _openTimeoutSeconds;
@@ -120,6 +145,22 @@ public partial class AiSettingsDialog : ConfirmationDialog
         root.AddChild(_lastUsedLine);
         root.AddChild(_notes);
 
+        _cudaBox.AddThemeConstantOverride("separation", 6);
+        Wrap(_cudaLine); Wrap(_cudaNote); Wrap(_cudaProgress);
+        _cudaLine.TextDirection = Control.TextDirection.Auto;
+        _cudaProgress.TextDirection = Control.TextDirection.Auto;
+        _cudaBox.AddChild(new HSeparator());
+        _cudaBox.AddChild(W.Label("GPU acceleration (CUDA)", "Section"));
+        _cudaBox.AddChild(_cudaLine);
+        var cudaRow = new HBoxContainer();
+        cudaRow.AddThemeConstantOverride("separation", 10);
+        cudaRow.AddChild(CudaButton); cudaRow.AddChild(CudaRemoveButton); cudaRow.AddChild(W.Spacer()); cudaRow.AddChild(CudaCancelButton);
+        _cudaBox.AddChild(cudaRow);
+        _cudaBox.AddChild(CudaBar);
+        _cudaBox.AddChild(_cudaProgress);
+        _cudaBox.AddChild(_cudaNote);
+        root.AddChild(_cudaBox);
+
         root.AddChild(new HSeparator());
         root.AddChild(LogToggle);
         LogBox.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
@@ -137,11 +178,15 @@ public partial class AiSettingsDialog : ConfirmationDialog
         _guide.Pressed += OpenGuide;
         ModelsButton.Pressed += () => { Hide(); _host.OpenAiModels(); };
         CheckButton.Pressed += () => RunCheck();
+        CudaButton.Pressed += StartCudaDownload;
+        CudaCancelButton.Pressed += CancelCudaDownload;
+        CudaRemoveButton.Pressed += RemoveCuda;
+        Canceled += CancelCudaDownload;
         LogToggle.Pressed += () => { _logOpen = !_logOpen; SyncLog(); };
         RunnerEdit.TextChanged += _ => Edited();
         ModelsEdit.TextChanged += _ => Edited();
         Confirmed += () => ApplyNow();
-        CloseRequested += Hide;
+        CloseRequested += () => { CancelCudaDownload(); Hide(); };
     }
 
     static void Wrap(Label l)
@@ -241,6 +286,7 @@ public partial class AiSettingsDialog : ConfirmationDialog
         ShowFiles(s, k.Describe());
         var hw = HardwareProbe.Probe();
         ShowHardware(hw, Array.Empty<string>());
+        RefreshCuda();
     }
 
     /// <summary>The graphics card list and the runner's device lines; keeps <paramref name="selected"/> even before the runner was asked.</summary>
@@ -269,6 +315,8 @@ public partial class AiSettingsDialog : ConfirmationDialog
               + (devices.Any(d => d.IsGpu) ? "" : "\n" + Tr("No graphics card is usable by Kimodo (no CUDA or Vulkan device): it will run on the processor. Updating the graphics driver usually fixes this."));
         var last = App.Kimodo?.LastDeviceUse;
         _lastUsedLine.Text = last is null ? "" : AiText.GeneratedOn(last.Mode, last.Motion?.Label) ?? "";
+        if (last is not null && last.CudaWouldHelp(devices) && App.CudaDownloadOffered())
+            _lastUsedLine.Text += "\n" + Tr("Your NVIDIA card ran Kimodo through Vulkan. Download GPU acceleration (CUDA) below to make it faster.");
     }
 
     void ShowFiles(KimodoSettings s, ProviderInfo info)
@@ -347,6 +395,142 @@ public partial class AiSettingsDialog : ConfirmationDialog
                 lines.Add($"{kv.Key[7..]}: {kv.Value}");
         _notes.Text = string.Join("\n", lines);
     }
+
+    // ---- optional CUDA backend (DECISIONS D47) ------------------------------------------------------------------------
+
+    /// <summary>Shows the CUDA section for an NVIDIA card (or when something of ours is on disk): status, the download button with its
+    /// size, Remove. Nothing is downloaded until <see cref="CudaButton"/> is pressed.</summary>
+    public void RefreshCuda()
+    {
+        if (CudaDownloading) return;
+        var st = App.CudaState();
+        var pkg = App.CudaPackage();
+        var nvidia = CudaBackend.HasNvidiaGpu(CudaHardwareFn());
+        var offer = CudaBackend.ShouldOffer(st, CudaHardwareFn());
+        _cudaBox.Visible = nvidia && st.Status != CudaBackendStatus.NotOffered || st.CanRemove;
+        CudaButton.Visible = offer && pkg is not null;
+        if (pkg is not null)
+            CudaButton.Text = string.Format(CultureInfo.InvariantCulture, Tr("Download GPU acceleration (CUDA, ~{0})"), AiText.Ltr(AiModelsDialog.FormatSize(pkg.Size)));
+        CudaRemoveButton.Visible = st.CanRemove && st.Status != CudaBackendStatus.Bundled;
+        CudaBar.Visible = false;
+        CudaCancelButton.Visible = false;
+        _cudaProgress.Text = "";
+        _cudaLine.RemoveThemeColorOverride("font_color");
+        _cudaLine.Text = st.Status switch
+        {
+            CudaBackendStatus.Bundled => Tr("This copy of Blazma already includes GPU acceleration (CUDA) for NVIDIA cards."),
+            CudaBackendStatus.Installed => string.Format(CultureInfo.InvariantCulture, Tr("GPU acceleration (CUDA) is installed ({0}). Kimodo uses it automatically on NVIDIA cards."), AiText.Ltr(AiModelsDialog.FormatSize(st.InstalledBytes))),
+            CudaBackendStatus.Outdated => Tr("The downloaded GPU acceleration belongs to another version of Blazma and is not used. Download the matching one, or remove it."),
+            CudaBackendStatus.NotInstalled when nvidia => Tr("Your NVIDIA graphics card can run Kimodo faster with CUDA. Without it Kimodo uses Vulkan, which also works. The download is optional and only starts when you press the button."),
+            _ => Tr("Downloaded GPU acceleration files are on this computer but this copy of Blazma cannot use them."),
+        };
+        if (st.PartialBytes > 0 && st.Status is CudaBackendStatus.NotInstalled or CudaBackendStatus.Outdated)
+            _cudaLine.Text += "\n" + string.Format(CultureInfo.InvariantCulture, Tr("{0} already downloaded: pressing the button continues where it stopped."), AiText.Ltr(AiModelsDialog.FormatSize(st.PartialBytes)));
+        _cudaNote.Text = offer && pkg is not null
+            ? string.Format(CultureInfo.InvariantCulture, Tr("From the Blazma release on GitHub, checked with SHA-256, saved to {0}. It needs {1} of disk space and includes NVIDIA CUDA runtime libraries under NVIDIA's licence (legal/NVIDIA_CUDA_NOTICE.txt)."),
+                AiText.Ltr(st.Directory), AiText.Ltr(AiModelsDialog.FormatSize(pkg.Size + pkg.InstalledBytes)))
+            : "";
+    }
+
+    /// <summary>The user pressed "Download GPU acceleration": stop the runner (it would hold the libraries), download, verify, unpack.</summary>
+    public void StartCudaDownload()
+    {
+        if (CudaDownloading || App.CudaPackage() is not { } pkg) return;
+        var dir = App.CudaDirectory();
+        App.Kimodo?.StopRunner("installing the CUDA backend");
+        CudaLastError = null; CudaLastCancelled = false;
+        CudaButton.Visible = false; CudaRemoveButton.Visible = false;
+        CudaBar.Visible = true; CudaBar.Value = 0;
+        CudaCancelButton.Visible = true; CudaCancelButton.Disabled = false;
+        _cudaProgress.Text = Tr("Starting…");
+        _cudaLine.RemoveThemeColorOverride("font_color");
+        _cudaCts = new CancellationTokenSource();
+        var ct = _cudaCts.Token;
+        _cudaDl = CudaDownloaderFactory();
+        var installer = new CudaBackendInstaller(_cudaDl);
+        installer.Progress += p => _cudaLatest = p;
+        _cudaLatest = null;
+        _cudaTask = Task.Run(() => installer.InstallAsync(pkg, dir, ct));
+    }
+
+    public void CancelCudaDownload()
+    {
+        if (!CudaDownloading) return;
+        CudaCancelButton.Disabled = true;
+        _cudaProgress.Text = Tr("Cancelling…");
+        _cudaCts?.Cancel();
+    }
+
+    public void RemoveCuda()
+    {
+        if (CudaDownloading) return;
+        App.Kimodo?.StopRunner("removing the CUDA backend");
+        try
+        {
+            var freed = CudaBackend.Remove(App.CudaDirectory());
+            App.CudaBackendChanged();
+            RefreshCuda();
+            _host.ToastNode.NotifyFormat("GPU acceleration removed ({0} freed)", _host.Palette.Ok, AiText.Ltr(AiModelsDialog.FormatSize(freed)));
+        }
+        catch (ModelDownloadException e)
+        {
+            RefreshCuda();
+            _cudaLine.Text = string.Format(CultureInfo.InvariantCulture, Tr("GPU acceleration could not be removed: {0}"), e.Message);
+            _cudaLine.AddThemeColorOverride("font_color", _host.Palette.Err);
+        }
+    }
+
+    public override void _Process(double delta)
+    {
+        if (_cudaTask is null) return;
+        if (_cudaLatest is { } p && !_cudaTask.IsCompleted) ShowCudaProgress(p);
+        if (!_cudaTask.IsCompleted) return;
+        var t = _cudaTask; _cudaTask = null;
+        _cudaDl?.Dispose(); _cudaDl = null;
+        CudaRunsDone++;
+        RefreshCuda();
+        if (t.IsCompletedSuccessfully)
+        {
+            App.CudaBackendChanged();
+            RefreshCuda();
+            _cudaProgress.Text = Tr("GPU acceleration is ready. Kimodo will use CUDA for the next generation.");
+            _host.ToastNode.Notify("GPU acceleration (CUDA) ready", _host.Palette.Ok);
+            return;
+        }
+        var ex = t.Exception?.GetBaseException();
+        if (t.IsCanceled || ex is OperationCanceledException)
+        {
+            CudaLastCancelled = true;
+            _cudaProgress.Text = Tr("Download cancelled. What was downloaded so far is kept: press the button again to continue.");
+            return;
+        }
+        CudaLastError = (ex as ModelDownloadException)?.Code ?? "io_error";
+        _cudaProgress.Text = CudaFriendly(CudaLastError, ex?.Message);
+        _cudaProgress.AddThemeColorOverride("font_color", _host.Palette.Err);
+    }
+
+    void ShowCudaProgress(DownloadProgress p)
+    {
+        _cudaProgress.RemoveThemeColorOverride("font_color");
+        CudaBar.Value = p.Fraction * 100;
+        _cudaProgress.Text = p.Stage switch
+        {
+            DownloadStage.Verifying or DownloadStage.Checking => Tr("Checking the download…"),
+            DownloadStage.Installing => string.Format(CultureInfo.InvariantCulture, Tr("Installing {0}"), AiText.Ltr(p.FileName)),
+            DownloadStage.Completed => Tr("Done"),
+            _ => string.Format(CultureInfo.InvariantCulture, Tr("{0} of {1}"), AiText.Ltr(AiModelsDialog.FormatSize(p.BytesDone)), AiText.Ltr(AiModelsDialog.FormatSize(p.BytesTotal)))
+                 + "   " + string.Format(CultureInfo.InvariantCulture, Tr("Speed {0}/s. Time left: {1}"), AiText.Ltr(AiModelsDialog.FormatSize((long)p.BytesPerSecond)),
+                     AiText.Ltr(p.Eta is { } e ? AiText.Elapsed(e) : "--:--")),
+        };
+    }
+
+    public static string CudaFriendly(string code, string? detail) => code switch
+    {
+        "insecure_url" or "host_not_allowed" => TranslationServer.Translate("The download address is not allowed (only secure connections to GitHub are). Nothing was downloaded."),
+        "package_invalid" => TranslationServer.Translate("The downloaded GPU acceleration package does not contain the expected files, so nothing was installed."),
+        "io_error" => string.Format(CultureInfo.InvariantCulture, TranslationServer.Translate("GPU acceleration could not be installed: {0}"), detail ?? code),
+        _ => AiModelsDialog.Friendly(code, detail),
+    };
 
     // ---- log ----------------------------------------------------------------------------------------------------------
 

@@ -4178,3 +4178,70 @@ msgstr "يهاجم"
 
 msgid "crouch"
 msgstr "ينحني"
+
+# Optional CUDA backend download (Settings → AI, DECISIONS D47)
+msgid "GPU acceleration (CUDA)"
+msgstr "تسريع بطاقة الرسومات (CUDA)"
+
+msgid "Remove GPU acceleration"
+msgstr "إزالة تسريع بطاقة الرسومات"
+
+msgid "Download GPU acceleration (CUDA, ~{0})"
+msgstr "تنزيل تسريع بطاقة الرسومات (CUDA، نحو {0})"
+
+msgid "This copy of Blazma already includes GPU acceleration (CUDA) for NVIDIA cards."
+msgstr "هذه النسخة من Blazma تتضمن تسريع بطاقة الرسومات (CUDA) لبطاقات NVIDIA بالفعل."
+
+msgid "GPU acceleration (CUDA) is installed ({0}). Kimodo uses it automatically on NVIDIA cards."
+msgstr "تسريع بطاقة الرسومات (CUDA) مثبّت ({0}). يستخدمه Kimodo تلقائيًا على بطاقات NVIDIA."
+
+msgid "The downloaded GPU acceleration belongs to another version of Blazma and is not used. Download the matching one, or remove it."
+msgstr "تسريع بطاقة الرسومات المنزَّل يخص إصدارًا آخر من Blazma ولا يُستخدم. نزّل النسخة المطابقة أو أزِله."
+
+msgid "Your NVIDIA graphics card can run Kimodo faster with CUDA. Without it Kimodo uses Vulkan, which also works. The download is optional and only starts when you press the button."
+msgstr "بطاقة رسومات NVIDIA لديك تستطيع تشغيل Kimodo أسرع باستخدام CUDA. بدونه يستخدم Kimodo واجهة Vulkan وهي تعمل أيضًا. التنزيل اختياري ولا يبدأ إلا عندما تضغط الزر."
+
+msgid "Downloaded GPU acceleration files are on this computer but this copy of Blazma cannot use them."
+msgstr "توجد ملفات تسريع بطاقة الرسومات المنزَّلة على هذا الجهاز، لكن هذه النسخة من Blazma لا تستطيع استخدامها."
+
+msgid "{0} already downloaded: pressing the button continues where it stopped."
+msgstr "نُزِّل {0} حتى الآن: الضغط على الزر يكمل من حيث توقف."
+
+msgid "From the Blazma release on GitHub, checked with SHA-256, saved to {0}. It needs {1} of disk space and includes NVIDIA CUDA runtime libraries under NVIDIA's licence (legal/NVIDIA_CUDA_NOTICE.txt)."
+msgstr "من إصدار Blazma على GitHub، ويُتحقق منه ببصمة SHA-256، ويُحفظ في {0}. يحتاج {1} من مساحة القرص، ويتضمن مكتبات تشغيل NVIDIA CUDA بترخيص NVIDIA (legal/NVIDIA_CUDA_NOTICE.txt)."
+
+msgid "GPU acceleration removed ({0} freed)"
+msgstr "أُزيل تسريع بطاقة الرسومات (تحرّر {0})"
+
+msgid "GPU acceleration could not be removed: {0}"
+msgstr "تعذّرت إزالة تسريع بطاقة الرسومات: {0}"
+
+msgid "GPU acceleration is ready. Kimodo will use CUDA for the next generation."
+msgstr "تسريع بطاقة الرسومات جاهز. سيستخدم Kimodo واجهة CUDA في التوليد التالي."
+
+msgid "GPU acceleration (CUDA) ready"
+msgstr "تسريع بطاقة الرسومات (CUDA) جاهز"
+
+msgid "Download cancelled. What was downloaded so far is kept: press the button again to continue."
+msgstr "أُلغي التنزيل. ما نُزِّل حتى الآن محفوظ: اضغط الزر مرة أخرى للمتابعة."
+
+msgid "Checking the download…"
+msgstr "جارٍ التحقق من الملف المنزَّل…"
+
+msgid "Installing {0}"
+msgstr "جارٍ تثبيت {0}"
+
+msgid "The download address is not allowed (only secure connections to GitHub are). Nothing was downloaded."
+msgstr "عنوان التنزيل غير مسموح (المسموح اتصالات آمنة بـ GitHub فقط). لم يُنزَّل شيء."
+
+msgid "The downloaded GPU acceleration package does not contain the expected files, so nothing was installed."
+msgstr "حزمة تسريع بطاقة الرسومات المنزَّلة لا تحتوي الملفات المتوقعة، لذلك لم يُثبَّت شيء."
+
+msgid "GPU acceleration could not be installed: {0}"
+msgstr "تعذّر تثبيت تسريع بطاقة الرسومات: {0}"
+
+msgid "Your NVIDIA card ran Kimodo through Vulkan. Download GPU acceleration (CUDA) below to make it faster."
+msgstr "شغّلت بطاقة NVIDIA لديك Kimodo عبر Vulkan. نزّل تسريع بطاقة الرسومات (CUDA) أدناه لتسريعه."
+
+msgid "Tip: this NVIDIA card is usually faster with GPU acceleration (CUDA). Download it in Settings → AI."
+msgstr "تلميح: بطاقة NVIDIA هذه أسرع عادةً مع تسريع بطاقة الرسومات (CUDA). نزّله من الإعدادات ← الذكاء الاصطناعي."

@@ -45,6 +45,14 @@ public sealed record KimodoDeviceUse(string Mode, KimodoDevice? Text, KimodoDevi
 
     public bool UsedGpu => Mode is "gpu" or "hybrid" || Motion?.IsGpu == true;
 
+    /// <summary>True when the motion ran on an NVIDIA card through Vulkan because the runner has no CUDA backend (<paramref name="devices"/>
+    /// lists none): the optional CUDA download (Settings → AI, DECISIONS D47) would very likely be faster.</summary>
+    public bool CudaWouldHelp(IReadOnlyList<KimodoDevice>? devices) =>
+        Motion is { } m && m.Backend.Equals("Vulkan", StringComparison.OrdinalIgnoreCase)
+        && (m.Description.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase) || m.Description.Contains("GeForce", StringComparison.OrdinalIgnoreCase)
+            || m.Description.Contains("Quadro", StringComparison.OrdinalIgnoreCase))
+        && devices is not null && !devices.Any(d => d.Backend.Equals("CUDA", StringComparison.OrdinalIgnoreCase));
+
     public JsonObject ToJson() => new()
     {
         ["mode"] = Mode, ["summary"] = Summary, ["usedGpu"] = UsedGpu,

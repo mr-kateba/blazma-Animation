@@ -96,6 +96,7 @@ public sealed record CommandResult(
 | تطبيق مفتوح | يفتح Godot خادم IPC محليًا (Named Pipe على Windows، Unix socket على Linux). عند تشغيل `blazma-mcp` أو `blazma-anim --attach` يتصل بالتطبيق ويرسل الأوامر نفسها، فتظهر التعديلات مباشرة مع Undo. |
 | بدون واجهة (Headless) | CLI/MCP يحمّلان المشروع مباشرة عبر المكتبات وينفذان الأوامر ثم يحفظان. يُمنع فتح المشروع نفسه من عمليتين للكتابة عبر ملف قفل `.lock`. |
 | توليد الحركة | `kimodo-runner` عملية منفصلة (C++) يُطلقها التطبيق عند الطلب فقط. الانهيار أو نفاد الذاكرة لا يُسقط المحرر، والإلغاء يتم بإنهاء العملية. لا تُحمَّل أي نماذج أثناء الخمول. |
+| واجهة CUDA الاختيارية (D47) | المثبّت يحمل الـrunner بواجهتَي المعالج وVulkan. `ggml-cuda` ومكتبات CUDA ملف إصدار منفصل يصفه `tools/kimodo/cuda-backend.json` (رابط، حجم، SHA-256 للأرشيف ولكل ملف). `CudaBackendInstaller` (في `Blazma.AI`) ينزّله عبر `ModelDownloader` بخيارات `GitHubReleases()` حين يضغط المستخدم الزر في الإعدادات ← AI فقط، ويفكّه إلى `runtime/cuda` بجانب مجلد النماذج (أو `userdata/runtime/cuda`) مع `installed.json`. `KimodoSettings.CudaBackendDirectory` → `RunnerProcess` يمرر `GGML_BACKEND_PATH` ويضيف المجلد إلى `PATH` (Linux: `LD_LIBRARY_PATH`)، فيحمّله `ggml_backend_load_all()` بعد واجهاته؛ ترتيب Auto كما هو (CUDA ثم Vulkan). لا أمر MCP/CLI يبدأ التنزيل. |
 
 الاتصال بين الأطراف بـJSON-RPC 2.0 مع الرسائل نفسها المستخدمة في MCP، فلا توجد صيغة ثالثة.
 

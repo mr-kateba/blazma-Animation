@@ -217,11 +217,13 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
             };
             if (use.Motion is { } md) meta["kimodo.motionDevice"] = md.Label;
             if (use.Text is { } td) meta["kimodo.textDevice"] = td.Label;
+            var cudaHint = use.CudaWouldHelp(RunnerDevices);
+            if (cudaHint) meta["kimodo.cudaHint"] = "true";
             var warnings = motion.Warnings.ToList();
             if (fallbackWarnings.Count > 0)
                 warnings.Insert(0, $"Generated on {use.Summary} after {fallbackWarnings.Count} failed attempt(s): {string.Join(" ", fallbackWarnings)}");
             motion = motion with { Metadata = meta, Warnings = warnings };
-            Write($"generated on {use.Summary}");
+            Write($"generated on {use.Summary}" + (cudaHint ? " (CUDA is not installed: the optional CUDA download in Settings → AI is usually faster on this card)" : ""));
             progress?.Report(new GenerationProgress("done", 1));
             return motion;
         }

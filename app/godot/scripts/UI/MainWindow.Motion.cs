@@ -137,6 +137,9 @@ public partial class MainWindow
         App.GoToStart();
         App.Play();
         var generatedOn = AiText.GeneratedOn((string?)r.Data["device"], (string?)r.Data["motionDevice"]);
+        // Ran on an NVIDIA card through Vulkan and the optional CUDA download is offered (DECISIONS D47): say where to get it.
+        if (generatedOn is not null && r.Data["cudaHint"] is JsonValue hint && hint.TryGetValue<bool>(out var h) && h && App.CudaDownloadOffered())
+            generatedOn += "\n" + Tr(AiText.CudaHint);
         LastMotionApply = new MotionApplyInfo(jobId, clipId, name, warnings, generatedOn);
         GenerateDlg.ShowApplied(jobId, name, warnings, generatedOn);
         if (warnings.Count > 0) _toast.NotifyFormat("Draft added: {0} ({1} notes)", _palette.Ok, name, warnings.Count.ToString(CultureInfo.InvariantCulture));

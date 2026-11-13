@@ -42,19 +42,54 @@ if [ -f "$D/kimodo-runner-$V-win64.zip" ]; then
   for f in kimodo.dll ggml.dll ggml-base.dll ggml-cpu-x64.dll ggml-cpu-haswell.dll ggml-vulkan.dll; do
     [ -s "$W/tools/kimodo/$f" ] && ok "tools/kimodo/$f present" || bad "tools/kimodo/$f missing (multi-backend runner)"
   done
-  if [ -f "$W/tools/kimodo/ggml-cuda.dll" ]; then
-    for f in cudart64_12.dll cublas64_12.dll cublasLt64_12.dll NVIDIA_CUDA_NOTICE.txt; do
-      [ -s "$W/tools/kimodo/$f" ] && ok "CUDA: tools/kimodo/$f present" || bad "ggml-cuda.dll shipped without tools/kimodo/$f"
-    done
-  else echo "  NOTE  no ggml-cuda.dll in tools/kimodo: NVIDIA cards use Vulkan"; fi
+  # The CUDA backend is a separate, optional download (DECISIONS D47): never in the app zip.
+  for f in ggml-cuda.dll cudart64_12.dll cublas64_12.dll cublasLt64_12.dll; do
+    [ -e "$W/tools/kimodo/$f" ] && bad "tools/kimodo/$f is in the app zip (CUDA must be the separate asset)" || ok "no $f in the app zip"
+  done
+  [ -f "$D/kimodo-runner-$V-win64.zip" ] && unzip -l "$D/kimodo-runner-$V-win64.zip" | grep -qiE 'ggml-cuda|cublas|cudart' && bad "kimodo-runner zip still carries CUDA files" || ok "kimodo-runner zip has no CUDA files"
   [ -s "$W/legal/NVIDIA_CUDA_NOTICE.txt" ] && [ -s "$W/legal/SPIRV_HEADERS_LICENSE.txt" ] && ok "CUDA and SPIRV-Headers notices in legal/" || bad "legal/NVIDIA_CUDA_NOTICE.txt or SPIRV_HEADERS_LICENSE.txt missing"
 else echo "  NOTE  no Windows kimodo-runner staged for $V (tools/kimodo not expected)"; fi
+
+echo "== optional CUDA backend asset (DECISIONS D47)"
+C="$D/blazma-cuda-backend-$V-win-x64.zip"; J="$W/tools/kimodo/cuda-backend.json"
+if [ -f "$C" ]; then
+  chk "CUDA zip integrity (unzip -t)" unzip -tq "$C"
+  [ -s "$J" ] && ok "tools/kimodo/cuda-backend.json present" || bad "CUDA asset built but tools/kimodo/cuda-backend.json missing"
+  unzip -q "$C" -d "$T/cuda"; CD="$T/cuda/blazma-cuda-backend-$V-win-x64"
+  for f in ggml-cuda.dll cudart64_12.dll cublas64_12.dll cublasLt64_12.dll NVIDIA_CUDA_NOTICE.txt; do
+    [ -s "$CD/$f" ] && ok "CUDA zip has $f" || bad "CUDA zip lacks $f"; done
+  isa "PE32+ executable.*x86-64" "$CD/ggml-cuda.dll" && ok "ggml-cuda.dll is PE32+ x86-64" || bad "ggml-cuda.dll not PE32+ x86-64"
+  chk "CUDA zip SHA256SUMS-cuda-backend.txt verifies" bash -c "cd '$CD' && sha256sum -c --quiet SHA256SUMS-cuda-backend.txt"
+  # What the app checks the download against: the zip's size and SHA-256 and every file's, as shipped in cuda-backend.json.
+  if python3 -I - "$J" "$C" "$CD" "$V" <<'PY' >"$T/cuda-json.txt" 2>&1
+import hashlib, json, os, sys
+j, z, d, v = sys.argv[1:]
+m = json.load(open(j))
+sha = lambda p: hashlib.sha256(open(p, "rb").read()).hexdigest()
+assert m["format"] == 1 and m["version"] == v, "format/version"
+assert m["asset"] == os.path.basename(z), "asset name"
+assert m["url"].startswith("https://github.com/") and m["url"].endswith("/releases/download/v%s/%s" % (v, m["asset"])), "url"
+assert m["size"] == os.path.getsize(z) and m["sha256"] == sha(z), "zip size/sha256"
+assert m["library"] == "ggml-cuda.dll" and any(f["name"] == m["library"] for f in m["files"]), "library"
+for f in m["files"]:
+    p = os.path.join(d, f["name"])
+    assert os.path.getsize(p) == f["size"] and sha(p) == f["sha256"], f["name"]
+print("ok")
+PY
+  then ok "cuda-backend.json matches the CUDA zip (size, SHA-256, every file)"; else bad "cuda-backend.json does not match the CUDA zip: $(cat "$T/cuda-json.txt" | tail -1)"; fi
+  grep -q "blazma-cuda-backend-$V-win-x64.zip" "$D/SHA256SUMS.txt" && ok "CUDA asset listed in SHA256SUMS.txt" || bad "CUDA asset not in SHA256SUMS.txt"
+  grep -q "$(sha256sum "$C" | cut -d' ' -f1)" "$D/RELEASE_NOTES-$V.md" && ok "release notes give the CUDA asset's SHA-256" || bad "release notes lack the CUDA SHA-256"
+else
+  [ -e "$J" ] && bad "cuda-backend.json shipped but no CUDA asset was built" || echo "  NOTE  no CUDA asset for $V (no ggml-cuda.dll in the runner build): NVIDIA cards use Vulkan"
+fi
 
 echo "== Windows installer (structural)"
 S="$D/BlazmaAnimation-$V-setup.exe"
 isa "PE32 executable" "$S" && ok "setup.exe is a PE executable" || bad "setup.exe not PE"
 file -b "$S" | grep -qi "Nullsoft" && ok "setup.exe is an NSIS installer" || bad "setup.exe is not NSIS"
 chk "setup.exe is larger than 50 MB (payload present)" test "$(stat -c %s "$S")" -gt 52428800
+# Without the CUDA backend (D47) the installer stays small (~150 MB); 250 MB means CUDA crept back in.
+chk "setup.exe is smaller than 250 MB ($(( $(stat -c %s "$S") / 1048576 )) MB, CUDA not bundled)" test "$(stat -c %s "$S")" -lt 262144000
 if command -v 7z >/dev/null; then
   7z l "$S" >"$T/setup-list.txt" 2>/dev/null
   grep -q "BlazmaAnimation.exe" "$T/setup-list.txt" && ok "installer payload lists BlazmaAnimation.exe" || bad "installer payload lacks BlazmaAnimation.exe"
@@ -63,6 +98,8 @@ if command -v 7z >/dev/null; then
   if [ -f "$D/kimodo-runner-$V-win64.zip" ]; then
     grep -q "kimodo-runner.exe" "$T/setup-list.txt" && ok "installer payload has tools/kimodo/kimodo-runner.exe" || bad "runner staged but missing from the installer"
     grep -q "ggml-vulkan.dll" "$T/setup-list.txt" && grep -q "ggml-cpu-x64.dll" "$T/setup-list.txt" && ok "installer payload has the GGML backends" || bad "installer payload lacks ggml-vulkan.dll / ggml-cpu-*.dll"
+    grep -qiE "ggml-cuda|cublas|cudart" "$T/setup-list.txt" && bad "installer payload contains CUDA files (must be the separate asset)" || ok "installer payload has no CUDA files"
+    grep -q "cuda-backend.json" "$T/setup-list.txt" || [ ! -f "$C" ] && ok "installer payload has tools/kimodo/cuda-backend.json (when the CUDA asset exists)" || bad "installer lacks cuda-backend.json"
     grep -q "vc_redist.x64.exe" "$T/setup-list.txt" && ok "installer payload has vc_redist.x64.exe (VC++ runtime)" || bad "installer payload lacks vc_redist.x64.exe"
     unzip -l "$D/BlazmaAnimation-$V-win64.zip" | grep -q "vc_redist" && bad "vc_redist.x64.exe must not be in the portable zip" || ok "portable zip has no vc_redist.x64.exe"
   fi

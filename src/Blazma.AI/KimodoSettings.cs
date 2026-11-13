@@ -19,6 +19,7 @@ public sealed record KimodoSettings
     public const string DeviceEnv = "BLAZMA_KIMODO_DEVICE";
     public const string GpuEnv = "BLAZMA_KIMODO_GPU";
     public const string TimeoutEnv = "BLAZMA_KIMODO_TIMEOUT_SECONDS";
+    public const string CudaEnv = "BLAZMA_KIMODO_CUDA_DIR";
 
     /// <summary>Released SOMA checkpoints (30-joint body skeleton) and their file names in the LocalAI-io GGUF repos.
     /// G1 (robot) and SMPL-X (research-only licence, DECISIONS D7) are deliberately not supported.</summary>
@@ -78,6 +79,10 @@ public sealed record KimodoSettings
     /// null = the best one (CUDA before Vulkan, discrete before integrated).</summary>
     public string? GpuDevice { get; init; }
 
+    /// <summary>Folder of the optional CUDA backend the user downloaded in Settings → AI (DECISIONS D47, <see cref="CudaBackend"/>);
+    /// null = none. When it holds a complete install, kimodo-runner loads it (<see cref="ResolveCudaBackend"/>).</summary>
+    public string? CudaBackendDirectory { get; init; }
+
     /// <summary>CPU threads (0 = runtime default); passed to kimodo.cpp as KIMODO_THREADS.</summary>
     public int Threads { get; init; }
 
@@ -103,6 +108,7 @@ public sealed record KimodoSettings
             RunnerPath = Env(RunnerEnv),
             ModelDirectory = Env(ModelsEnv),
             TextModel = Env(TextModelEnv),
+            CudaBackendDirectory = Env(CudaEnv),
         };
         if (Env(ModelEnv) is { } m) s = s with { Model = m };
         if (Env(DeviceEnv) is { } d) s = s with { Device = d };
@@ -132,6 +138,26 @@ public sealed record KimodoSettings
         return null;
     }
 
+    /// <summary>The CUDA backend library kimodo-runner should load in addition to its own backends (passed as GGML_BACKEND_PATH), or null:
+    /// no folder set, not an absolute path, nothing complete installed there, or the runner already ships its own copy (never load two).</summary>
+    public string? ResolveCudaBackend()
+    {
+        if (CudaBackendDirectory is not { Length: > 0 } d || !IsAbsolute(d)) return null;
+        if (CudaBackend.ResolveLibrary(d) is not { } lib) return null;
+        return CudaBackend.IsBundled(ResolveRunner(), Path.GetFileName(lib)) ? null : lib;
+    }
+
+    /// <summary>These settings with <see cref="CudaBackendDirectory"/> pointing at <paramref name="directory"/> (default
+    /// <see cref="CudaBackend.DefaultDirectory"/>) when a CUDA backend that matches this runner build is installed there; unchanged
+    /// otherwise, or when a folder is already set (BLAZMA_KIMODO_CUDA_DIR wins).</summary>
+    public KimodoSettings WithInstalledCudaBackend(string? directory = null)
+    {
+        if (CudaBackendDirectory is { Length: > 0 }) return this;
+        var runner = ResolveRunner();
+        var dir = directory ?? CudaBackend.DefaultDirectory();
+        return CudaBackend.State(CudaBackendPackage.Load(runner), dir, runner).Status == CudaBackendStatus.Installed ? this with { CudaBackendDirectory = dir } : this;
+    }
+
     static bool IsAbsolute(string p)
     {
         try { return Path.IsPathFullyQualified(p); }
@@ -141,7 +167,7 @@ public sealed record KimodoSettings
     /// <summary>Absolute paths these settings point at (configured and resolved), longest first, for hiding them from agents.</summary>
     public IReadOnlyList<string> KnownPaths()
     {
-        var list = new List<string?> { RunnerPath, ResolveRunner(), ModelDirectory, ResolveMotionModel(), ResolveTextModel(), TextModel };
+        var list = new List<string?> { RunnerPath, ResolveRunner(), ModelDirectory, ResolveMotionModel(), ResolveTextModel(), TextModel, CudaBackendDirectory };
         try { if (ModelDirectory is { Length: > 0 } d) list.Add(Path.GetFullPath(d)); }
         catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException) { }
         foreach (var dir in SearchDirs()) list.Add(dir);

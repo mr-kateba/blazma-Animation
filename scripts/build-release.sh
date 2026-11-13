@@ -13,8 +13,10 @@
 #   KIMODO_RUNNER_WIN / KIMODO_RUNNER_LINUX   optional: folder (or .zip) with a kimodo-runner build (the artifacts of the manual
 #                  `kimodo-runner` workflow: kimodo-runner[.exe], kimodo + GGML libraries incl. the run-time backends ggml-cpu-*,
 #                  ggml-vulkan and optionally ggml-cuda + CUDA runtime DLLs + NVIDIA_CUDA_NOTICE.txt, SHA256SUMS*.txt). Default: build/cache/kimodo-runner-win64
-#                  and build/cache/kimodo-runner-linux-x64 when present. Bundled into tools/kimodo/ (the app finds it there: the repo
-#                  is private, so its release assets can't be downloaded anonymously) and also published as kimodo-runner-<version>-*.zip/.tar.gz.
+#                  and build/cache/kimodo-runner-linux-x64 when present. Bundled into tools/kimodo/ (CPU + Vulkan backends) and also published
+#                  as kimodo-runner-<version>-*.zip/.tar.gz. The CUDA backend is NOT bundled (DECISIONS D47): it becomes the separate asset
+#                  blazma-cuda-backend-<version>-win-x64.zip, described by tools/kimodo/cuda-backend.json (size + SHA-256 of the zip and of each
+#                  file), which the app downloads only when the user presses "Download GPU acceleration" in Settings → AI.
 #                  Missing = the release has no runner (Kimodo then needs a runner the user builds; docs/AI_INTEGRATION.md §5).
 # Output: build/release/<version>/   (zip, setup.exe, tar.gz, AppImage, SHA256SUMS.txt, RELEASE_NOTES-<version>.md)
 set -euo pipefail
@@ -154,6 +156,53 @@ if [ -e "$RUNNER_WIN" ]; then log "kimodo-runner (Windows)"; stage_runner "$RUNN
 else echo "NOTE: no Windows kimodo-runner at $RUNNER_WIN — the release will not include it"; fi
 if [ $SKIP_LINUX = 0 ] && [ -e "$RUNNER_LINUX" ]; then log "kimodo-runner (Linux)"; stage_runner "$RUNNER_LINUX" kimodo-runner "$WORK/runner-linux"; HAVE_RUNNER_LINUX=1; fi
 
+# ---------------------------------------------------------------- 3c. optional CUDA backend as its own asset (DECISIONS D47)
+# ggml-cuda.dll + cudart/cublas/cublasLt are ~940 MB of the runner (≈300 MB of the installer). They leave tools/kimodo and become
+# blazma-cuda-backend-<version>-win-x64.zip; tools/kimodo/cuda-backend.json carries its URL, size and SHA-256 and every file's size
+# and SHA-256, so the app verifies the download against values shipped in the installer. Without CUDA the runner uses Vulkan.
+RELEASE_REPO="${BLAZMA_RELEASE_REPO:-mr-kateba/blazma-Animation}"
+CUDA_FILES=(ggml-cuda.dll cudart64_12.dll cublas64_12.dll cublasLt64_12.dll NVIDIA_CUDA_NOTICE.txt)
+CUDA_ASSET="blazma-cuda-backend-$VERSION-win-x64.zip"
+HAVE_CUDA=0
+if [ $HAVE_RUNNER_WIN = 1 ] && [ -f "$WORK/runner-win/ggml-cuda.dll" ]; then
+  log "CUDA backend → $CUDA_ASSET"
+  CD="$WORK/cuda/blazma-cuda-backend-$VERSION-win-x64"; rm -rf "$WORK/cuda"; mkdir -p "$CD"
+  for f in "${CUDA_FILES[@]}"; do mv "$WORK/runner-win/$f" "$CD/"; done
+  [ -f "$WORK/runner-win/SHA256SUMS-cuda.txt" ] && mv "$WORK/runner-win/SHA256SUMS-cuda.txt" "$CD/"
+  cp "$SRC/packaging/legal/NVIDIA_CUDA_NOTICE.txt" "$CD/NVIDIA_CUDA_NOTICE.txt"   # the notice for this package (where it installs, how to remove it)
+  # Checksum lists that stay with the runner must not name the files that moved (and must still verify).
+  for sums in "$WORK/runner-win"/SHA256SUMS*.txt; do
+    [ -f "$sums" ] || continue
+    for f in "${CUDA_FILES[@]}"; do sed -i "/[ *]$f\r\?\$/d" "$sums"; done
+    (cd "$WORK/runner-win" && sha256sum -c --quiet "$(basename "$sums")") || die "runner checksums broken after moving the CUDA files out ($(basename "$sums"))"
+  done
+  (cd "$CD" && sha256sum "${CUDA_FILES[@]}" > SHA256SUMS-cuda-backend.txt)
+  ls "$WORK/runner-win" | grep -qiE '^(ggml-cuda|cudart|cublas)' && die "CUDA files left in tools/kimodo"
+  (cd "$WORK/cuda" && zip -q -r -9 -X "$OUT/$CUDA_ASSET" "$(basename "$CD")")
+  CUDA_SHA="$(sha256sum "$OUT/$CUDA_ASSET" | cut -d' ' -f1)"; CUDA_SIZE="$(stat -c %s "$OUT/$CUDA_ASSET")"
+  {
+    echo '{'
+    echo '  "format": 1,'
+    echo "  \"version\": \"$VERSION\","
+    echo '  "cuda": "12.4",'
+    echo "  \"asset\": \"$CUDA_ASSET\","
+    echo "  \"url\": \"https://github.com/$RELEASE_REPO/releases/download/v$VERSION/$CUDA_ASSET\","
+    echo "  \"size\": $CUDA_SIZE,"
+    echo "  \"sha256\": \"$CUDA_SHA\","
+    echo '  "library": "ggml-cuda.dll",'
+    echo '  "files": ['
+    n=0; for f in "${CUDA_FILES[@]}"; do
+      n=$((n+1)); sep=","; [ $n = ${#CUDA_FILES[@]} ] && sep=""
+      echo "    { \"name\": \"$f\", \"size\": $(stat -c %s "$CD/$f"), \"sha256\": \"$(sha256sum "$CD/$f" | cut -d' ' -f1)\" }$sep"
+    done
+    echo '  ]'
+    echo '}'
+  } > "$WORK/runner-win/cuda-backend.json"
+  python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$WORK/runner-win/cuda-backend.json" || die "cuda-backend.json is not valid JSON"
+  HAVE_CUDA=1
+  echo "CUDA asset: $CUDA_ASSET ($((CUDA_SIZE / 1048576)) MB, sha256 $CUDA_SHA); runner left in tools/kimodo: $(du -sh "$WORK/runner-win" | cut -f1)"
+fi
+
 # ---------------------------------------------------------------- 4. assemble
 # Docs and legal texts come from the source that was built ($SRC: the git snapshot with --from-git), never from local edits.
 DOCS=(AGENT_SETUP_AR.md AI_INTEGRATION.md MCP_TOOLS.md CLI_REFERENCE.md AGENT_RECIPES.md)
@@ -277,6 +326,10 @@ NOTES="$OUT/RELEASE_NOTES-$VERSION.md"
   echo "- لا يحتاج .NET ولا Godot. البرنامج غير موقَّع رقميًا: في Windows اضغط **More info** ثم **Run anyway** في SmartScreen."
   echo "- أدوات الذكاء الاصطناعي في مجلد \`tools\`؛ الشرح في \`docs/AGENT_SETUP_AR.md\`."
   [ $HAVE_RUNNER_WIN = 1 ] && echo "- \`kimodo-runner\` (توليد الحركة محليًا) مضمَّن في \`tools/kimodo\`. نماذج Kimodo لا تُضمَّن: تُنزَّل من داخل البرنامج (الإعدادات ← AI) بضغطة من المستخدم بعد عرض الحجم والتراخيص."
+  if [ $HAVE_CUDA = 1 ]; then
+    echo "- **تسريع NVIDIA (CUDA) اختياري ومنفصل:** المثبّت يحمل واجهتَي المعالج وVulkan فقط. لبطاقات NVIDIA يظهر في الإعدادات ← AI زر «تنزيل تسريع بطاقة الرسومات (CUDA)» يُنزِّل \`$CUDA_ASSET\` ($((CUDA_SIZE / 1048576)) MB) عند الضغط فقط ويتحقق منه. بدونه تعمل بطاقات NVIDIA عبر Vulkan."
+    echo "  - SHA-256: \`$CUDA_SHA\`"
+  fi
   echo "- تحقق من الملفات بـ \`SHA256SUMS.txt\`."
   echo
   echo "## ما تم إنجازه (من تقارير المراحل)"

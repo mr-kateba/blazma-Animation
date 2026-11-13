@@ -275,6 +275,11 @@ Section "Uninstall"
   Delete "$INSTDIR\uninstall.exe"
   RMDir "$INSTDIR"
 
+  ; The optional CUDA backend the user downloaded in Settings → AI (DECISIONS D47) belongs to this program: removed with it.
+  ; Only Blazma's own runtime folder; the parent goes only if it is empty.
+  RMDir /r "$LOCALAPPDATA\${APPKEY}\runtime"
+  RMDir "$LOCALAPPDATA\${APPKEY}"
+
   ; Downloaded AI models (GBs, outside the install folder): offered, default No (also when silent).
   ${If} ${FileExists} "${MODELSDIR}\*.*"
     ${GetSize} "${MODELSDIR}" "/S=0M" $1 $2 $3
