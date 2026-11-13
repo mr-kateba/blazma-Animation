@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using Blazma.AI;
 using Blazma.Commands;
+using Blazma.Core.Text;
 using Godot;
 
 namespace Blazma.UI.Views;
@@ -49,7 +50,7 @@ public static partial class AiText
 
     /// <summary>One line per device kimodo-runner listed: "NVIDIA GeForce RTX 4070 (CUDA, 12 GB)".</summary>
     public static string Devices(IReadOnlyList<KimodoDevice> devices) =>
-        string.Join("\n", devices.Select(d => "• " + Ltr(d.MemoryTotalBytes > 0 && d.IsGpu ? $"{d.Label}, {Bytes(d.MemoryTotalBytes)}" : d.Label)));
+        string.Join("\n", devices.Select(d => "• " + Ltr(d.MemoryTotalBytes > 0 && d.IsGpu ? $"{d.Label}, {Memory(d.MemoryTotalBytes)}" : d.Label)));
 
     public static string Keywords => string.Join(", ", ProceduralMotionProvider.SupportedKeywords);
 
@@ -141,5 +142,19 @@ public static partial class AiText
     /// <summary>Elapsed time as m:ss.</summary>
     public static string Elapsed(TimeSpan t) => $"{(int)t.TotalMinutes}:{t.Seconds:00}";
 
-    public static string Bytes(long? b) => b is null ? "?" : string.Format(CultureInfo.InvariantCulture, "{0:0.#} GB", b.Value / (double)HardwareReport.GiB);
+    /// <summary>A file or download size in decimal units (1 GB = 10^9 bytes, as Hugging Face and GitHub state them), translated:
+    /// "6.2 GB" / "6.2 جيجابايت". The one formatter for model packages, download progress, the CUDA package, free space and exports.</summary>
+    public static string Size(long? b)
+    {
+        if (b is not { } v) return "?";
+        var (n, unit) = ByteSize.Split(v);
+        var template = unit switch { "GB" => T("{0} GB"), "MB" => T("{0} MB"), "KB" => T("{0} KB"), _ => T("{0} bytes") };
+        return string.Format(CultureInfo.InvariantCulture, template, n);
+    }
+
+    /// <summary>RAM or video memory: GB of 2^30 bytes, as Windows and the card makers label it ("16 GB RAM").</summary>
+    public static string Memory(long? b) => b is null ? "?" : string.Format(CultureInfo.InvariantCulture, T("{0} GB"), ByteSize.MemoryGb(b.Value));
+
+    /// <summary>A memory requirement from the model catalogue, e.g. 16 → "16 GB".</summary>
+    public static string MemoryGiB(double gib) => string.Format(CultureInfo.InvariantCulture, T("{0} GB"), gib.ToString("0.#", CultureInfo.InvariantCulture));
 }

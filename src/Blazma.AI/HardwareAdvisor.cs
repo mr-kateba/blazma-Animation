@@ -30,22 +30,23 @@ public static class HardwareAdvisor
 
         string en, ar;
         var ramText = ram is { } x ? Gb(x) : "unknown";
+        var ramTextAr = ram is { } xa ? GbAr(xa) : "غير معروفة";
         var gpuText = gpu is null ? "no graphics card detected" : $"{gpu.Name}{(gpu.VramBytes is { } b ? $" ({Gb(b / (double)HardwareReport.GiB)} VRAM)" : "")}";
-        var gpuTextAr = gpu is null ? "لم تُكتشف بطاقة رسوميات" : $"{gpu.Name}{(gpu.VramBytes is { } b2 ? $" (ذاكرة رسوميات {Gb(b2 / (double)HardwareReport.GiB)})" : "")}";
+        var gpuTextAr = gpu is null ? "لم تُكتشف بطاقة رسوميات" : $"{gpu.Name}{(gpu.VramBytes is { } b2 ? $" (ذاكرة رسوميات {GbAr(b2 / (double)HardwareReport.GiB)})" : "")}";
         if (!fit.Fits)
         {
             en = $"This PC has {ramText} RAM; even the smallest package needs about {pick.MinRamGiB:0} GB. Generation may fail or be very slow.";
-            ar = $"ذاكرة هذا الجهاز {ramText}، وأصغر حزمة تحتاج نحو {pick.MinRamGiB:0} GB. قد يفشل التوليد أو يكون بطيئًا جدًا.";
+            ar = $"ذاكرة هذا الجهاز {ramTextAr}، وأصغر حزمة تحتاج نحو {pick.MinRamGiB:0} جيجابايت. قد يفشل التوليد أو يكون بطيئًا جدًا.";
         }
         else if (fit.GpuFits)
         {
             en = $"{ramText} RAM and {gpuText}: the {pick.NameEn} package runs on the graphics card.";
-            ar = $"ذاكرة {ramText} و{gpuTextAr}: الحزمة «{pick.NameAr}» تعمل على بطاقة الرسوميات.";
+            ar = $"ذاكرة {ramTextAr} و{gpuTextAr}: الحزمة «{pick.NameAr}» تعمل على بطاقة الرسوميات.";
         }
         else
         {
             en = $"{ramText} RAM, {gpuText}: the {pick.NameEn} package on the CPU is the safe choice (slower than a graphics card).";
-            ar = $"ذاكرة {ramText}، {gpuTextAr}: الحزمة «{pick.NameAr}» على المعالج هي الخيار الآمن (أبطأ من بطاقة الرسوميات).";
+            ar = $"ذاكرة {ramTextAr}، {gpuTextAr}: الحزمة «{pick.NameAr}» على المعالج هي الخيار الآمن (أبطأ من بطاقة الرسوميات).";
         }
         if (ram is null) { en += " RAM could not be read."; ar += " تعذّرت قراءة حجم الذاكرة."; }
         return new ModelRecommendation(pick.Id, fit.Device, gpu, en, ar, fits);
@@ -64,20 +65,22 @@ public static class HardwareAdvisor
         if (!fits)
         {
             en = $"Needs at least {t.MinRamGiB:0} GB RAM ({t.RecommendedRamGiB:0} GB recommended).";
-            ar = $"يحتاج {t.MinRamGiB:0} GB ذاكرة على الأقل (يُنصح بـ{t.RecommendedRamGiB:0} GB).";
+            ar = $"يحتاج {t.MinRamGiB:0} جيجابايت ذاكرة على الأقل (يُنصح بـ{t.RecommendedRamGiB:0} جيجابايت).";
         }
         else if (gpuFits)
         {
             en = vram >= t.RecommendedVramGiB ? "Fits on the graphics card." : $"Runs on the graphics card; {t.RecommendedVramGiB:0} GB VRAM recommended.";
-            ar = vram >= t.RecommendedVramGiB ? "يعمل على بطاقة الرسوميات." : $"يعمل على بطاقة الرسوميات؛ يُنصح بذاكرة رسوميات {t.RecommendedVramGiB:0} GB.";
+            ar = vram >= t.RecommendedVramGiB ? "يعمل على بطاقة الرسوميات." : $"يعمل على بطاقة الرسوميات؛ يُنصح بذاكرة رسوميات {t.RecommendedVramGiB:0} جيجابايت.";
         }
         else
         {
             en = ram >= t.RecommendedRamGiB || ram is null ? "Runs on the CPU (slower)." : $"Runs on the CPU, but {t.RecommendedRamGiB:0} GB RAM is recommended.";
-            ar = ram >= t.RecommendedRamGiB || ram is null ? "يعمل على المعالج (أبطأ)." : $"يعمل على المعالج، لكن يُنصح بذاكرة {t.RecommendedRamGiB:0} GB.";
+            ar = ram >= t.RecommendedRamGiB || ram is null ? "يعمل على المعالج (أبطأ)." : $"يعمل على المعالج، لكن يُنصح بذاكرة {t.RecommendedRamGiB:0} جيجابايت.";
         }
         return new TierFit(t.Id, fits, gpuFits, device, en, ar);
     }
 
+    // Memory is counted in GB of 2^30 bytes, as Windows and the card makers label it (file sizes use decimal units: ByteSize).
     static string Gb(double gib) => gib.ToString(gib < 10 ? "0.#" : "0", CultureInfo.InvariantCulture) + " GB";
+    static string GbAr(double gib) => gib.ToString(gib < 10 ? "0.#" : "0", CultureInfo.InvariantCulture) + " جيجابايت";
 }

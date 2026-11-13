@@ -85,7 +85,7 @@ static class Program
             var server = new ToolServer(conn);
             var options = new McpServerOptions
             {
-                ServerInfo = new Implementation { Name = "blazma-mcp", Version = "0.1.0" },
+                ServerInfo = new Implementation { Name = "blazma-mcp", Version = "1.0.0" },
                 ServerInstructions = Instructions,
                 Capabilities = new ServerCapabilities { Tools = new ToolsCapability() },
                 Handlers = new McpServerHandlers

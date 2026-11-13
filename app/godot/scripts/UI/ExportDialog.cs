@@ -488,10 +488,7 @@ public partial class ExportDialog : ConfirmationDialog
     /// <summary>Keeps paths and numbers in left-to-right order inside right-to-left text.</summary>
     static string Ltr(string s) => "\u2066" + s + "\u2069";
 
-    static string FormatSize(long bytes) =>
-        bytes >= 1 << 20 ? (bytes / 1048576.0).ToString("0.0", CultureInfo.InvariantCulture) + " MB"
-        : bytes >= 1024 ? (bytes / 1024.0).ToString("0.0", CultureInfo.InvariantCulture) + " KB"
-        : bytes.ToString(CultureInfo.InvariantCulture) + " B";
+    static string FormatSize(long bytes) => AiText.Size(bytes);
 
     // ---- test hooks -------------------------------------------------------------------------------------------------
 

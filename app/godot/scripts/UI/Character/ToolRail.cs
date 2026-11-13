@@ -79,6 +79,25 @@ public partial class ToolRail : PanelContainer
         return b;
     }
 
+    readonly Dictionary<Button, string> _labels = new();
+
+    /// <summary>True when the rail shows icons only (a short stage: 720 or 768 px high windows with the timeline open).</summary>
+    public bool Compact { get; private set; }
+
+    /// <summary>Icons only (the names stay in the tooltips) when the stage is too short for the labelled rail.</summary>
+    public void SetCompact(bool compact)
+    {
+        if (compact == Compact) return;
+        Compact = compact;
+        foreach (var (b, _) in _icons)
+        {
+            if (!_labels.ContainsKey(b)) _labels[b] = b.Text;
+            b.Text = compact ? "" : _labels[b];
+            b.CustomMinimumSize = compact ? new Vector2(40, 34) : new Vector2(54, 50);
+            b.VerticalIconAlignment = compact ? VerticalAlignment.Center : VerticalAlignment.Top;
+        }
+    }
+
     /// <summary>Enable/disable according to the selection (called by MainWindow after every selection or pose change).</summary>
     public void Update(bool hasCharacter, bool canPin, bool pinned, bool canReset)
     {

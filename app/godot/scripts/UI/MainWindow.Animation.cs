@@ -87,11 +87,22 @@ public partial class MainWindow
         _mSettings.AddCheckItem("Motion Trail", MTrail);
         _mSettings.AddCheckItem("Onion Skin", MOnion);
         _mOnion = new PopupMenu { Name = "OnionFrames" };
-        foreach (var n in OnionChoices) _mOnion.AddRadioCheckItem(string.Format(CultureInfo.InvariantCulture, Tr("{0} frames"), n), MOnionBase + n);
+        foreach (var n in OnionChoices) _mOnion.AddRadioCheckItem("", MOnionBase + n);
+        RefreshOnionLabels();
         _mOnion.IdPressed += id => App.SetOnionFrames((int)id - MOnionBase);
         _mSettings.AddChild(_mOnion);
         _mSettings.AddSubmenuNodeItem("Onion Skin Range", _mOnion);
         _mSettings.IdPressed += id => OnMenu((int)id);
+    }
+
+    /// <summary>"3 frames" is formatted, not a msgid: set again when the language changes.</summary>
+    void RefreshOnionLabels()
+    {
+        for (var i = 0; i < _mOnion.ItemCount; i++)
+        {
+            _mOnion.SetItemText(i, string.Format(CultureInfo.InvariantCulture, Tr("{0} frames"), _mOnion.GetItemId(i) - MOnionBase));
+            _mOnion.SetItemAutoTranslateMode(i, AutoTranslateModeEnum.Disabled);
+        }
     }
 
     void OnAnimationMenu(int id)

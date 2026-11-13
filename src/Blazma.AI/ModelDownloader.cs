@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
+using Blazma.Core.Text;
 
 namespace Blazma.AI;
 
@@ -369,7 +370,7 @@ public sealed class ModelDownloader : IDisposable
         }
     }
 
-    static string Mb(long bytes) => $"{bytes / (1024.0 * 1024 * 1024):0.##} GB";
+    static string Mb(long bytes) => ByteSize.Format(bytes);
 
     /// <summary>Package byte counter, speed over the last few seconds, throttled reports.</summary>
     sealed class Meter(ModelDownloader owner, string packageId, int fileCount, long total)

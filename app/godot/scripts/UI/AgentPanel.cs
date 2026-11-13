@@ -131,8 +131,9 @@ public partial class AgentPanel : PanelContainer
         return l;
     }
 
-    /// <summary>Technical text (tool names, arguments, commands): monospace, never translated, always left-to-right.</summary>
-    Label Tech(string text, string variation = "MonoLabel", bool wrap = false)
+    /// <summary>Technical text (tool names, arguments, commands): never translated, always left-to-right. Code is monospace;
+    /// arguments use "MonoFaint", which switches to the regular font in Arabic (they can hold an Arabic prompt).</summary>
+    Label Tech(string text, string variation = "CodeLabel", bool wrap = false)
     {
         var l = new Label { Text = text, ThemeTypeVariation = variation, AutoTranslateMode = AutoTranslateModeEnum.Disabled, TextDirection = Control.TextDirection.Ltr };
         l.HorizontalAlignment = HorizontalAlignment.Left;
@@ -308,7 +309,7 @@ public partial class AgentPanel : PanelContainer
             box.AddChild(head);
 
             var cmdBox = Card();
-            cmdBox.AddChild(Tech(CommandText, "MonoLabel", true));
+            cmdBox.AddChild(Tech(CommandText, "CodeLabel", true));
             box.AddChild(cmdBox);
 
             var folders = new Button { Text = "Folders agents may read…", FocusMode = FocusModeEnum.None, SizeFlagsHorizontal = SizeFlags.ShrinkBegin };
@@ -346,7 +347,7 @@ public partial class AgentPanel : PanelContainer
             var top = new HBoxContainer();
             top.AddThemeConstantOverride("separation", 8);
             top.AddChild(WarnIcon());
-            var tool = Tech(p.Tool, "MonoLabel");
+            var tool = Tech(p.Tool, "CodeLabel");
             tool.SizeFlagsHorizontal = SizeFlags.ExpandFill;
             top.AddChild(tool);
             var from = host.Sessions.FirstOrDefault(s => s.Id == p.SessionId)?.ClientName ?? "agent";
@@ -582,14 +583,14 @@ public partial class AgentPanel : PanelContainer
         v.AddThemeConstantOverride("separation", 2);
         var row = new HBoxContainer();
         row.AddThemeConstantOverride("separation", 6);
-        row.AddChild(Tech(Local(c.Time, "HH:mm:ss"), "MonoFaint"));
+        row.AddChild(Tech(Local(c.Time, "HH:mm:ss"), "CodeFaint"));
         row.AddChild(c.Ok ? OkIcon() : FailIcon());
-        var tool = Tech(c.Tool, "MonoLabel");
+        var tool = Tech(c.Tool, "CodeLabel");
         tool.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         row.AddChild(tool);
         if (!c.Ok && c.ErrorCode is not null)
         {
-            var code = Tech(c.ErrorCode, "MonoFaint");
+            var code = Tech(c.ErrorCode, "CodeFaint");
             code.AddThemeColorOverride("font_color", c.ErrorCode == "approval_required" ? P.Warn : P.Err);
             row.AddChild(code);
         }
