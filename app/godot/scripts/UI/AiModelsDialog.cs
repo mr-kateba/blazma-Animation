@@ -205,13 +205,8 @@ public partial class AiModelsDialog : AcceptDialog
 
     // ---- formatting ---------------------------------------------------------------------------------------------------
 
-    public static string FormatSize(long? bytes)
-    {
-        if (bytes is not { } b) return "?";
-        return b >= 1L << 30 ? string.Format(CultureInfo.InvariantCulture, "{0:0.0} GB", b / (double)(1L << 30))
-            : b >= 1L << 20 ? string.Format(CultureInfo.InvariantCulture, "{0:0.0} MB", b / (double)(1L << 20))
-            : string.Format(CultureInfo.InvariantCulture, "{0:0} KB", b / 1024.0);
-    }
+    /// <summary>File and download sizes: decimal units, translated (see <see cref="AiText.Size"/>).</summary>
+    public static string FormatSize(long? bytes) => AiText.Size(bytes);
 
     static string L(string s) => AiText.Ltr(s);
     static bool Arabic => TranslationServer.GetLocale().StartsWith("ar", StringComparison.Ordinal);
@@ -275,8 +270,8 @@ public partial class AiModelsDialog : AcceptDialog
         _hwGpu.Text = g is null || g.Integrated == true && g.VramBytes is null
             ? (g is null ? Tr("No dedicated GPU detected") : string.Format(CultureInfo.InvariantCulture, Tr("Graphics: {0} (built into the processor, shares system memory)"), L(g.Name)))
             : g.Integrated == true ? string.Format(CultureInfo.InvariantCulture, Tr("Graphics: {0} (built into the processor, shares system memory)"), L(g.Name))
-            : string.Format(CultureInfo.InvariantCulture, Tr("Graphics card: {0}, video memory {1}"), L(g.Name), L(g.VramBytes is { } v ? FormatSize(v) : Tr("unknown")));
-        _hwOther.Text = string.Format(CultureInfo.InvariantCulture, Tr("Memory (RAM): {0}   Processor: {1} cores"), L(FormatSize(hw.TotalRamBytes)), L(hw.LogicalCpus.ToString(CultureInfo.InvariantCulture)));
+            : string.Format(CultureInfo.InvariantCulture, Tr("Graphics card: {0}, video memory {1}"), L(g.Name), L(g.VramBytes is { } v ? AiText.Memory(v) : Tr("unknown")));
+        _hwOther.Text = string.Format(CultureInfo.InvariantCulture, Tr("Memory (RAM): {0}   Processor: {1} cores"), L(AiText.Memory(hw.TotalRamBytes)), L(hw.LogicalCpus.ToString(CultureInfo.InvariantCulture)));
         _hwNote.Text = hw.Notes.Count > 0 ? string.Join("\n", hw.Notes) : "";
         _rec = HardwareAdvisor.Recommend(hw, Catalog);
         if (!_deviceTouched) DeviceBox.Select(AiText.DeviceIndex(_rec.Device));
@@ -333,7 +328,7 @@ public partial class AiModelsDialog : AcceptDialog
             var t = c.Tier;
             c.Name.Text = TierName(t);
             c.Info.Text = string.Format(CultureInfo.InvariantCulture, Tr("Download size {0}. Needs {1} RAM (more is better: {2}); a graphics card needs {3} video memory."),
-                L(FormatSize(t.TotalBytes)), L($"{t.MinRamGiB:0} GB"), L($"{t.RecommendedRamGiB:0} GB"), L($"{t.MinVramGiB:0} GB"));
+                L(FormatSize(t.TotalBytes)), L(AiText.MemoryGiB(t.MinRamGiB)), L(AiText.MemoryGiB(t.RecommendedRamGiB)), L(AiText.MemoryGiB(t.MinVramGiB)));
             c.Reason.Text = Arabic ? t.QualityAr : t.QualityEn;
             var st = ModelCatalog.State(t, _dir);
             c.Installed = st.Installed;
@@ -381,7 +376,7 @@ public partial class AiModelsDialog : AcceptDialog
             var check = new CheckBox { Text = string.Format(CultureInfo.InvariantCulture, Tr("I have read and accept: {0}"), lic.Name), AutoTranslateMode = AutoTranslateModeEnum.Disabled, FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
             check.SetMeta("licence", id);
             check.Toggled += _ => UpdateStart();
-            var link = new Button { Text = Tr("Open the licence"), FocusMode = Control.FocusModeEnum.None, Disabled = lic.Url.Length == 0, TooltipText = lic.Url };
+            var link = new Button { Text = Tr("Open the licence"), AutoTranslateMode = AutoTranslateModeEnum.Disabled, FocusMode = Control.FocusModeEnum.None, Disabled = lic.Url.Length == 0, TooltipText = lic.Url };
             link.SetMeta("url", lic.Url);
             var url = lic.Url;
             link.Pressed += () => { if (url.StartsWith("https://", StringComparison.Ordinal)) OS.ShellOpen(url); };

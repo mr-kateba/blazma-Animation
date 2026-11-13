@@ -346,13 +346,13 @@ public partial class AiSettingsDialog : ConfirmationDialog
     {
         var gpus = hw.Gpus.Count == 0
             ? Tr("no GPU found")
-            : string.Join("; ", hw.Gpus.Select(g => g.VramBytes is { } v ? $"{g.Name} ({AiText.Bytes(v)})" : g.Name));
+            : string.Join("; ", hw.Gpus.Select(g => g.VramBytes is { } v ? $"{g.Name} ({AiText.Memory(v)})" : g.Name));
         _hardware.Text = string.Format(CultureInfo.InvariantCulture, Tr("This computer: {0} CPU cores, {1} RAM, GPU: {2}"),
-            AiText.Ltr(hw.LogicalCpus.ToString(CultureInfo.InvariantCulture)), AiText.Ltr(AiText.Bytes(hw.TotalRamBytes)), AiText.Ltr(gpus));
+            AiText.Ltr(hw.LogicalCpus.ToString(CultureInfo.InvariantCulture)), AiText.Ltr(AiText.Memory(hw.TotalRamBytes)), AiText.Ltr(gpus));
         var g = hw.BestGpu;
         _gpuLine.Text = g is null ? Tr("No dedicated GPU detected: Kimodo will run on the processor.")
             : string.Format(CultureInfo.InvariantCulture, g.Integrated == true ? Tr("Recognised graphics: {0} (built into the processor, shares system memory)") : Tr("Recognised graphics card: {0}, video memory {1}"),
-                AiText.Ltr(g.Name), AiText.Ltr(g.VramBytes is { } v ? AiModelsDialog.FormatSize(v) : Tr("unknown")));
+                AiText.Ltr(g.Name), AiText.Ltr(g.VramBytes is { } v ? AiText.Memory(v) : Tr("unknown")));
     }
 
     // ---- check --------------------------------------------------------------------------------------------------------

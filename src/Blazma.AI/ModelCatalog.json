@@ -55,7 +55,7 @@
       "minVramGiB": 8, "recommendedVramGiB": 12,
       "autoNeedsGpu": true,
       "qualityEn": "Text encoder Q8_0, the variant kimodo.cpp recommends and uses by default. Best balance; fastest on a graphics card with 12 GB or more.",
-      "qualityAr": "مُرمِّز النص Q8_0، وهو الذي يوصي به kimodo.cpp ويستخدمه افتراضيًا. أفضل توازن، والأسرع على بطاقة رسوميات بذاكرة 12 GB أو أكثر."
+      "qualityAr": "مُرمِّز النص Q8_0، وهو الذي يوصي به kimodo.cpp ويستخدمه افتراضيًا. أفضل توازن، والأسرع على بطاقة رسوميات بذاكرة 12 جيجابايت أو أكثر."
     },
     {
       "id": "reference",
@@ -68,7 +68,7 @@
       "minVramGiB": 16, "recommendedVramGiB": 20,
       "autoNeedsGpu": true,
       "qualityEn": "Unquantised BF16 text encoder (upstream: \"reference\"). Largest download; only for PCs with 32 GB RAM and a 20 GB+ graphics card.",
-      "qualityAr": "مُرمِّز النص BF16 بلا ضغط (يصفه المصدر بـ«المرجعي»). أكبر تنزيل، فقط لأجهزة بذاكرة 32 GB وبطاقة رسوميات 20 GB أو أكثر."
+      "qualityAr": "مُرمِّز النص BF16 بلا ضغط (يصفه المصدر بـ«المرجعي»). أكبر تنزيل، فقط لأجهزة بذاكرة 32 جيجابايت وبطاقة رسوميات 20 جيجابايت أو أكثر."
     }
   ],
   "runner": {

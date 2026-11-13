@@ -6,13 +6,17 @@ using Blazma.Core.Model;
 using Blazma.Core.Persistence;
 using Blazma.Tests.Advanced;
 using Blazma.Tests.Persistence;
+using Xunit.Abstractions;
 
 namespace Blazma.Tests.Commands;
 
 /// <summary>Audit fixes: undo history keeps only what an edit changed and is capped; saves verify by manifest; snapshots for
 /// autosave on a worker thread.</summary>
-public class HistoryAndSaveTests
+[Collection(HistoryTimingCollection.Name)]
+public class HistoryAndSaveTests(ITestOutputHelper output)
 {
+    static double Median(List<double> v) => v.Order().ElementAt(v.Count / 2);
+
     static string Rename(ProjectSession s, string name) { P8.Ok(s, "project.rename", new { name }); return name; }
 
     [Fact]
@@ -26,17 +30,33 @@ public class HistoryAndSaveTests
         var fullBytes = ClipDelta.EstimateBytes(clip);
         var bytes0 = s.HistoryBytes;
 
-        P8.Ok(s, "key.set", new { clipId, characterId = ces, bones = "Skeleton_torso_joint_1", frame = 0 }); // warm-up
-        const int n = 40;
-        var times = new List<double>();
-        for (var i = 1; i <= n; i++)
+        // Timing (robust, not weaker): warm up first, then interleave every key.set with a whole-clip JSON snapshot (what each step
+        // used to cost, twice) so background load slows both alike. A regression to whole-clip snapshots fails the relative check on
+        // any machine; the absolute check takes the best of three batch medians, so one burst of load cannot fail it alone.
+        P8.Ok(s, "key.set", new { clipId, characterId = ces, bones = "Skeleton_torso_joint_1", frame = 0 }); // warm-up (counted in history)
+        for (var w = 0; w < 3; w++) _ = P8.Json(clip);
+        const int batches = 3, perBatch = 15, n = batches * perBatch;
+        var keyTimes = new List<double>(); var snapTimes = new List<double>(); var batchMedians = new List<double>();
+        for (var b = 0; b < batches; b++)
         {
-            var sw = Stopwatch.StartNew();
-            P8.Ok(s, "key.set", new { clipId, characterId = ces, bones = "Skeleton_torso_joint_1", frame = i * 3 });
-            times.Add(sw.Elapsed.TotalMilliseconds);
+            var batch = new List<double>();
+            for (var j = 1; j <= perBatch; j++)
+            {
+                var i = b * perBatch + j;
+                var sw = Stopwatch.StartNew();
+                P8.Ok(s, "key.set", new { clipId, characterId = ces, bones = "Skeleton_torso_joint_1", frame = i * 3 });
+                var t = sw.Elapsed.TotalMilliseconds;
+                batch.Add(t); keyTimes.Add(t);
+                sw.Restart();
+                _ = P8.Json(P8.Clip(s, clipId));
+                snapTimes.Add(sw.Elapsed.TotalMilliseconds);
+            }
+            batchMedians.Add(Median(batch));
         }
-        var median = times.Order().ElementAt(n / 2); // robust to GC pauses and other tests running in parallel
-        Assert.True(median < 10, $"key.set took {median:0.0} ms per command (median; was ~52 ms with whole-clip JSON snapshots)");
+        var keyMedian = Median(keyTimes); var snapMedian = Median(snapTimes);
+        output.WriteLine($"key.set median {keyMedian:0.00} ms (batches {string.Join(", ", batchMedians.Select(m => m.ToString("0.00")))}), whole-clip snapshot median {snapMedian:0.00} ms");
+        Assert.True(keyMedian < snapMedian / 2, $"key.set ({keyMedian:0.00} ms) costs more than half a whole-clip snapshot ({snapMedian:0.00} ms): history went back to whole-clip copies");
+        Assert.True(batchMedians.Min() < 10, $"key.set took {batchMedians.Min():0.0} ms per command (best batch median; was ~52 ms with whole-clip JSON snapshots)");
 
         // Memory: each step holds the changed track(s), far less than the whole clip (was 2 whole-clip copies per step).
         var perStep = (s.HistoryBytes - bytes0) / (n + 1.0);
@@ -162,4 +182,12 @@ public class HistoryAndSaveTests
         Assert.False(session.AutosaveSnapshot(ProjectArchive.Snapshot(project)));
         Assert.False(Directory.Exists(session.Folder));
     }
+}
+
+/// <summary>The history tests measure wall-clock time: they run on their own, after the parallel tests, so CPU-heavy tests running
+/// alongside cannot skew them.</summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class HistoryTimingCollection
+{
+    public const string Name = "History timing (serial)";
 }

@@ -511,7 +511,8 @@ public partial class GenerateMotionDialog : ConfirmationDialog
             var caption = new LineEdit
             {
                 Text = seg.Caption, TextDirection = Control.TextDirection.Auto, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-                CustomMinimumSize = new Vector2(220, 0), TooltipText = "The English text the generator receives for this step. Kimodo understands English motion descriptions best.",
+                CustomMinimumSize = new Vector2(220, 0), AutoTranslateMode = AutoTranslateModeEnum.Disabled, // English on purpose: sent to the generator
+                TooltipText = TranslationServer.Translate("The English text the generator receives for this step. Kimodo understands English motion descriptions best."),
             };
             var seconds = new UnitSpinBox { MinValue = MotionRequest.MinDurationSeconds, MaxValue = MotionRequest.MaxDurationSeconds, Step = 0.05, Value = seg.DurationSeconds, UnitEn = "s" };
             seconds.LocalizeNumeralSystem = false;

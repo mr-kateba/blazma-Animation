@@ -161,7 +161,7 @@ public partial class SelfTest
             await Settle();
             Check($"models {lang} hardware is probed off the main thread (frames kept being drawn)", () => frames >= 10 ? null : $"frames={frames}");
             Check($"models {lang} hardware shows 'no dedicated GPU' and RAM", () =>
-                dlg.GpuText.Length > 0 && dlg.HardwareOtherText.Contains("8.0 GB") && dlg.GpuText == TranslationServer.Translate("No dedicated GPU detected") ? null : $"{dlg.GpuText} // {dlg.HardwareOtherText}");
+                dlg.GpuText.Length > 0 && dlg.HardwareOtherText.Contains(AiText.Memory(8L << 30)) && AiText.Memory(8L << 30) == (en ? "8 GB" : "8 جيجابايت") && dlg.GpuText == TranslationServer.Translate("No dedicated GPU detected") ? null : $"{dlg.GpuText} // {dlg.HardwareOtherText}");
             Check($"models {lang} the advisor's choice carries the 'Recommended' badge, only it", () =>
                 dlg.Recommendation?.TierId == "light" && dlg.Cards["light"].Badge.Visible && !dlg.Cards["standard"].Badge.Visible && !dlg.Cards["reference"].Badge.Visible ? null : $"rec={dlg.Recommendation?.TierId}");
             Check($"models {lang} tiers that do not fit warn but stay selectable", () =>
@@ -176,7 +176,7 @@ public partial class SelfTest
                 await WaitFor(() => dlg.ProbesDone > probes0, 10);
                 await Settle();
                 Check("models Refresh shows the new GPU with its video memory and moves the badge", () =>
-                    dlg.GpuText.Contains("RTX 4090") && dlg.GpuText.Contains("24.0 GB") && dlg.Cards["reference"].Badge.Visible && !dlg.Cards["light"].Badge.Visible ? null : $"{dlg.GpuText} rec={dlg.Recommendation?.TierId}");
+                    dlg.GpuText.Contains("RTX 4090") && dlg.GpuText.Contains(AiText.Memory(24L << 30)) && dlg.Cards["reference"].Badge.Visible && !dlg.Cards["light"].Badge.Visible ? null : $"{dlg.GpuText} rec={dlg.Recommendation?.TierId}");
                 pc = weak; probes0 = dlg.ProbesDone;
                 PressButton(dlg.RefreshButton);
                 await WaitFor(() => dlg.ProbesDone > probes0, 10);
@@ -188,7 +188,8 @@ public partial class SelfTest
             PressButton(dlg.Cards["light"].Action);
             await Settle();
             Check($"models {lang} confirmation shows size, free space, folder and both licences", () =>
-                dlg.Current == AiModelsDialog.View.Confirm && dlg.Plan is { } p && dlg.ConfirmSizes.Contains(AiModelsDialog.FormatSize(p.BytesTotal)) && dlg.ConfirmSpace.Contains(" GB")
+                dlg.Current == AiModelsDialog.View.Confirm && dlg.Plan is { } p && dlg.ConfirmSizes.Contains(AiModelsDialog.FormatSize(p.BytesTotal)) && dlg.ConfirmSpace.Contains(en ? " GB" : " جيجابايت")
+                && (en ? !dlg.ConfirmSizes.Contains("بايت") : !new[] { "GB", "MB", "KB" }.Any(dlg.ConfirmSizes.Contains))
                 && dlg.DirEdit.Text == dir && dlg.LicenceChecks.Count == 2 ? null : $"{dlg.Current} {dlg.ConfirmSizes} {dlg.ConfirmSpace} {dlg.LicenceChecks.Count}");
             Check($"models {lang} Download stays disabled until every licence is ticked", () =>
             {

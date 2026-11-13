@@ -103,6 +103,7 @@ public partial class MainWindow : Control
         InitCharacters();
         Props.Rebuild();
         RefreshAll();
+        SetupResponsiveLayout();
 
         CallDeferred(nameof(StartupChecks));
     }
@@ -146,12 +147,13 @@ public partial class MainWindow : Control
             _fpsText.Text = string.Format(Tr("{0} FPS"), P8.Ltr(Engine.GetFramesPerSecond().ToString("0", CultureInfo.InvariantCulture)));
         }
         FlushHistoryIfStale();
+        FitLayoutIfChanged();
     }
 
     public override void _Notification(int what)
     {
         if (what == NotificationWMCloseRequest) RequestQuit();
-        else if (what == NotificationTranslationChanged && IsNodeReady()) { Keys.RefreshHints(); UpdateMenus(); UpdateStatus(); UpdateChip(); UpdateAgentUi(); }
+        else if (what == NotificationTranslationChanged && IsNodeReady()) { Keys.RefreshHints(); UpdateMenus(); UpdateStatus(); UpdateChip(); UpdateAgentUi(); RefreshOnionLabels(); QueueFitLayout(); }
     }
 
     /// <summary>Top-level menu popup by index (Project, Edit, Animation, Rigging, Settings); used by screenshot tests.</summary>
@@ -170,6 +172,7 @@ public partial class MainWindow : Control
         W.Fill(page);
         AddChild(page);
 
+        PageNode = page;
         page.AddChild(BuildTopBar());
 
         // Body ----------------------------------------------------------------------------------
@@ -225,7 +228,14 @@ public partial class MainWindow : Control
         CombatPanelNode.SizeFlagsHorizontal = SizeFlags.Fill;
         _rightDock.AddChild(CombatPanelNode);
         _rightDock.AddChild(HistoryPanel);
-        _splitInner.AddChild(_rightDock);
+        // The panels stack; on a short window (768, 720 px) the column scrolls instead of pushing the status bar off screen.
+        var rightScroll = new ScrollContainer
+        {
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, SizeFlagsHorizontal = SizeFlags.Fill, SizeFlagsVertical = SizeFlags.ExpandFill,
+        };
+        rightScroll.AddChild(_rightDock);
+        _rightDock.VisibilityChanged += () => rightScroll.Visible = _rightDock.Visible;
+        _splitInner.AddChild(rightScroll);
 
         _splitOuter = new HSplitContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill, SizeFlagsVertical = SizeFlags.ExpandFill };
         Dock = new LeftDock(this, OutlinePanel) { SizeFlagsHorizontal = SizeFlags.Fill };
@@ -259,6 +269,7 @@ public partial class MainWindow : Control
     {
         var bar = new PanelContainer { ThemeTypeVariation = "TopBar", CustomMinimumSize = new Vector2(0, 40) };
         var row = new HBoxContainer();
+        _topBar = bar; _topRow = row;
         row.AddThemeConstantOverride("separation", 8);
         bar.AddChild(row);
 
@@ -267,6 +278,7 @@ public partial class MainWindow : Control
         brand.AddThemeConstantOverride("separation", 8);
         brand.AddChild(_brandMark);
         var name = W.Label("Blazma Animation", "Heading", false);
+        _brandName = name;
         brand.AddChild(name);
         row.AddChild(W.Margin(brand, 0, 0, 12, 0));
 
@@ -287,6 +299,7 @@ public partial class MainWindow : Control
         row.AddChild(BuildPropsPanelToggle());
         row.AddChild(BuildCombatPanelToggle());
         row.AddChild(BuildPhysicsPanelToggle());
+        row.AddChild(BuildTopOverflow());
         row.AddChild(BuildAiButton());
         row.AddChild(BuildHelpButton());
 
@@ -863,6 +876,7 @@ public partial class MainWindow : Control
         _chipDot.SetColor(App.IsDirty ? _palette.Warn : _palette.Ok);
         _chip.TooltipText = App.IsDirty ? Tr("Unsaved changes") : Tr("All changes saved");
         GetWindow().Title = $"{p.Name}{(App.IsDirty ? " •" : "")} — Blazma Animation";
+        if (_topBar is not null) QueueFitLayout();
     }
 
     void UpdateStatus()
@@ -884,6 +898,7 @@ public partial class MainWindow : Control
     {
         var s = App.Settings;
         _palette = BlazmaTheme.PaletteFor(s.Theme);
+        BlazmaTheme.ApplyLanguage(s.Language);
         Theme = BlazmaTheme.For(s.Theme);
         LayoutDirection = App.IsRtl ? LayoutDirectionEnum.Rtl : LayoutDirectionEnum.Ltr;
         OnCameraSettingsChanged();
@@ -919,6 +934,7 @@ public partial class MainWindow : Control
         SyncViewTools();
         Agent.MarkDirty();
         UpdateAgentUi();
+        if (_compactToggles.Count > 0) QueueFitLayout();
     }
 
     /// <summary>The inspector sits at the inline end: right in English, left in Arabic (the stage itself never mirrors).</summary>

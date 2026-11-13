@@ -37,7 +37,8 @@ def main():
     missing = {}
     def check(text, where):
         text = unescape(text)
-        if text and not text.endswith(' ') and not IGNORE.match(text) and text not in ids:
+        # bilingual literals (already Arabic) are shown as they are
+        if text and not text.endswith(' ') and not IGNORE.match(text) and not re.search('[\u0600-\u06FF]', text) and text not in ids:
             missing.setdefault(text, where)
     for f in (HERE / "scripts").rglob("*.cs"):
         if f.name.startswith("SelfTest"): continue

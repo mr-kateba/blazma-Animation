@@ -29,6 +29,7 @@ public partial class TimelineCanvas : Control
     enum Drag { None, Scrub, LoopStart, LoopEnd, Marker }
     Drag _drag;
     string? _dragMarker;
+    float _dragGrabDx;
     long _dragFrame;
     long _dragLoopStart, _dragLoopEnd;
 
@@ -278,6 +279,8 @@ public partial class TimelineCanvas : Control
             _drag = Drag.Marker;
             _dragMarker = chip;
             _dragFrame = _chips.First(c => c.id == chip).frame;
+            // Keep the grab point: the chip sits to the side of the marker line, so the frame under the cursor is not the marker's.
+            _dragGrabDx = pos.X - _axis.X(_dragFrame);
             return;
         }
         if (clip is { Loop.Enabled: true } && pos.Y < 16)
@@ -307,7 +310,7 @@ public partial class TimelineCanvas : Control
                 App.GoToFrame(FrameFromX(mm.Position.X));
                 break;
             case Drag.Marker:
-                _dragFrame = FrameFromX(mm.Position.X);
+                _dragFrame = FrameFromX(mm.Position.X - _dragGrabDx);
                 QueueRedraw();
                 break;
             case Drag.LoopStart:

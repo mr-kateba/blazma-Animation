@@ -4245,3 +4245,30 @@ msgstr "شغّلت بطاقة NVIDIA لديك Kimodo عبر Vulkan. نزّل ت�
 
 msgid "Tip: this NVIDIA card is usually faster with GPU acceleration (CUDA). Download it in Settings → AI."
 msgstr "تلميح: بطاقة NVIDIA هذه أسرع عادةً مع تسريع بطاقة الرسومات (CUDA). نزّله من الإعدادات ← الذكاء الاصطناعي."
+
+msgid "{0} GB"
+msgstr "{0} جيجابايت"
+
+msgid "{0} MB"
+msgstr "{0} ميجابايت"
+
+msgid "{0} KB"
+msgstr "{0} كيلوبايت"
+
+msgid "{0} bytes"
+msgstr "{0} بايت"
+
+msgid "More: mode, language and theme"
+msgstr "المزيد: الوضع واللغة والمظهر"
+
+msgid "Blazma Animation Project"
+msgstr "مشروع Blazma Animation"
+
+msgid "glTF Binary"
+msgstr "glTF ثنائي"
+
+msgid "Shortcuts (JSON)"
+msgstr "الاختصارات (JSON)"
+
+msgid "Search"
+msgstr "بحث"

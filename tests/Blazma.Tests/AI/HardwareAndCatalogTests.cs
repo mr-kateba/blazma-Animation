@@ -165,6 +165,22 @@ public class HardwareAndCatalogTests
         Assert.Equal("light", r.TierId);
         Assert.All(r.Tiers, t => Assert.False(t.Fits));
         Assert.Contains("smallest", r.ReasonEn);
+        // Memory in GB as Windows labels it (4 GiB → "4 GB"), in Arabic with the Arabic unit, never the Latin symbol.
+        Assert.Contains("4 GB RAM", r.ReasonEn);
+        Assert.Contains("4 جيجابايت", r.ReasonAr);
+        Assert.DoesNotContain("GB", r.ReasonAr);
+        Assert.All(r.Tiers, t => Assert.DoesNotContain("GB", t.ReasonAr));
+    }
+
+    [Fact]
+    public void Catalogue_Sizes_Are_Shown_In_Decimal_Units_Like_Hugging_Face()
+    {
+        var light = ModelCatalog.Default.Tiers.Single(t => t.Id == "light");
+        Assert.Equal(6_198_797_854, light.TotalBytes); // the six files listed on Hugging Face at the pinned revisions
+        Assert.Equal(6, light.Files.Count);
+        Assert.Equal("6.2 GB", Blazma.Core.Text.ByteSize.Format(light.TotalBytes)); // 5.8 when divided by 2^30
+        Assert.Equal(new[] { "6.2 GB", "9.3 GB", "16.3 GB" }, ModelCatalog.Default.Tiers.Select(t => Blazma.Core.Text.ByteSize.Format(t.TotalBytes)));
+        Assert.All(ModelCatalog.Default.Tiers, t => Assert.DoesNotContain("GB", t.QualityAr));
     }
 
     [Fact]

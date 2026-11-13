@@ -49,7 +49,34 @@ public static class BlazmaTheme
 
     public static FontFile Regular => _regular ??= GD.Load<FontFile>(FontDir + "IBMPlexSansArabic-Regular.ttf");
     public static FontFile SemiBold => _semi ??= GD.Load<FontFile>(FontDir + "IBMPlexSansArabic-SemiBold.ttf");
-    public static FontFile Mono => _mono ??= GD.Load<FontFile>(FontDir + "IBMPlexMono-Regular.ttf");
+    /// <summary>IBM Plex Mono for code, paths and numbers. Arabic letters inside it (a folder or bone name) fall back to IBM Plex
+    /// Sans Arabic, never to a system font.</summary>
+    public static FontFile Mono => _mono ??= LoadMono();
+
+    static FontFile LoadMono()
+    {
+        var f = GD.Load<FontFile>(FontDir + "IBMPlexMono-Regular.ttf");
+        f.Fallbacks = new Godot.Collections.Array<Font> { Regular };
+        return f;
+    }
+
+    /// <summary>Theme types that show translated text in the monospace look in English. Arabic must never be set in the monospace
+    /// font (its spacing and the missing Arabic glyphs make it hard to read), so in Arabic these use the regular font.
+    /// "CodeLabel"/"CodeFaint" (tool names, paths, arguments) stay monospace in every language.</summary>
+    static readonly string[] LocalisedMonoTypes = { "MonoLabel", "MonoFaint", "OptionButton" };
+    static string _language = "en";
+
+    /// <summary>The font for text drawn on a canvas that may be translated: monospace in English, regular in Arabic.</summary>
+    public static Font UiMono => _language == "ar" ? Regular : Mono;
+
+    /// <summary>Switch the localised monospace types to the right font for <paramref name="language"/> in every built theme.</summary>
+    public static void ApplyLanguage(string language)
+    {
+        if (_language == language) return;
+        _language = language;
+        foreach (var t in new[] { _dark, _light })
+            if (t is not null) foreach (var type in LocalisedMonoTypes) t.SetFont("font", type, UiMono);
+    }
 
     public const int BaseFontSize = 14;
 
@@ -132,13 +159,21 @@ public static class BlazmaTheme
         t.SetFontSize("font_size", "Section", 13);
         t.SetColor("font_color", "Section", p.Text2);
         t.SetTypeVariation("MonoLabel", "Label");
-        t.SetFont("font", "MonoLabel", Mono);
+        t.SetFont("font", "MonoLabel", UiMono);
         t.SetFontSize("font_size", "MonoLabel", 12);
         t.SetColor("font_color", "MonoLabel", p.Text2);
         t.SetTypeVariation("MonoFaint", "Label");
-        t.SetFont("font", "MonoFaint", Mono);
+        t.SetFont("font", "MonoFaint", UiMono);
         t.SetFontSize("font_size", "MonoFaint", 11);
         t.SetColor("font_color", "MonoFaint", p.Text3);
+        t.SetTypeVariation("CodeLabel", "Label");
+        t.SetFont("font", "CodeLabel", Mono);
+        t.SetFontSize("font_size", "CodeLabel", 12);
+        t.SetColor("font_color", "CodeLabel", p.Text2);
+        t.SetTypeVariation("CodeFaint", "Label");
+        t.SetFont("font", "CodeFaint", Mono);
+        t.SetFontSize("font_size", "CodeFaint", 11);
+        t.SetColor("font_color", "CodeFaint", p.Text3);
         t.SetTypeVariation("ErrLabel", "Label");
         t.SetColor("font_color", "ErrLabel", p.Err);
 
@@ -334,7 +369,7 @@ public static class BlazmaTheme
         t.SetIcon("arrow", "OptionButton", chevDown);
         t.SetConstant("arrow_margin", "OptionButton", 6);
         t.SetConstant("h_separation", "OptionButton", 6);
-        t.SetFont("font", "OptionButton", Mono);
+        t.SetFont("font", "OptionButton", UiMono);
         t.SetFontSize("font_size", "OptionButton", 13);
 
         // Text input ------------------------------------------------------------------------------

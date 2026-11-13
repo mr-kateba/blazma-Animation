@@ -38,6 +38,8 @@ public partial class TimelinePanel : PanelContainer
     public Segmented Tabs { get; }
     public OptionButton ClipPick { get; } = new() { AutoTranslateMode = AutoTranslateModeEnum.Disabled, FocusMode = FocusModeEnum.None, FitToLongestItem = false };
     public Button AddMarkerButton { get; }
+    /// <summary>The header row (tabs, clip picker, action buttons); it wraps when the panel is narrow.</summary>
+    public HFlowContainer Header { get; }
     public Button ExportButton { get; }
     /// <summary>Phase 7: opens the Generate motion dialog (prominent in Simple mode).</summary>
     public Button GenerateButton { get; }
@@ -78,19 +80,26 @@ public partial class TimelinePanel : PanelContainer
         root.AddThemeConstantOverride("separation", 8);
         AddChild(W.Margin(root, 12, 8, 12, 10));
 
-        // header: tabs, clip picker, add marker
-        var head = new HBoxContainer { LayoutDirection = LayoutDirectionEnum.ApplicationLocale };
-        head.AddThemeConstantOverride("separation", 10);
+        // header: tabs, clip picker, add marker. A flow container: when the panel is narrow (AI dock open, 1280 px wide, Arabic labels)
+        // the buttons wrap onto a second line instead of pushing the window content off screen.
+        var head = new HFlowContainer { LayoutDirection = LayoutDirectionEnum.ApplicationLocale };
+        head.AddThemeConstantOverride("h_separation", 10);
+        head.AddThemeConstantOverride("v_separation", 6);
+        Header = head;
         Tabs = new Segmented("Timeline", "Dope Sheet", "Graph", "Clips", "Poses", "Sequence", "Combo");
         Tabs.Selected += i => SelectTab(i);
         head.AddChild(Tabs);
+        var clipBox = new HBoxContainer(); // the label and the picker stay on one line
+        clipBox.AddThemeConstantOverride("separation", 10);
         var clipLabel = W.Label("Clip", "Dim");
-        head.AddChild(clipLabel);
+        clipBox.AddChild(clipLabel);
         ClipPick.CustomMinimumSize = new Vector2(210, 0);
         ClipPick.ClipText = true;
+        ClipPick.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
         ClipPick.TooltipText = "The clip you are animating. Keys go into this clip.";
         ClipPick.ItemSelected += OnClipPicked;
-        head.AddChild(ClipPick);
+        clipBox.AddChild(ClipPick);
+        head.AddChild(clipBox);
 
         var draft = new HBoxContainer();
         draft.AddThemeConstantOverride("separation", 6);

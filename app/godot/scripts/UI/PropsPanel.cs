@@ -50,7 +50,7 @@ public partial class PropsPanel : PanelContainer
     public SpinBox RotX { get; } = P8.Spin(-360, 360, 1, 0, "°");
     public SpinBox RotY { get; } = P8.Spin(-360, 360, 1, 0, "°");
     public SpinBox RotZ { get; } = P8.Spin(-360, 360, 1, 0, "°");
-    public Button KeyButton { get; } = new() { Text = "Key prop", FocusMode = Control.FocusModeEnum.None, ThemeTypeVariation = "KeyBtn", TooltipText = "Record the prop's position and rotation as a key at this frame (K)." };
+    public Button KeyButton { get; } = new() { Text = "Key prop", FocusMode = Control.FocusModeEnum.None, ThemeTypeVariation = "KeyBtn" };
     public Button RemoveButton { get; } = new() { Text = "Remove prop", FocusMode = Control.FocusModeEnum.None };
     readonly Label _empty = W.Label("No props yet. Add a shape below, or import a model.", "Faint");
     readonly Label _name = W.Label("", "Heading", false);
@@ -153,6 +153,7 @@ public partial class PropsPanel : PanelContainer
         ar.AddThemeConstantOverride("separation", 6);
         KeyButton.SizeFlagsHorizontal = SizeFlags.ExpandFill; RemoveButton.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         ar.AddChild(KeyButton); ar.AddChild(RemoveButton);
+        ShortcutMap.Instance.Hint(KeyButton, "Record the prop's position and rotation as a key at this frame.", "key.insert");
         _selected.AddChild(ar);
         root.AddChild(_selected);
 

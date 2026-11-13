@@ -369,6 +369,13 @@ public partial class SelfTest : Node
             return;
         }
 
+        if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_LAYOUT") == "1")
+        {
+            await RunLayout();
+            Finish();
+            return;
+        }
+
         if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_POLISH") == "1")
         {
             await RunPolish();
@@ -450,6 +457,9 @@ public partial class SelfTest : Node
 
         // UI audit fixes: file association, translations, autosave thread, file errors.
         await RunPolish();
+
+        // 1.0 audit: window sizes 1280-1536 in both languages, no monospace Arabic, translations of the built UI.
+        await RunLayout();
 
         // Restore the user's settings.
         App.SetLanguage(backup.Language); App.SetTheme(backup.Theme); App.SetAdvancedMode(backup.AdvancedMode);
