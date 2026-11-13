@@ -168,7 +168,7 @@ public sealed class MotionJobService : IDisposable
 
     /// <summary>Kimodo (settings from BLAZMA_KIMODO_* environment variables) + the procedural provider.</summary>
     public static MotionJobService CreateDefault() =>
-        new(new IMotionGenerationProvider[] { new KimodoProvider(KimodoSettings.FromEnvironment()), new ProceduralMotionProvider() });
+        new(new IMotionGenerationProvider[] { new KimodoProvider(KimodoSettings.FromEnvironment().WithInstalledCudaBackend()), new ProceduralMotionProvider() });
 
     public IReadOnlyList<IMotionGenerationProvider> Providers => _providers;
     public KimodoProvider? Kimodo => _providers.OfType<KimodoProvider>().FirstOrDefault();
@@ -377,6 +377,7 @@ public sealed class MotionJobService : IDisposable
         var warnings = new List<string>();
         if (request.Constraints is { Loop: true }) warnings.Add("Loop was ignored: a motion made of several steps does not loop.");
         string? lastDevice = null;
+        var cudaHint = false;
         for (var i = 0; i < n; i++)
         {
             ct.ThrowIfCancellationRequested();
@@ -404,6 +405,7 @@ public sealed class MotionJobService : IDisposable
             foreach (var w in r.Warnings) if (!warnings.Contains(w)) warnings.Add(w);
             var device = motion.Metadata.GetValueOrDefault("kimodo.generatedOn");
             lastDevice = device ?? lastDevice;
+            if (motion.Metadata.GetValueOrDefault("kimodo.cudaHint") == "true") cudaHint = true;
             SetSegment(job, i, "done", device);
         }
         ct.ThrowIfCancellationRequested();
@@ -415,6 +417,7 @@ public sealed class MotionJobService : IDisposable
         for (var i = 0; i < n; i++)
             clip.Metadata[$"segment.{i + 1}"] = $"{parts[i].Text} → {parts[i].Prompt} ({parts[i].DurationSeconds.ToString("0.##", CultureInfo.InvariantCulture)} s)";
         if (lastDevice is not null) clip.Metadata["kimodo.generatedOn"] = lastDevice;
+        if (cudaHint) clip.Metadata["kimodo.cudaHint"] = "true";
         var message = $"{clip.DurationFrames} frames from {n} steps: {string.Join(" → ", parts.Select(x => x.Action ?? x.Prompt))}" +
             (polished is { Stages.Count: > 0 } ? $"; physics polish: {string.Join(", ", polished.Stages)}" : "") + ".";
         return (clip, warnings, message);
@@ -1216,6 +1219,8 @@ public sealed class ApplyMotionJob(MotionJobService jobs, string jobId, string? 
             ["device"] = _clip.Metadata.GetValueOrDefault("kimodo.device"),
             ["motionDevice"] = _clip.Metadata.GetValueOrDefault("kimodo.motionDevice"),
             ["generatedOn"] = _clip.Metadata.GetValueOrDefault("kimodo.generatedOn"),
+            // Ran on an NVIDIA card through Vulkan: the optional CUDA download (Settings → AI, user only) would be faster.
+            ["cudaHint"] = _clip.Metadata.GetValueOrDefault("kimodo.cudaHint") == "true",
             ["durationFrames"] = _clip.DurationFrames,
             ["fps"] = _clip.Fps.ToString(),
             ["trackCount"] = _clip.Tracks.Count,

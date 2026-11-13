@@ -275,6 +275,16 @@ In **Settings > Motion Generation (AI)…** pick the **Device**:
 
 The **Check** button lists the devices Blazma found. After each generation, the result shows a **"Generated on: …"** line so you always know what actually ran, for example "Generated on: the processor (CPU)", plus a warning if it had to fall back after a failed attempt.
 
+#### Optional: GPU acceleration for NVIDIA cards (CUDA)
+
+To keep the installer small (about 150 MB instead of about 460 MB), it ships the CPU and Vulkan backends only. NVIDIA cards work through Vulkan out of the box. CUDA is usually faster on NVIDIA, so when Blazma detects an NVIDIA card, **Settings > Motion Generation (AI)…** shows a **GPU acceleration (CUDA)** section with a **Download GPU acceleration (CUDA, ~550 MB)** button.
+
+- Nothing is downloaded until you press the button (AI agents and the MCP/CLI tools can never start it). The file comes from the Blazma release on GitHub and is checked against the SHA-256 stored in the app before it is unpacked.
+- It goes to `%LOCALAPPDATA%\BlazmaAnimation\runtime\cuda` (or `userdata\runtime\cuda` in portable mode) and needs about 1.5 GB of free space while it installs.
+- A progress bar, speed and time left are shown; **Cancel** keeps what was downloaded and pressing the button again continues.
+- Once installed, **Automatic** uses CUDA by itself. **Remove GPU acceleration** deletes it again (so does uninstalling Blazma).
+- If a generation ran on an NVIDIA card through Vulkan, the "Generated on" line adds a tip pointing to this download.
+
 ### Step 3: Write your prompt
 
 Press **Generate motion…** (below the timeline, or Animation menu).

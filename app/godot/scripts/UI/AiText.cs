@@ -44,6 +44,9 @@ public static partial class AiText
         _ => motionDevice is { Length: > 0 } ? string.Format(CultureInfo.InvariantCulture, T("Generated on: {0}"), Ltr(motionDevice)) : null,
     };
 
+    /// <summary>Shown under "Generated on" when an NVIDIA card ran through Vulkan because the CUDA backend is not installed.</summary>
+    public const string CudaHint = "Tip: this NVIDIA card is usually faster with GPU acceleration (CUDA). Download it in Settings → AI.";
+
     /// <summary>One line per device kimodo-runner listed: "NVIDIA GeForce RTX 4070 (CUDA, 12 GB)".</summary>
     public static string Devices(IReadOnlyList<KimodoDevice> devices) =>
         string.Join("\n", devices.Select(d => "• " + Ltr(d.MemoryTotalBytes > 0 && d.IsGpu ? $"{d.Label}, {Bytes(d.MemoryTotalBytes)}" : d.Label)));

@@ -5,7 +5,8 @@ using System.Security.Cryptography;
 
 namespace Blazma.AI;
 
-public enum DownloadStage { Checking, Downloading, Verifying, Completed }
+/// <summary>Installing = unpacking a downloaded archive (the optional CUDA backend, <see cref="CudaBackendInstaller"/>).</summary>
+public enum DownloadStage { Checking, Downloading, Verifying, Installing, Completed }
 
 /// <summary>Progress of a package download. Bytes are for the whole package; files already in place count as done.</summary>
 public sealed record DownloadProgress(
@@ -61,6 +62,16 @@ public sealed class ModelDownloaderOptions
     /// <summary>Tests only: plain http to 127.0.0.1/localhost (a local fake server).</summary>
     internal bool AllowLoopbackHttp { get; init; }
 
+    /// <summary>Options for a Blazma release asset (the optional CUDA backend, DECISIONS D47): starts at github.com, redirects only to
+    /// GitHub's release download hosts (objects.githubusercontent.com, release-assets.githubusercontent.com).</summary>
+    public static ModelDownloaderOptions GitHubReleases() => new()
+    {
+        AllowedHosts = new[] { "github.com" },
+        AllowedHostSuffixes = new[] { ".githubusercontent.com" },
+        FreeSpaceMarginBytes = 256L * 1024 * 1024,
+        ReplaceMismatchedFiles = true, // Blazma's own download folder: a stale archive there is ours to replace
+    };
+
     static long? DiskFree(string dir)
     {
         try { return new DriveInfo(Path.GetFullPath(dir)).AvailableFreeSpace; }
@@ -72,7 +83,8 @@ public sealed class ModelDownloaderOptions
 /// Downloads a catalog package, only when the user asks (DECISIONS D43): HTTPS to allowlisted Hugging Face hosts (redirects followed
 /// by hand and only to allowlisted HTTPS hosts), resumable (<c>.part</c> + Range), cancellable, disk space checked first,
 /// SHA-256 verified, then renamed into place atomically. A verified file is never replaced; a wrong one only with
-/// <see cref="ModelDownloaderOptions.ReplaceMismatchedFiles"/>. One download at a time per instance.
+/// <see cref="ModelDownloaderOptions.ReplaceMismatchedFiles"/>. One download at a time per instance. The same machinery downloads
+/// the optional CUDA backend from the GitHub release (<see cref="DownloadFilesAsync"/>, <see cref="ModelDownloaderOptions.GitHubReleases"/>, D47).
 /// </summary>
 public sealed class ModelDownloader : IDisposable
 {
@@ -102,19 +114,7 @@ public sealed class ModelDownloader : IDisposable
     {
         catalog ??= ModelCatalog.Default;
         var dir = Path.GetFullPath(modelsDirectory);
-        long todo = 0;
-        var conflicts = new List<string>();
-        foreach (var f in tier.Files)
-        {
-            var final = Path.Combine(dir, f.FileName);
-            if (File.Exists(final))
-            {
-                if (new FileInfo(final).Length != f.Size) { conflicts.Add(f.FileName); todo += f.Size; }
-                continue; // same size: hashed when downloading
-            }
-            var part = final + ".part";
-            todo += f.Size - (File.Exists(part) ? Math.Min(new FileInfo(part).Length, f.Size) : 0);
-        }
+        var (_, todo, conflicts) = Remaining(tier.Files, dir);
         var free = _o.FreeSpace(ExistingAncestor(dir));
         var licences = tier.LicenceIds.Select(id => catalog.Licences.TryGetValue(id, out var l) ? l : new ModelLicence(id, id, "", "", "")).ToList();
         return new DownloadPlan(tier, dir, tier.TotalBytes, todo, free, free is null || free >= todo + _o.FreeSpaceMarginBytes, licences, conflicts);
@@ -138,31 +138,69 @@ public sealed class ModelDownloader : IDisposable
         if (missing.Count > 0) throw new ModelDownloadException("licence_not_accepted", "The user has not accepted: " + string.Join(", ", missing) + ".");
         device = KimodoSettings.NormalizeDevice(device);
         if (!KimodoSettings.DeviceModes.Contains(device)) throw new ArgumentException("device must be auto, gpu, cpu or hybrid", nameof(device));
+        var dir = Path.GetFullPath(modelsDirectory);
+        var skipped = await DownloadFilesAsync(tier.Id, tier.Files, dir, 0, reportCompleted: true, ct).ConfigureAwait(false);
+        return new ModelInstallResult(tier.Id, dir, tier.MotionModel, tier.TextFile.FileName, device, tier.Files.Select(f => f.FileName).ToList(), skipped);
+    }
+
+    /// <summary>
+    /// Downloads files that are not part of the model catalog (a release asset such as the optional CUDA backend) with exactly the same
+    /// rules: allowlisted HTTPS hosts, resumable <c>.part</c>, free space checked first (plus <paramref name="extraBytesNeeded"/>, e.g.
+    /// room to unpack an archive), SHA-256 verified, renamed into place. Returns the names of files that were already there and verified.
+    /// </summary>
+    /// <param name="reportCompleted">False when the caller still has work to do (it reports <see cref="DownloadStage.Completed"/> itself).</param>
+    public Task<IReadOnlyList<string>> DownloadFilesAsync(string packageId, IReadOnlyList<ModelFile> files, string directory, long extraBytesNeeded = 0,
+        bool reportCompleted = true, CancellationToken ct = default) =>
+        DownloadFilesCoreAsync(packageId, files, Path.GetFullPath(directory), extraBytesNeeded, reportCompleted, ct);
+
+    async Task<IReadOnlyList<string>> DownloadFilesCoreAsync(string packageId, IReadOnlyList<ModelFile> files, string dir, long extraBytesNeeded,
+        bool reportCompleted, CancellationToken ct)
+    {
         if (Interlocked.Exchange(ref _busy, 1) != 0) throw new ModelDownloadException("busy", "A download is already running.");
         try
         {
-            foreach (var f in tier.Files) CheckUrl(f.Url, initial: true);
-            var dir = Path.GetFullPath(modelsDirectory);
+            foreach (var f in files) CheckUrl(f.Url, initial: true);
             try { Directory.CreateDirectory(dir); }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { throw new ModelDownloadException("io_error", $"Cannot create '{dir}': {e.Message}", e); }
 
-            var plan = Plan(tier, dir);
-            if (!plan.EnoughSpace)
-                throw new ModelDownloadException("disk_full", $"Not enough free disk space: {Mb(plan.BytesToDownload + _o.FreeSpaceMarginBytes)} needed, {Mb(plan.FreeBytes ?? 0)} free.");
+            var (total, todo, _) = Remaining(files, dir);
+            var free = _o.FreeSpace(ExistingAncestor(dir));
+            var need = todo + Math.Max(0, extraBytesNeeded) + _o.FreeSpaceMarginBytes;
+            if (free is { } fb && fb < need)
+                throw new ModelDownloadException("disk_full", $"Not enough free disk space: {Mb(need)} needed, {Mb(fb)} free.");
 
-            var meter = new Meter(this, tier, plan.BytesTotal);
+            var meter = new Meter(this, packageId, files.Count, total);
             var skipped = new List<string>();
-            for (var i = 0; i < tier.Files.Count; i++)
+            for (var i = 0; i < files.Count; i++)
             {
                 ct.ThrowIfCancellationRequested();
-                var f = tier.Files[i];
+                var f = files[i];
                 meter.File(f.FileName, i);
                 if (await InstallFileAsync(f, dir, meter, ct).ConfigureAwait(false)) skipped.Add(f.FileName);
             }
-            meter.Report(DownloadStage.Completed, force: true);
-            return new ModelInstallResult(tier.Id, dir, tier.MotionModel, tier.TextFile.FileName, device, tier.Files.Select(f => f.FileName).ToList(), skipped);
+            if (reportCompleted) meter.Report(DownloadStage.Completed, force: true);
+            return skipped;
         }
         finally { Volatile.Write(ref _busy, 0); }
+    }
+
+    /// <summary>Total bytes, bytes still to download (resumable .part files count as partly done) and files that exist with another size.</summary>
+    static (long Total, long ToDownload, List<string> Conflicts) Remaining(IReadOnlyList<ModelFile> files, string dir)
+    {
+        long todo = 0;
+        var conflicts = new List<string>();
+        foreach (var f in files)
+        {
+            var final = Path.Combine(dir, f.FileName);
+            if (File.Exists(final))
+            {
+                if (new FileInfo(final).Length != f.Size) { conflicts.Add(f.FileName); todo += f.Size; }
+                continue; // same size: hashed when downloading
+            }
+            var part = final + ".part";
+            todo += f.Size - (File.Exists(part) ? Math.Min(new FileInfo(part).Length, f.Size) : 0);
+        }
+        return (files.Sum(f => f.Size), todo, conflicts);
     }
 
     /// <summary>True when the file was already there and verified.</summary>
@@ -306,7 +344,7 @@ public sealed class ModelDownloader : IDisposable
             throw new ModelDownloadException(initial ? "insecure_url" : "redirect_refused", $"Refusing a non-HTTPS {(initial ? "address" : "redirect")}: {url.Scheme}://{url.Host}.");
         var host = url.IdnHost.ToLowerInvariant();
         var ok = _o.AllowedHosts.Any(h => host == h) || (!initial && _o.AllowedHostSuffixes.Any(s => host.EndsWith(s, StringComparison.Ordinal) && host.Length > s.Length));
-        if (!ok) throw new ModelDownloadException(initial ? "host_not_allowed" : "redirect_refused", $"Refusing to download from '{host}': only Hugging Face hosts are allowed.");
+        if (!ok) throw new ModelDownloadException(initial ? "host_not_allowed" : "redirect_refused", $"Refusing to download from '{host}': only {string.Join(", ", _o.AllowedHosts)} (and their download servers) are allowed.");
     }
 
     async Task<string> HashFileAsync(string path, Meter meter, CancellationToken ct)
@@ -334,7 +372,7 @@ public sealed class ModelDownloader : IDisposable
     static string Mb(long bytes) => $"{bytes / (1024.0 * 1024 * 1024):0.##} GB";
 
     /// <summary>Package byte counter, speed over the last few seconds, throttled reports.</summary>
-    sealed class Meter(ModelDownloader owner, ModelTier tier, long total)
+    sealed class Meter(ModelDownloader owner, string packageId, int fileCount, long total)
     {
         long _done, _fileStart;
         string _file = "";
@@ -359,7 +397,7 @@ public sealed class ModelDownloader : IDisposable
             var speed = now - t0 > 0.1 ? Math.Max(0, (_done - b0) / (now - t0)) : 0;
             TimeSpan? eta = speed > 1 && stage == DownloadStage.Downloading ? TimeSpan.FromSeconds((total - _done) / speed) : null;
             if (stage == DownloadStage.Completed) { _done = total; eta = TimeSpan.Zero; }
-            owner.Progress?.Invoke(new DownloadProgress(tier.Id, stage, _file, _index, tier.Files.Count, _done, total, speed, eta));
+            owner.Progress?.Invoke(new DownloadProgress(packageId, stage, _file, _index, fileCount, _done, total, speed, eta));
         }
     }
 }

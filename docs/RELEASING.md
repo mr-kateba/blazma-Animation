@@ -32,6 +32,8 @@ scripts/release-smoke.sh 0.9.0
 | `BlazmaAnimation-<v>-win64.zip` | نسخة محمولة (فيها `portable.txt`) |
 | `BlazmaAnimation-<v>-linux-x64.tar.gz` | Linux محمولة؛ فيها `blazma-animation.desktop` (‏Exec=`BlazmaAnimation.x86_64`) و`blazma-animation-mime.xml` لنوع `application/x-blazanim` (‏`xdg-mime install blazma-animation-mime.xml`) |
 | `BlazmaAnimation-<v>-x86_64.AppImage` | Linux ملف واحد |
+| `kimodo-runner-<v>-win64.zip` / `kimodo-runner-<v>-linux-x64.tar.gz` | الـrunner وحده (مع بناء runner فقط)؛ نسخة Windows بلا CUDA |
+| `blazma-cuda-backend-<v>-win-x64.zip` | **واجهة CUDA الاختيارية (D47)**: `ggml-cuda.dll` و`cudart64_12`/`cublas64_12`/`cublasLt64_12` و`NVIDIA_CUDA_NOTICE.txt` و`SHA256SUMS-cuda-backend.txt` (نحو 550 MB). لا تدخل المثبّت ولا الـzip؛ البرنامج ينزّلها من رابط الإصدار حين يضغط المستخدم الزر في الإعدادات ← AI، ويتحقق منها بالقيم في `tools/kimodo/cuda-backend.json`. **يجب رفعها مع الإصدار نفسه** (الوسم `v<v>`) وإلا يفشل الزر بخطأ HTTP |
 | `SHA256SUMS.txt` | بصمات كل الملفات |
 
 كل حزمة فيها `LICENSE.txt` (Blazma: ملكية خاصة، كل الحقوق محفوظة لـ mr-kateba) و`THIRD_PARTY_NOTICES.md` ومجلد `legal/` بالنصوص الكاملة: رخصة Godot وCOPYRIGHT.txt الخاص به، رخصة .NET وإشعارات الطرف الثالث لـ .NET 8 و10، Apache-2.0، رخصة MCP C# SDK، رخصة وNOTICE لـ kimodo.cpp، رخصة NVIDIA Kimodo (بيانات هيكل SOMA)، GGML وnlohmann/json (MIT)، وخطوط IBM Plex (OFL).
@@ -61,3 +63,16 @@ scripts/release-smoke.sh 0.9.0
 ## وقت تشغيل VC++ في المثبّت
 
 عند وجود Windows kimodo-runner ينزّل `build-release.sh` الملف `vc_redist.x64.exe` مرة واحدة إلى `build/cache` من `https://aka.ms/vs/17/release/vc_redist.x64.exe` ويتحقق من توقيع Microsoft بـ `osslsigncode verify` (`apt-get install -y osslsigncode`)؛ بدونه يطبع تحذيرًا مع SHA-256 للتوثيق اليدوي. يُضمَّن في المثبّت فقط (لا في مجلد التطبيق ولا في الـzip؛ الـzip فيه `README-VC_REDIST.txt`)، ويفحص `release-smoke.sh` وجوده عبر `7z l`. الإشعار: `packaging/legal/MSVC_REDIST_NOTICE.txt`.
+
+## واجهة CUDA الاختيارية (D47)
+
+عند وجود `ggml-cuda.dll` في بناء الـrunner (artifact ‏`kimodo-runner-windows-x64-cuda`، مثلًا من التشغيل 42365146397) ينقل `build-release.sh`
+ملفات CUDA من `tools/kimodo` إلى `blazma-cuda-backend-<v>-win-x64.zip`، ويحذف أسماءها من `SHA256SUMS*.txt` الباقية ويعيد التحقق منها،
+ويكتب `tools/kimodo/cuda-backend.json` (الرابط `https://github.com/<repo>/releases/download/v<v>/<asset>`، الحجم، SHA-256 للأرشيف ولكل ملف؛
+المستودع من `BLAZMA_RELEASE_REPO`، الافتراضي `mr-kateba/blazma-Animation`). ملاحظات الإصدار تذكر الملف وحجمه وبصمته.
+`release-smoke.sh` يتحقق: لا ملفات CUDA في الـzip ولا المثبّت ولا `kimodo-runner-*.zip`، المثبّت أصغر من 250 MB، الأرشيف سليم وفيه كل
+الملفات، `cuda-backend.json` يطابق الأرشيف وكل ملف، والأرشيف مذكور في `SHA256SUMS.txt` وبصمته في ملاحظات الإصدار.
+بدون بناء CUDA لا يُنتج الأرشيف ولا `cuda-backend.json`، ولا يظهر الزر.
+
+الأحجام المتوقعة (من ملفات التشغيل 42365146397): `ggml-cuda.dll` ‏369 MB، `cublasLt64_12.dll` ‏474 MB، `cublas64_12.dll` ‏100 MB،
+`cudart64_12.dll` ‏0.5 MB (نحو 943 MB غير مضغوطة، نحو 549 MB بضغط zip). الباقي في `tools/kimodo` نحو 60 MB (نحو 19 MB مضغوطة).

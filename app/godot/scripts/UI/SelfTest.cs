@@ -354,6 +354,14 @@ public partial class SelfTest : Node
             return;
         }
 
+        if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_CUDA") == "1")
+        {
+            // Development shortcut: only the optional CUDA backend scenario (D47).
+            await RunCuda();
+            Finish();
+            return;
+        }
+
         if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_POLISH") == "1")
         {
             await RunPolish();
@@ -417,6 +425,9 @@ public partial class SelfTest : Node
 
         // AI models window: hardware, recommendation, licences, download against a local fake server.
         await RunModels();
+
+        // Optional CUDA backend download in Settings → AI (D47), against the same kind of local server.
+        await RunCuda();
 
         // Phase 8: templates, retarget, foot lock, sequences, props.
         await RunPhase8();

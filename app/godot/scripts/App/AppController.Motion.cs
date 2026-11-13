@@ -90,7 +90,50 @@ public partial class AppController
         if (Settings.KimodoDevice != "auto") s = s with { Device = Settings.KimodoDevice };
         if (Settings.KimodoGpu.Length > 0) s = s with { GpuDevice = Settings.KimodoGpu };
         if (Settings.KimodoTimeoutSeconds > 0) s = s with { GenerateTimeout = TimeSpan.FromSeconds(Settings.KimodoTimeoutSeconds) };
+        // The optional CUDA backend the user downloaded (DECISIONS D47), when it matches this runner build.
+        if (s.CudaBackendDirectory is null && CudaState().Status == CudaBackendStatus.Installed) s = s with { CudaBackendDirectory = CudaDirectory() };
         return s;
+    }
+
+    // ---- optional CUDA backend (DECISIONS D47) ------------------------------------------------------------------------
+
+    /// <summary>Tests only: another folder for the CUDA download.</summary>
+    public string? CudaDirectoryOverride { get; set; }
+
+    /// <summary>Where the CUDA backend is downloaded to: next to the models (%LOCALAPPDATA%\BlazmaAnimation\runtime\cuda), or
+    /// userdata/runtime/cuda in portable mode. A folder set in BLAZMA_KIMODO_CUDA_DIR wins.</summary>
+    public string CudaDirectory() =>
+        CudaDirectoryOverride
+        ?? (System.Environment.GetEnvironmentVariable(KimodoSettings.CudaEnv) is { Length: > 0 } env && System.IO.Path.IsPathFullyQualified(env) ? env
+            : AppPaths.Portable ? AppPaths.Combine(System.IO.Path.Combine("runtime", "cuda")) : CudaBackend.DefaultDirectory());
+
+    /// <summary>The runner the CUDA package belongs to: the configured one, else the one bundled with the app.</summary>
+    public string? CudaRunner() =>
+        EffectiveKimodoSettingsWithoutCuda().ResolveRunner() ?? ModelCatalog.Default.FindBundledRunner(System.IO.Path.GetDirectoryName(OS.GetExecutablePath()) ?? "");
+
+    KimodoSettings EffectiveKimodoSettingsWithoutCuda()
+    {
+        var s = KimodoSettings.FromEnvironment();
+        return Settings.KimodoRunner.Length > 0 ? s with { RunnerPath = Settings.KimodoRunner } : s;
+    }
+
+    /// <summary>Tests only: the package description to use instead of cuda-backend.json next to the runner.</summary>
+    public CudaBackendPackage? CudaPackageOverride { get; set; }
+
+    /// <summary>This build's CUDA package (cuda-backend.json next to the runner), or null (Linux, a self-built runner, no CUDA asset).</summary>
+    public CudaBackendPackage? CudaPackage() => CudaPackageOverride ?? CudaBackendPackage.Load(CudaRunner());
+
+    public CudaBackendState CudaState() => CudaBackend.State(CudaPackage(), CudaDirectory(), CudaRunner());
+
+    /// <summary>True when the download is offered (package available, not installed): the "generated on" hint can point to it.</summary>
+    public bool CudaDownloadOffered() => CudaState().Status is CudaBackendStatus.NotInstalled or CudaBackendStatus.Outdated;
+
+    /// <summary>After installing or removing the CUDA backend: the runner restarts with (or without) it.</summary>
+    public void CudaBackendChanged()
+    {
+        ApplyKimodoSettings();
+        SettingsChanged?.Invoke();
+        AgentChanged?.Invoke();
     }
 
     void ApplyKimodoSettings()

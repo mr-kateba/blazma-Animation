@@ -41,7 +41,8 @@ Blazma's local text-to-motion runner (`ai/kimodo`, built by the manual `kimodo-r
 - **GGML** — MIT, Copyright (c) 2023-2026 The ggml authors, https://github.com/ggml-org/ggml (`legal/GGML_LICENSE.txt`).
 - **SPIRV-Headers** (vulkan-sdk-1.4.309.0, compiled into `ggml-vulkan`) — MIT-style Khronos licence, Copyright (c)
   2015-2024 The Khronos Group Inc., https://github.com/KhronosGroup/SPIRV-Headers (`legal/SPIRV_HEADERS_LICENSE.txt`).
-- **NVIDIA CUDA runtime** (`cudart64_12.dll`, `cublas64_12.dll`, `cublasLt64_12.dll`, only with `ggml-cuda.dll`) —
+- **NVIDIA CUDA runtime** (`cudart64_12.dll`, `cublas64_12.dll`, `cublasLt64_12.dll`, with `ggml-cuda.dll`; not in the installer,
+  only in the optional `blazma-cuda-backend-<version>-win-x64.zip` the user downloads from Settings → AI) —
   redistributed unmodified under the NVIDIA CUDA Toolkit EULA, Attachment A (`legal/NVIDIA_CUDA_NOTICE.txt`).
 - **nlohmann/json 3.11.3** — MIT, Copyright (c) 2013-2022 Niels Lohmann, https://github.com/nlohmann/json (`legal/NLOHMANN_JSON_LICENSE.txt`).
 

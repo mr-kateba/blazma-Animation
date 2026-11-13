@@ -109,6 +109,16 @@ internal sealed class RunnerProcess : IDisposable
         // kimodo.cpp reads its backend from the environment (the C API's runtime options are accepted but not used in the
         // reviewed revision). The runner also sets it, and KIMODO_THREADS, for every request.
         if (settings.Device == "cpu") env["KIMODO_BACKEND"] = "cpu";
+        // The optional CUDA backend the user downloaded (DECISIONS D47) lives outside the runner's folder: GGML loads it from
+        // GGML_BACKEND_PATH after its own backends, and its CUDA runtime libraries are found through the library search path.
+        // A GGML_BACKEND_PATH the user set themselves wins.
+        if (settings.ResolveCudaBackend() is { } cuda && !env.ContainsKey("GGML_BACKEND_PATH"))
+        {
+            env["GGML_BACKEND_PATH"] = cuda;
+            var dir = Path.GetDirectoryName(cuda)!;
+            var key = windows ? "PATH" : "LD_LIBRARY_PATH";
+            env[key] = env.TryGetValue(key, out var old) && old.Length > 0 ? dir + (windows ? ";" : ":") + old : dir;
+        }
         if (!windows) env["KIMODO_RUNNER_PARENT_PID"] = hostPid.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return env;
     }
