@@ -2,7 +2,7 @@
 
 [العربية](GUIDE_AR.md) · [Back to README](../README.md)
 
-Blazma Animation is a 3D character animation studio for your desktop. You pose a character, set keys on a timeline, or simply describe a movement in words, then export a `.glb` file that Godot, Unity, Unreal (via glTF) and most 3D tools can open. This guide walks you through every part of the app, step by step. It describes version **0.12.0**.
+Blazma Animation is a 3D character animation studio for your desktop. You pose a character, set keys on a timeline, or simply describe a movement in words, then export a `.glb` file that Godot, Unity, Unreal (via glTF) and most 3D tools can open. This guide walks you through every part of the app, step by step. It describes version **1.0.0**.
 
 > **Language of the app:** the interface is available in English and Arabic (right-to-left). Switch at any time with the **EN / عربي** buttons in the top bar. Every screenshot in this guide is real; Arabic versions of many of them are shown in the [Arabic guide](GUIDE_AR.md).
 
@@ -102,6 +102,8 @@ From top to bottom:
 ### Language and theme
 
 Click **EN** or **عربي** in the top bar. Choosing Arabic flips the whole layout to right-to-left, including panels and timeline labels. The timeline itself always runs left to right, as in every animation tool. **Dark** and **Light** change the theme.
+
+On a smaller screen (1280–1440 px wide, or with many panels open) the top bar makes room by itself: the app name is hidden first, then the mode, language and theme switches move into the **⋯** button (they are also in **Settings**), then the Props, Combat and Physics buttons show an icon only. When the window is still too narrow, the project outline steps aside until there is room again, and the timeline buttons wrap onto a second line.
 
 <img src="screenshots/p10-ar-dark-camera-viewport.png" width="820" alt="The same window in Arabic with a right-to-left layout">
 
@@ -252,7 +254,7 @@ The dialog detects your hardware (graphics card, RAM, CPU) and **recommends** a 
 | **Standard** | Q8_0 | 9.3 GB | 12 / 16 GB | 8 / 12 GB | A graphics card with 12 GB or more |
 | **Reference** | BF16 | 16.3 GB | 20 / 32 GB | 16 / 20 GB | Very powerful machines |
 
-All three use the same motion model; they differ in the size of the text encoder. RAM figures are estimates, so every package stays selectable even if the dialog warns that it may be slow.
+All three use the same motion model; they differ in the size of the text encoder. Download sizes are in decimal units (1 GB = 1,000,000,000 bytes), the way Hugging Face and download pages state them, everywhere in the app; RAM and graphics memory are given the way Windows labels them ("16 GB RAM"). RAM figures are estimates, so every package stays selectable even if the dialog warns that it may be slow.
 
 1. Press **Download** on a package.
 2. Read and accept the model licences (NVIDIA Open Model License for the motion model, Meta Llama 3 Community License for the text encoder). Blazma will not download anything until you confirm.

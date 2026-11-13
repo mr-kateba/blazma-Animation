@@ -35,9 +35,9 @@
    ```
    cd blazma-animation
    ```
-3. انتقل إلى الفرع الصحيح:
+3. انتقل إلى الفرع الرئيسي (main، الافتراضي عادةً):
    ```
-   git checkout claude/stoic-ritchie-2nyfnl
+   git checkout main
    ```
 
 ## 3. طريقة التشغيل
