@@ -107,7 +107,7 @@ public partial class MainWindow
     {
         var s = App.Settings;
         return $"{GetViewportRect().Size.X}|{s.Language}|{s.AdvancedMode}|{_sidePanelsHidden}|{Agent.Visible}|{Dock.Visible}|{_rightDock.Visible}|{_chipLabel.Text}|"
-               + string.Concat(_rightDock.GetChildren().OfType<Control>().Select(c => c.Visible ? "1" : "0"));
+               + $"{PhysicsPanelNode.Visible}{PropsPanelNode.Visible}{CombatPanelNode.Visible}{HistoryPanel.Visible}"; // no per-frame array
     }
 
     /// <summary>True while the project outline (left dock) is hidden because the window is too narrow for it.</summary>
