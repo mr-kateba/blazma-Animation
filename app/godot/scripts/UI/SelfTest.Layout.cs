@@ -68,7 +68,7 @@ public partial class SelfTest
             var bad = new List<string>();
             void Walk(Node n)
             {
-                foreach (var c in n.GetChildren())
+                foreach (var c in Kids(n))
                 {
                     if (c is Window wnd && !wnd.Visible) continue;
                     if (c is CanvasItem ci && !ci.Visible) continue;
@@ -124,7 +124,7 @@ public partial class SelfTest
                             if (!pm.IsItemSeparator(i) || pm.GetItemText(i).Length > 0)
                                 if (pm.GetItemAutoTranslateMode(i) != Node.AutoTranslateModeEnum.Disabled) Need(pm.GetItemText(i));
                 }
-                foreach (var c in n.GetChildren(true)) Walk(c, on);
+                foreach (var c in Kids(n, true)) Walk(c, on);
             }
             Walk(_w, true);
             return missing.Count == 0 ? null : $"{missing.Count} without ar.po entry: " + string.Join(" | ", missing);
@@ -135,6 +135,16 @@ public partial class SelfTest
         App.SetPropsPanel(before.PropsPanel); App.SetCombatPanel(before.CombatPanel); App.SetPhysicsPanel(before.PhysicsPanel);
         _w.ShowAgentPanel(before.Agent);
         await Settle();
+        // The walks above touch every node and theme item: let the wrappers they created go before the app shuts down.
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+    }
+
+    /// <summary>Children by index: walking the whole UI with GetChildren() would allocate a Godot array per node.</summary>
+    static IEnumerable<Node> Kids(Node n, bool includeInternal = false)
+    {
+        var count = n.GetChildCount(includeInternal);
+        for (var i = 0; i < count; i++) yield return n.GetChild(i, includeInternal);
     }
 
     /// <summary>Names, symbols and file types that read the same in both languages.</summary>
@@ -160,7 +170,7 @@ public partial class SelfTest
         var cut = new List<string>();
         void Walk(Control root)
         {
-            foreach (var n in root.GetChildren())
+            foreach (var n in Kids(root))
             {
                 if (n is not Control c || !c.IsVisibleInTree()) continue;
                 var r = c.GetGlobalRect();
@@ -184,7 +194,7 @@ public partial class SelfTest
             cut.Add($"tool rail y={rail.Position.Y:0}..{rail.End.Y:0} outside the stage y={stage.Position.Y:0}..{stage.End.Y:0} (compact={_w.Rail.Compact})");
         // Controls inside the header must also be inside it (a FlowContainer that cannot wrap would push them past its edge).
         var h = _w.Timeline.Header.GetGlobalRect();
-        foreach (var n in _w.Timeline.Header.GetChildren())
+        foreach (var n in Kids(_w.Timeline.Header))
             if (n is Control c && c.IsVisibleInTree() && c.Size.X > 0 && (c.GetGlobalRect().Position.X < h.Position.X - 0.5f || c.GetGlobalRect().End.X > h.End.X + 0.5f))
                 cut.Add($"header child {c.Name} outside the header");
         return cut.Count == 0 ? null : $"level {_w.TopBarLevel}: " + string.Join("; ", cut.Take(6));
