@@ -6,7 +6,7 @@
 
 [Download](https://github.com/mr-kateba/blazma-Animation/releases) · [English guide](docs/GUIDE_EN.md) · [الدليل العربي](docs/GUIDE_AR.md)
 
-Version 0.12.0 · Windows 10/11 x64 (Linux x64 also available)
+Version 1.0.0 · Windows 10/11 x64 (Linux x64 also available)
 
 <img src="docs/screenshots/p10-en-dark-camera-viewport.png" width="860" alt="Blazma Animation: the Mannequin in the 3D view with the timeline below">
 
@@ -126,7 +126,7 @@ Get the latest build from the **[Releases page](https://github.com/mr-kateba/bla
 - **[User guide (English)](docs/GUIDE_EN.md)**
 - **[دليل المستخدم (العربية)](docs/GUIDE_AR.md)**
 - [Connecting external AI tools over MCP / CLI](docs/AGENT_SETUP_AR.md) (Arabic) · [MCP tools](docs/MCP_TOOLS.md) · [CLI reference](docs/CLI_REFERENCE.md)
-- [Windows setup](docs/WINDOWS_SETUP.md) · [Releasing](docs/RELEASING.md) · [Project status](docs/STATUS.md) · [Feature matrix](docs/FEATURE_MATRIX.md)
+- [Windows setup](docs/WINDOWS_SETUP.md) · [Releasing](docs/RELEASING.md) · [Project status](docs/STATUS.md) · [Changelog](CHANGELOG.md) · [Feature matrix](docs/FEATURE_MATRIX.md)
 - Technical documents: [Architecture](docs/ARCHITECTURE.md) · [Data format](docs/DATA_FORMAT.md) · [AI integration](docs/AI_INTEGRATION.md) · [Decisions](docs/DECISIONS.md)
 
 ---
@@ -199,7 +199,7 @@ Blazma Animation استوديو لتحريك الشخصيات ثلاثية ال�
 - **[دليل المستخدم (العربية)](docs/GUIDE_AR.md)**
 - **[User guide (English)](docs/GUIDE_EN.md)**
 - [ربط أدوات الذكاء الاصطناعي الخارجية عبر MCP / CLI](docs/AGENT_SETUP_AR.md) · [أدوات MCP](docs/MCP_TOOLS.md) · [مرجع CLI](docs/CLI_REFERENCE.md)
-- [التشغيل على Windows](docs/WINDOWS_SETUP.md) · [إصدار نسخة](docs/RELEASING.md) · [حالة المشروع](docs/STATUS.md) · [مصفوفة الميزات](docs/FEATURE_MATRIX.md)
+- [التشغيل على Windows](docs/WINDOWS_SETUP.md) · [إصدار نسخة](docs/RELEASING.md) · [حالة المشروع](docs/STATUS.md) · [سجل التغييرات](CHANGELOG.md) · [مصفوفة الميزات](docs/FEATURE_MATRIX.md)
 - وثائق تقنية: [المعمارية](docs/ARCHITECTURE.md) · [صيغة البيانات](docs/DATA_FORMAT.md) · [تكامل الذكاء الاصطناعي](docs/AI_INTEGRATION.md) · [القرارات](docs/DECISIONS.md)
 
 </div>

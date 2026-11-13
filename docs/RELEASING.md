@@ -14,9 +14,11 @@
 ## البناء
 
 ```
-scripts/build-release.sh 0.9.0 --from-git
-scripts/release-smoke.sh 0.9.0
+scripts/build-release.sh 1.0.0 --from-git
+scripts/release-smoke.sh 1.0.0
 ```
+
+**رقم الإصدار يُمرَّر هنا فقط**: السكربت يكتبه في المثبّت (`VERSION`/`NUMVER` لـ NSIS) و`VERSION.txt` وأسماء الملفات و`cuda-backend.json`، فلا تعدّله في الكود. قبل البناء أضف قسم الإصدار إلى `CHANGELOG.md` وحدّث رأس `docs/STATUS.md` والإصدار المذكور في `README.md` و`docs/GUIDE_AR.md` و`docs/GUIDE_EN.md`.
 
 الخيارات: `--from-git[=REV]` يبني نسخة نظيفة من commit (موصى به للإصدار الرسمي كي لا تتسرب تعديلات غير مكتملة؛ التوثيق والتراخيص وملاحظات الإصدار تؤخذ أيضًا من تلك النسخة)، `--skip-tests`، `--skip-linux`، `--skip-appimage`، `--skip-installer`.
 `release-smoke.sh --full` يشغّل أيضًا اختبار الواجهة الكامل على نسخة Linux المصدّرة (~4 دقائق).
