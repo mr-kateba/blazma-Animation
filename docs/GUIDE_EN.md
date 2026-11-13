@@ -376,6 +376,21 @@ Before and after auto-balance (a bent-over pose with the centre of mass outside 
 
 <img src="screenshots/p6-en-dark-secondary-result.png" width="420" alt="Secondary motion result">
 
+### Automatic physics polish
+
+Every motion you **generate from text** and every **template** you apply goes through a physics polish before you see it:
+
+- **Planted feet:** a foot that touches the floor stays put (no sliding) and rolls from heel to toe.
+- **No sinking:** no part of the body goes below the floor; a body lying down rests on it.
+- **Real jumps:** the body follows a ballistic arc (gravity 9.81 m/s²), and the knees bend on landing to absorb the impact.
+- **Natural falls:** the body accelerates until it hits the floor, then bounces slightly and settles.
+- **Smooth joins:** the steps of a multi-step prompt keep their momentum, without sudden jumps in speed.
+- **Light secondary motion** on the spine, head and arms.
+
+<img src="screenshots/physics-before-after.png" width="640" alt="Foot slide and ground penetration before and after the physics polish">
+
+External AI tools can turn it off per command (`physicsPolish=false`) or run it on any clip with `motion.physics_polish`.
+
 Physics tools assume a flat floor, and only the feet count as support.
 
 ---
