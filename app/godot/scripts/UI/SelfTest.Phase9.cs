@@ -42,8 +42,8 @@ public partial class SelfTest
         var mid = man.Id.ToString();
         var rig = RigOf(man);
         var cp = _w.CombatPanelNode;
-        var dir = System.IO.Path.Combine(Godot.ProjectSettings.GlobalizePath("user://"), "p9_selftest");
-        if (System.IO.Directory.Exists(dir)) System.IO.Directory.Delete(dir, true);
+        var dir = DocExportDir("Combat") ?? System.IO.Path.Combine(Godot.ProjectSettings.GlobalizePath("user://"), "p9_selftest");
+        if (DocExportDir("Combat") is null && System.IO.Directory.Exists(dir)) System.IO.Directory.Delete(dir, true);
         System.IO.Directory.CreateDirectory(dir);
         s.LastExportDir = dir;
 

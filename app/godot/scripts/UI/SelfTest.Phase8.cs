@@ -65,8 +65,8 @@ public partial class SelfTest
         var man = Ch();
         var mid = man.Id.ToString();
         var rig = RigOf(man);
-        var dir = System.IO.Path.Combine(Godot.ProjectSettings.GlobalizePath("user://"), "p8_selftest");
-        if (System.IO.Directory.Exists(dir)) System.IO.Directory.Delete(dir, true);
+        var dir = DocExportDir("Props") ?? System.IO.Path.Combine(Godot.ProjectSettings.GlobalizePath("user://"), "p8_selftest");
+        if (DocExportDir("Props") is null && System.IO.Directory.Exists(dir)) System.IO.Directory.Delete(dir, true);
         System.IO.Directory.CreateDirectory(dir);
         var lastExportBackup = s.LastExportDir;
         s.LastExportDir = dir;

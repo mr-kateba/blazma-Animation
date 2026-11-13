@@ -339,6 +339,13 @@ public partial class SelfTest : Node
             return;
         }
 
+        if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_DOCMODELS") == "1")
+        {
+            await RunDocModels();
+            Finish();
+            return;
+        }
+
         if (System.Environment.GetEnvironmentVariable("BLAZMA_ONLY_REELMODELS") == "1")
         {
             await RunReelModels();

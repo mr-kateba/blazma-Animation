@@ -30,8 +30,8 @@ public partial class SelfTest
         var s = App.Settings;
         var lastDirBackup = s.LastExportDir;
         App.SetLanguage("en"); App.SetTheme("dark"); App.SetAdvancedMode(false);
-        var dir = System.IO.Path.Combine(Godot.ProjectSettings.GlobalizePath("user://"), "export_selftest");
-        if (System.IO.Directory.Exists(dir)) System.IO.Directory.Delete(dir, true);
+        var dir = DocExportDir() ?? System.IO.Path.Combine(Godot.ProjectSettings.GlobalizePath("user://"), "export_selftest");
+        if (DocExportDir() is null && System.IO.Directory.Exists(dir)) System.IO.Directory.Delete(dir, true);
         System.IO.Directory.CreateDirectory(dir);
         s.LastExportDir = dir;
 
