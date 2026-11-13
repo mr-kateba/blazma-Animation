@@ -13,7 +13,7 @@ Version 1.0.0 · Windows 10/11 x64 (Linux x64 also available)
 [<img src="docs/screenshots/demo-2-thumb.jpg" width="560" alt="Watch the demo: generating a multi-step motion from an Arabic prompt">](docs/videos/demo-2.mp4)
 
 *Watch: «في واحد وراك، اجري، وبعدها موت» becomes a three-step animation, generated on a CPU.*
-[Demo 1](docs/videos/demo-1.mp4) · [Demo 2](docs/videos/demo-2.mp4) · [Demo 3](docs/videos/demo-3.mp4) · [Demo 4](docs/videos/demo-4.mp4)
+[Demo 1](docs/videos/demo-1.mp4) · [Demo 2](docs/videos/demo-2.mp4) · [Demo 3](docs/videos/demo-3.mp4) · [Demo 4](docs/videos/demo-4.mp4) · [From keyframes to one sentence (45 s)](marketing/blazma-x2/x2-16x9.mp4)
 
 </div>
 
@@ -24,6 +24,24 @@ Version 1.0.0 · Windows 10/11 x64 (Linux x64 also available)
 Blazma Animation lets you create game-ready character animation without a steep learning curve. Pose a built-in mannequin or your own humanoid model, set keys on a timeline, start from a template, or **type what the character should do** (in English or Arabic) and let the on-device AI model draft the motion for you. When you are happy, export a `.glb` file plus a JSON sidecar for Godot, Unity, Unreal and other tools.
 
 The interface is available in **English and Arabic (right-to-left)**, with dark and light themes and a **Simple** mode for beginners and an **Advanced** mode for power users.
+
+### New in 1.0
+
+- **Natural motion out of the box:** generated motions and templates get a physics polish: feet stay planted, nothing sinks into the floor, jumps follow a real ballistic arc and land with bent knees, falls hit the ground and settle, and the joins between steps keep their momentum.
+- **Understands Arabic better:** dialects, spelling mistakes («هل تقصد…؟» with one-click fix), negation ("without running"), counts ("jump three times") and combined actions ("walks while waving").
+- **Welcome and tutorial:** the first launch picks your system language, then a 13-step interactive tour lights up the real buttons.
+- **Professional keyboard shortcuts:** one central map, fully customisable with conflict warnings, import/export and a printable cheat sheet (**F1**).
+- **Smaller download:** the installer is now about **150 MB** (was 460 MB). NVIDIA acceleration (CUDA) is an optional download from inside the app.
+- **Fits laptop screens:** the layout adapts down to 1280×720 in both languages.
+
+See the full [changelog](CHANGELOG.md).
+
+<table>
+<tr>
+<td width="50%" valign="top"><img src="docs/screenshots/p11-en-dark-tutorial.png" width="400" alt="Interactive tutorial"></td>
+<td width="50%" valign="top"><img src="docs/screenshots/p11-en-dark-shortcuts.png" width="400" alt="Keyboard shortcuts settings"></td>
+</tr>
+</table>
 
 ### Key features
 
@@ -47,7 +65,7 @@ The interface is available in **English and Arabic (right-to-left)**, with dark 
 <tr>
 <td valign="top">
 
-**Physics assistance.** See balance (centre of mass and support polygon) on every frame, auto-balance unbalanced poses, and add secondary motion.
+**Physics assistance.** Automatic physics polish on generated motion (planted feet, real jumps and falls), balance (centre of mass and support polygon) on every frame, auto-balance and secondary motion.
 
 <img src="docs/screenshots/p6-en-dark-balanced-after.png" width="360" alt="Balance overlay">
 
@@ -90,6 +108,7 @@ Get the latest build from the **[Releases page](https://github.com/mr-kateba/bla
 | Administrator rights | Not needed | Not needed |
 | Settings stored in | `%APPDATA%\BlazmaAnimation` | `userdata` next to the program |
 
+- **Sizes (1.0.0):** installer about 150 MB, portable zip about 165 MB, Linux AppImage about 145 MB.
 - **SmartScreen:** the app is not digitally signed yet. If Windows shows "Windows protected your PC", click **More info**, then **Run anyway**. You can verify the download with `SHA256SUMS.txt`.
 - **Visual C++ runtime:** AI motion generation needs the Microsoft Visual C++ 2015–2022 x64 runtime. The installer installs it if it is missing. With the portable zip, install it once from <https://aka.ms/vs/17/release/vc_redist.x64.exe> (the error "MSVCP140.dll was not found" means it is missing).
 - Linux x64: `.tar.gz` and `AppImage` are on the same page.
@@ -103,7 +122,7 @@ Get the latest build from the **[Releases page](https://github.com/mr-kateba/bla
 | Graphics | Any GPU with OpenGL support | Used for the 3D view |
 | Disk | Space for the app and your projects | Plus 6.2 to 16.3 GB if you use text-to-motion |
 
-**AI motion generation is optional and runs entirely on your computer.** A graphics card is optional: **NVIDIA (CUDA)** or **any Vulkan GPU** (NVIDIA, AMD, Intel) makes it much faster, and the CPU works too. Choose a model package that fits your PC (downloaded in one click from the app, with a resumable download):
+**AI motion generation is optional and runs entirely on your computer.** A graphics card is optional: **any Vulkan GPU** (NVIDIA, AMD, Intel) makes it much faster, and the CPU works too. On NVIDIA cards you can also press **Settings > Motion Generation (AI)… > Download GPU acceleration (CUDA)** (about 550 MB, optional, only when you press it) for the fastest generation. Choose a model package that fits your PC (downloaded in one click from the app, with a resumable download):
 
 | Package | Download size | RAM (min / recommended) | GPU memory (min / recommended) |
 |---|---|---|---|
@@ -119,7 +138,7 @@ Get the latest build from the **[Releases page](https://github.com/mr-kateba/bla
 4. **Polish:** use **Foot lock…**, the dope sheet or the graph editor, and the **Balance** view.
 5. **Export:** press **Ctrl+E**, pick *In place* root motion if your engine moves the character, and save the `.glb` (with its sidecar).
 
-**Shortcuts:** **F1** shows every keyboard shortcut (searchable, printable); change any of them in **Settings > Keyboard Shortcuts…**. Common keys: **Space** play, **K** key, **Ctrl+G** generate motion, **Ctrl+T** templates, **Ctrl+Z** undo, **F** frame, **Shift+F1** tutorial.
+**Shortcuts:** **F1** shows every keyboard shortcut (searchable, printable); change any of them in **Settings > Keyboard Shortcuts…**. Common keys: **Space** play, **K** key the pose (**Shift+K** the selected bone), **Ctrl+G** generate motion, **Ctrl+T** templates, **Ctrl+Z** undo, **F** frame, **Shift+F1** tutorial.
 
 ### Guides
 
@@ -139,11 +158,24 @@ Blazma Animation استوديو لتحريك الشخصيات ثلاثية ال�
 
 الواجهة متاحة **بالعربية (من اليمين إلى اليسار) وبالإنجليزية**، بسمتين داكنة وفاتحة، ووضع **بسيط** للمبتدئين ووضع **متقدم** للمحترفين.
 
+### الجديد في 1.0
+
+- **حركة طبيعية تلقائيًا:** الحركات المولَّدة والقوالب تمرّ بصقل فيزيائي: القدمان ثابتتان على الأرض بلا انزلاق، ولا يدخل الجسم في الأرض، والقفز يتبع قوس الجاذبية الحقيقي وتنثني الركبتان عند الهبوط، والسقوط يرتطم بالأرض ويستقر، والانتقال بين الخطوات ناعم.
+- **فهم أعمق للعربي:** اللهجات، والأخطاء الإملائية («هل تقصد…؟» مع تصحيح بضغطة)، والنفي («بدون ما يجري»)، والعدد («يقفز ثلاث مرات»)، والحركات المركّبة («يمشي وهو يلوّح»).
+- **ترحيب وشرح تفاعلي:** أول تشغيل يختار لغة جهازك تلقائيًا، ثم جولة من 13 خطوة تضيء الأزرار الحقيقية.
+- **اختصارات احترافية:** خريطة موحّدة قابلة للتخصيص بالكامل، مع تنبيه التعارض، والاستيراد والتصدير، وورقة اختصارات قابلة للطباعة (**F1**).
+- **تنزيل أصغر:** المثبّت صار نحو **150 ميجابايت** (كان 460). تسريع NVIDIA (CUDA) صار تنزيلًا اختياريًا من داخل البرنامج.
+- **يناسب شاشات اللابتوب:** الواجهة تتكيّف حتى 1280×720 باللغتين.
+
+التفاصيل في [سجل التغييرات](CHANGELOG.md).
+
+<img src="docs/screenshots/p11-ar-dark-welcome.png" width="420" alt="شاشة الترحيب"> <img src="docs/screenshots/p11-ar-dark-tutorial.png" width="420" alt="الشرح التفاعلي">
+
 ### أهم الميزات
 
 - **من النص إلى حركة:** صف الحركة، حتى لو من عدة خطوات، بالعربية أو الإنجليزية. يخطّط Blazma الخطوات ويولّد كلًّا منها بنموذج Kimodo على جهازك، ثم تقبل المسودة أو تتجاهلها بعد تعديلها.
 - **التحريك:** وضعيات FK وIK، عكس الوضعية، مكتبة وضعيات، خط زمني مع ورقة مفاتيح ومحرر منحنيات وعلامات وتكرار، وقوالب جاهزة (وقوف، مشي، ركض، قفز، تلويح، ضربة).
-- **مساعدة الفيزياء:** عرض التوازن (مركز الكتلة ومنطقة الارتكاز) في كل إطار، وموازنة تلقائية، وحركة ثانوية.
+- **مساعدة الفيزياء:** صقل فيزيائي تلقائي للحركة المولَّدة (قدمان ثابتتان، قفز وسقوط واقعيان)، وعرض التوازن (مركز الكتلة ومنطقة الارتكاز) في كل إطار، وموازنة تلقائية، وحركة ثانوية.
 - **إعادة التوجيه والدمج:** استيراد `.glb` بشري مع مطابقة عظام تلقائية، ونسخ الحركة بين الشخصيات، وتثبيت القدمين، وربط المقاطع بانتقالات ناعمة.
 - **الأدوات (Props):** اربط سيفًا أو أي جسم باليد وحرّكه مع الشخصية.
 - **أدوات القتال:** مراحل الهجوم وصناديق الضرب والإصابة واختبار الضرب وردود الفعل والكومبو، وتُصدَّر كلها مع الحركة.
@@ -163,6 +195,7 @@ Blazma Animation استوديو لتحريك الشخصيات ثلاثية ال�
 | صلاحيات المدير | غير لازمة | غير لازمة |
 | مكان الإعدادات | `%APPDATA%\BlazmaAnimation` | `userdata` بجانب البرنامج |
 
+- **الأحجام (1.0.0):** المثبّت نحو 150 ميجابايت، والنسخة المحمولة نحو 165 ميجابايت، وAppImage لـLinux نحو 145 ميجابايت.
 - **SmartScreen:** البرنامج غير موقَّع رقميًا بعد. إن ظهرت «Windows protected your PC» فاضغط **More info** ثم **Run anyway**. ويمكنك التحقق من الملف بمقارنته مع `SHA256SUMS.txt`.
 - **وقت تشغيل Visual C++:** توليد الحركة يحتاج Microsoft Visual C++ 2015–2022 x64. المثبّت يثبّته إن غاب. وفي النسخة المحمولة ثبّته مرة واحدة من <https://aka.ms/vs/17/release/vc_redist.x64.exe> (الخطأ «MSVCP140.dll was not found» يعني أنه غير موجود).
 - نسخ Linux x64 (`.tar.gz` وAppImage) في الصفحة نفسها.
@@ -172,17 +205,17 @@ Blazma Animation استوديو لتحريك الشخصيات ثلاثية ال�
 | | الموصى به | ملاحظات |
 |---|---|---|
 | نظام التشغيل | Windows 10 أو 11 (64 بت) | وLinux x64 مدعوم أيضًا |
-| المعالج / الذاكرة | معالج 64 بت حديث، وذاكرة 8 GB أو أكثر | للتحريك والتصدير. توليد الذكاء الاصطناعي يحتاج ذاكرة أكبر (أدناه) |
+| المعالج / الذاكرة | معالج 64 بت حديث، وذاكرة 8 جيجابايت أو أكثر | للتحريك والتصدير. توليد الذكاء الاصطناعي يحتاج ذاكرة أكبر (أدناه) |
 | الرسوميات | أي بطاقة تدعم OpenGL | للعرض ثلاثي الأبعاد |
-| القرص | مساحة للبرنامج ومشاريعك | إضافة 6.2 إلى 16.3 GB إن استعملت التوليد من النص |
+| القرص | مساحة للبرنامج ومشاريعك | إضافة 6.2 إلى 16.3 جيجابايت إن استعملت التوليد من النص |
 
-**توليد الحركة بالذكاء الاصطناعي اختياري ويعمل بالكامل على جهازك.** بطاقة الرسوميات اختيارية: بطاقة **NVIDIA (CUDA)** أو **أي بطاقة تدعم Vulkan** (NVIDIA وAMD وIntel) تسرّعه كثيرًا، والمعالج يكفي أيضًا. اختر حزمة نموذج تناسب جهازك (تُنزَّل بضغطة واحدة من البرنامج مع إمكانية استئناف التنزيل):
+**توليد الحركة بالذكاء الاصطناعي اختياري ويعمل بالكامل على جهازك.** بطاقة الرسوميات اختيارية: **أي بطاقة تدعم Vulkan** (NVIDIA وAMD وIntel) تسرّعه كثيرًا، والمعالج يكفي أيضًا. ولبطاقات NVIDIA يمكنك الضغط على **الإعدادات ← توليد الحركة (ذكاء اصطناعي)… ← تنزيل تسريع بطاقة الرسومات (CUDA)** (نحو 550 ميجابايت، اختياري ولا يُنزَّل إلا بضغطتك) لأسرع توليد. اختر حزمة نموذج تناسب جهازك (تُنزَّل بضغطة واحدة من البرنامج مع إمكانية استئناف التنزيل):
 
 | الحزمة | حجم التنزيل | الذاكرة (أدنى / موصى) | ذاكرة البطاقة (أدنى / موصى) |
 |---|---|---|---|
-| خفيفة | **6.2 GB** | 7.5 / 16 GB | 6 / 8 GB |
-| قياسية | **9.3 GB** | 12 / 16 GB | 8 / 12 GB |
-| مرجعية | **16.3 GB** | 20 / 32 GB | 16 / 20 GB |
+| خفيفة | **6.2 جيجابايت** | 7.5 / 16 GB | 6 / 8 GB |
+| قياسية | **9.3 جيجابايت** | 12 / 16 GB | 8 / 12 GB |
+| مرجعية | **16.3 جيجابايت** | 20 / 32 GB | 16 / 20 GB |
 
 ### بداية سريعة (5 خطوات)
 
@@ -192,7 +225,7 @@ Blazma Animation استوديو لتحريك الشخصيات ثلاثية ال�
 4. **صقل:** استعمل **تثبيت القدمين…** أو ورقة المفاتيح أو الرسم البياني، وعرض **التوازن**.
 5. **صدّر:** اضغط **Ctrl+E**، واختر حركة الجذر «في المكان» إن كان محركك يحرّك الشخصية، واحفظ ملف `.glb` (مع ملفه المرافق).
 
-**الاختصارات:** **F1** يعرض كل اختصارات لوحة المفاتيح (مع بحث وطباعة)، ويمكنك تغيير أي منها من **الإعدادات ← اختصارات لوحة المفاتيح…**. أشهرها: **Space** تشغيل، **K** مفتاح، **Ctrl+G** توليد حركة، **Ctrl+T** القوالب، **Ctrl+Z** تراجع، **F** إظهار المحدد، **Shift+F1** الشرح.
+**الاختصارات:** **F1** يعرض كل اختصارات لوحة المفاتيح (مع بحث وطباعة)، ويمكنك تغيير أي منها من **الإعدادات ← اختصارات لوحة المفاتيح…**. أشهرها: **Space** تشغيل، **K** مفتاح للوضعية كلها (**Shift+K** للعظمة المحددة)، **Ctrl+G** توليد حركة، **Ctrl+T** القوالب، **Ctrl+Z** تراجع، **F** إظهار المحدد، **Shift+F1** الشرح.
 
 ### الأدلة
 
