@@ -110,7 +110,7 @@ Get the latest build from the **[Releases page](https://github.com/mr-kateba/bla
 
 - **Sizes (1.0.0):** installer about 150 MB, portable zip about 165 MB, Linux AppImage about 145 MB.
 - **SmartScreen:** the app is not digitally signed yet. If Windows shows "Windows protected your PC", click **More info**, then **Run anyway**. You can verify the download with `SHA256SUMS.txt`.
-- **Visual C++ runtime:** AI motion generation needs the Microsoft Visual C++ 2015–2022 x64 runtime. The installer installs it if it is missing. With the portable zip, install it once from <https://aka.ms/vs/17/release/vc_redist.x64.exe> (the error "MSVCP140.dll was not found" means it is missing).
+- **Nothing else to install:** the Microsoft Visual C++ runtime that AI motion generation needs ships inside the app (`tools\kimodo`, since 1.0.1), in the installer and in the portable zip. No administrator rights, no separate `vc_redist.x64.exe`.
 - Linux x64: `.tar.gz` and `AppImage` are on the same page.
 
 ### System requirements
@@ -197,7 +197,7 @@ Blazma Animation استوديو لتحريك الشخصيات ثلاثية ال�
 
 - **الأحجام (1.0.0):** المثبّت نحو 150 ميجابايت، والنسخة المحمولة نحو 165 ميجابايت، وAppImage لـLinux نحو 145 ميجابايت.
 - **SmartScreen:** البرنامج غير موقَّع رقميًا بعد. إن ظهرت «Windows protected your PC» فاضغط **More info** ثم **Run anyway**. ويمكنك التحقق من الملف بمقارنته مع `SHA256SUMS.txt`.
-- **وقت تشغيل Visual C++:** توليد الحركة يحتاج Microsoft Visual C++ 2015–2022 x64. المثبّت يثبّته إن غاب. وفي النسخة المحمولة ثبّته مرة واحدة من <https://aka.ms/vs/17/release/vc_redist.x64.exe> (الخطأ «MSVCP140.dll was not found» يعني أنه غير موجود).
+- **لا شيء آخر لتثبيته:** مكتبات Microsoft Visual C++ التي يحتاجها توليد الحركة تأتي داخل البرنامج (`tools\kimodo`، منذ 1.0.1) في المثبّت وفي النسخة المحمولة. لا صلاحيات مدير ولا `vc_redist.x64.exe` منفصل.
 - نسخ Linux x64 (`.tar.gz` وAppImage) في الصفحة نفسها.
 
 ### متطلبات النظام

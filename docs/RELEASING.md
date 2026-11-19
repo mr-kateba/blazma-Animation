@@ -24,7 +24,7 @@ scripts/release-smoke.sh 1.0.0
 `release-smoke.sh --full` يشغّل أيضًا اختبار الواجهة الكامل على نسخة Linux المصدّرة (~4 دقائق).
 
 ما يفعله البناء بالترتيب: اختبارات النواة (`-warnaserror`، أي فشل يوقف الإصدار) ← تصدير Godot لـ Windows وLinux ← نشر أدوات الوكلاء
-(`blazma-mcp`, `blazma-anim`) ملفًا واحدًا مستقلًا لـ win-x64 وlinux-x64 ← التجميع ← ملاحظات الإصدار من `docs/reports` ← `SHA256SUMS.txt`.
+(`blazma-mcp`, `blazma-anim`) ملفًا واحدًا مستقلًا لـ win-x64 وlinux-x64 ← التجميع ← ملاحظات الإصدار (كتلة التثبيت + قسم الإصدار من `CHANGELOG.md`) ← `SHA256SUMS.txt`.
 
 ## المخرجات: `build/release/<الإصدار>/`
 
@@ -62,9 +62,21 @@ scripts/release-smoke.sh 1.0.0
 - أو شغّل workflow **Release** يدويًا (Actions ← Release ← Run workflow) مع الإصدار؛ يستدعي نفس `scripts/build-release.sh` ويرفع المخرجات
   كـ artifact، ويُنشئ الـ Release إذا فعّلت `publish`. (يستهلك دقائق Actions؛ الطريقة المحلية مجانية.)
 
-## وقت تشغيل VC++ في المثبّت
+## مكتبات VC++ بجانب kimodo-runner (D49)
 
-عند وجود Windows kimodo-runner ينزّل `build-release.sh` الملف `vc_redist.x64.exe` مرة واحدة إلى `build/cache` من `https://aka.ms/vs/17/release/vc_redist.x64.exe` ويتحقق من توقيع Microsoft بـ `osslsigncode verify` (`apt-get install -y osslsigncode`)؛ بدونه يطبع تحذيرًا مع SHA-256 للتوثيق اليدوي. يُضمَّن في المثبّت فقط (لا في مجلد التطبيق ولا في الـzip؛ الـzip فيه `README-VC_REDIST.txt`)، ويفحص `release-smoke.sh` وجوده عبر `7z l`. الإشعار: `packaging/legal/MSVC_REDIST_NOTICE.txt`.
+لا `vc_redist.x64.exe` بعد 1.0.1: مكتبات Microsoft Visual C++ (`msvcp140*.dll`، `vcruntime140*.dll`، `concrt140.dll`، `vcomp140.dll`) تُنسخ إلى
+`tools/kimodo` بجانب `kimodo-runner.exe` (نشر محلي يسمح به Microsoft لملفات "Distributable Code"). في GitHub Actions تأخذها مهمة `vcruntime`
+في `release.yml` (windows-2022) من مجلد `VC\Redist\MSVC\<version>\x64` في Visual Studio، وتتحقق من توقيع Microsoft (Authenticode) ومن أن
+الإصدار 14.40 فأعلى، وتكتب `SHA256SUMS-vcruntime.txt`؛ ثم يتحقق `build-release.sh` من البصمات والإصدار ويشغّل `scripts/pe-deps.py check`
+على `tools/kimodo` (كل DLL يجد ما يستورده هناك أو في Windows، والمكتبات ليست أقدم من المترجم الذي بنى الـrunner). محليًا: ضع المجلد في
+`build/cache/vcruntime-win64` أو مرّره بـ `VC_RUNTIME_WIN=<مجلد>` (الملفات من `VC\Redist\MSVC\<version>\x64\Microsoft.VC14x.CRT` و`.OpenMP` مع
+`SHA256SUMS-vcruntime.txt`)؛ بدونه يتوقف البناء عند وجود Windows runner. `release-smoke.sh` يتحقق منها في الـzip والمثبّت. الإشعار:
+`packaging/legal/MSVC_REDIST_NOTICE.txt`.
+
+## ملاحظات الإصدار
+
+`RELEASE_NOTES-<v>.md` = كتلة التثبيت (عربي) + قسم `## <v>` من `CHANGELOG.md` بعنوان "What's new in <v>". اكتب القسم قبل البناء:
+إصدار نهائي بلا قسم في `CHANGELOG.md` يوقف `build-release.sh` (إصدار تجريبي مثل `1.1.0-rc1` يكتفي بتحذير، أو يستخدم قسم `1.1.0`).
 
 ## واجهة CUDA الاختيارية (D47)
 

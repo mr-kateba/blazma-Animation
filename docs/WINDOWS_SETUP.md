@@ -152,7 +152,6 @@ certutil -hashfile BlazmaAnimation-<الإصدار>-setup.exe SHA256
 
 ## وقت تشغيل Visual C++ (لتوليد الحركة Kimodo)
 
-`kimodo-runner.exe` مبني بـ MSVC ويحتاج Microsoft Visual C++ 2015–2022 x64 Runtime (الملفات MSVCP140.dll وVCRUNTIME140.dll وVCRUNTIME140_1.dll). الخطأ «MSVCP140.dll was not found» يعني غيابه.
+`kimodo-runner.exe` مبني بـ MSVC ويحتاج مكتبات Microsoft Visual C++ (MSVCP140.dll وVCRUNTIME140.dll وVCRUNTIME140_1.dll، وVCOMP140.dll لواجهات المعالج). منذ 1.0.1 تأتي هذه المكتبات بجانبه في `tools\kimodo` (نشر محلي للتطبيق، DECISIONS D49): لا `vc_redist.x64.exe` ولا صلاحيات مدير، في المثبّت والنسخة المحمولة معًا.
 
-- **المثبّت:** يتحقق من وجوده (الإصدار 14.40 فأعلى) ويثبّت `vc_redist.x64.exe` الرسمي المضمَّن بصمت إن لم يكن موجودًا؛ تُطلب موافقة المدير (UAC) لهذه الخطوة فقط، وبقية التثبيت للمستخدم الحالي. عند الرفض يكتمل التثبيت ويعمل البرنامج، لكن توليد الحركة بالذكاء الاصطناعي يحتاج الـruntime.
-- **النسخة المحمولة:** ثبّته يدويًا مرة واحدة (يحتاج صلاحيات مدير): <https://aka.ms/vs/17/release/vc_redist.x64.exe> (التعليمات أيضًا في `README-VC_REDIST.txt` داخل الـzip).
+- الخطأ «MSVCP140.dll was not found» (أو رمز الخروج 0xC0000135) يعني أن المجلد `tools\kimodo` ناقص: أعد التثبيت أو فك الـzip من جديد.
