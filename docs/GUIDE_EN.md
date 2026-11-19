@@ -58,9 +58,9 @@ The program is not yet digitally signed, so Windows may show "Windows protected 
 certutil -hashfile BlazmaAnimation-<version>-setup.exe SHA256
 ```
 
-### Visual C++ runtime (needed for AI motion generation)
+### Visual C++ runtime (included)
 
-The motion-generation engine (`kimodo-runner.exe`) needs the *Microsoft Visual C++ 2015–2022 x64 Runtime*. The **installer** checks for it and installs it for you (Windows asks for administrator approval for that one step only). With the **portable** zip, install it once yourself from <https://aka.ms/vs/17/release/vc_redist.x64.exe>. If it is missing you will see "MSVCP140.dll was not found" when generating motion; everything else in the app still works.
+The motion-generation engine (`kimodo-runner.exe`) needs the *Microsoft Visual C++* runtime libraries. Since 1.0.1 they ship next to it in `tools\kimodo`, in the installer and in the portable zip: you do not install `vc_redist.x64.exe` and no administrator approval is needed.
 
 ### First launch
 
@@ -284,6 +284,7 @@ To keep the installer small (about 150 MB instead of about 460 MB), it ships the
 - Nothing is downloaded until you press the button (AI agents and the MCP/CLI tools can never start it). The file comes from the Blazma release on GitHub and is checked against the SHA-256 stored in the app before it is unpacked.
 - It goes to `%LOCALAPPDATA%\BlazmaAnimation\runtime\cuda` (or `userdata\runtime\cuda` in portable mode) and needs about 1.5 GB of free space while it installs.
 - A progress bar, speed and time left are shown; **Cancel** keeps what was downloaded and pressing the button again continues.
+- **GeForce RTX 50 (Blackwell):** the CUDA package of this release is built with CUDA 12.4, which does not support these cards, so it is not offered and not used on them; Kimodo runs on an RTX 50 through Vulkan, and the CUDA section says so. A later release builds CUDA with 12.8 for them.
 - Once installed, **Automatic** uses CUDA by itself. **Remove GPU acceleration** deletes it again (so does uninstalling Blazma).
 - If a generation ran on an NVIDIA card through Vulkan, the "Generated on" line adds a tip pointing to this download.
 
@@ -590,11 +591,11 @@ The full step-by-step guide (in Arabic) is [AGENT_SETUP_AR.md](AGENT_SETUP_AR.md
 **Windows says "Windows protected your PC" (SmartScreen).**
 The app is not signed yet. Click **More info**, then **Run anyway**. Verify the download with `SHA256SUMS.txt`.
 
-**"MSVCP140.dll was not found" when I generate motion.**
-Install the Microsoft Visual C++ 2015–2022 x64 Runtime: <https://aka.ms/vs/17/release/vc_redist.x64.exe>. The installer does this for you; the portable zip does not.
+**"MSVCP140.dll was not found" or "a library it needs is missing" when I generate motion.**
+Since 1.0.1 these libraries ship in `tools\kimodo`. If the message appears, that folder is incomplete (security software removed a file, or the app was copied partially): reinstall, or unpack the zip again.
 
 **The app does not see my graphics card.**
-Open **Settings > AI Models…** and press **Refresh**, or press **Check** in **Motion Generation (AI)…**. Update your graphics driver (NVIDIA drivers provide CUDA; any recent driver provides Vulkan). Set the device to **Automatic (GPU first)**; if a GPU attempt fails, Blazma falls back and tells you. As a safe choice you can always select **Processor only**. GPU generation is a recent feature (v0.11) and is still being validated on more hardware; reports are welcome.
+Open **Settings > AI Models…** and press **Refresh**, or press **Check** in **Motion Generation (AI)…**. Update your graphics driver (NVIDIA drivers provide CUDA; any recent driver provides Vulkan). Set the device to **Automatic (GPU first)**; if a GPU attempt fails, Blazma falls back and tells you, and if no usable graphics card is found at all it generates on the processor and says "No usable graphics card was found, so the motion was generated on the processor" with the reason (for example: the graphics driver has no Vulkan support, or a file is missing, with the Windows error number). **Check** shows the same reason. As a safe choice you can always select **Processor only**. GPU generation is a recent feature (v0.11) and is still being validated on more hardware; reports are welcome.
 
 **Generation is very slow.**
 On CPU, one generation can take several minutes. Use a graphics card if you have one (Automatic or **Graphics card + processor**), pick the **Light** package on weak PCs, and generate a shorter clip. Close other heavy programs, because the models need a lot of memory. The time limit for one generation is configurable in the AI settings (default 15 minutes).

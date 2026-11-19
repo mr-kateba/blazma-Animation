@@ -3,6 +3,43 @@
 All notable changes to Blazma Animation. Versions follow the release tags (`v<version>`); notes for 0.12.0 and earlier are on the
 [releases page](https://github.com/mr-kateba/blazma-Animation/releases) and in `docs/STATUS.md`.
 
+## 1.0.1 — 2026-11-19
+
+Fixes for what testers hit with 1.0.0 on Windows.
+
+### AI motion generation
+- **No Visual C++ setup any more (D49):** the Microsoft Visual C++ runtime that kimodo-runner and its GGML libraries need now ships
+  next to them in `tools\kimodo` (Microsoft's app-local deployment), in the installer and in the portable zip. The installer no longer
+  asks for administrator rights for `vc_redist.x64.exe` and no longer shows the "Visual C++ runtime was not installed" warning. With an
+  old or missing system runtime the graphics card backend could not load in 1.0.0, so Kimodo reported "no graphics card".
+- **Automatic never stops at "no graphics card":** when kimodo-runner finds no usable CUDA or Vulkan device, Automatic (and
+  "Graphics card + processor") generates on the processor and says so: "No usable graphics card was found, so the motion was
+  generated on the processor", with the reason. The order stays CUDA → Vulkan → graphics card + processor → processor. Only
+  "Graphics card only" still fails, with the reason.
+- **Why the graphics card was not used:** Blazma reads the GGML backend libraries' import tables (nothing is loaded) and names the
+  cause: a missing file (Windows error 126), a too-old library (Windows error 127), no Vulkan driver (`vulkan-1.dll`), no NVIDIA driver
+  (`nvcuda.dll`), or "the files are fine but the driver offers no Vulkan device". Shown after generation, in **Check** and in the log.
+- **GeForce RTX 50 (Blackwell):** the optional CUDA download is built with CUDA 12.4, which cannot target compute capability 12.0. It is
+  no longer offered or used on such a card (detected with `nvidia-smi --query-gpu=compute_cap`, or from the card name); Kimodo runs
+  on it through Vulkan and Settings → AI says why. `cuda-backend.json` can now list the compiled architectures, and the
+  kimodo-runner workflow builds the CUDA backend with CUDA 12.8 including sm_120 for a later release.
+- **Errors in Arabic:** generation errors (no graphics card, out of memory, missing model files, runner start failures, a missing
+  runtime library, CUDA driver errors, protocol mismatch) are translated, and the step text and any English part are wrapped in
+  Unicode isolates so mixed Arabic/English lines read in the right order. A runner that exits with 0xC0000135 / 0xC0000139 (missing or
+  too-old library) gets an actionable message.
+
+### Motion planner
+- Causative words such as «خليه»، «خلّيه»، «خليها»، «خله»، «خلها»، «خلّ»، «خلوه»، «اجعله»، «خلي الشخصية»، «خلي الرجال» are read as
+  "make him / her …": the step shows «يجري», not «خليه يجري», and they never trigger a "did you mean" hint.
+- «يتشقلب»، «تشقلب»، «شقلبة» (and the common misspelling «يتشقبل») are a somersault: "a person does a forward flip"; «يتشقلب للخلف»
+  is a backflip. «يتدحرج» stays rolling on the ground.
+- "Did you mean" hints are stricter: short words one unrelated letter away from a dictionary word (such as «خليه» → «خلسه») get none.
+  The note for an automatic correction reads naturally in Arabic.
+
+### Releases
+- Release notes come from this file's section for the version (plus the install block) instead of the old phase reports.
+- The MCP server reports version 1.0.1.
+
 ## 1.0.0 — 2026-11-13
 
 Everything since v0.12.0.
