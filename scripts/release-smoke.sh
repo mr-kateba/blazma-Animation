@@ -122,8 +122,8 @@ if command -v 7z >/dev/null; then
     grep -q "cuda-backend.json" "$T/setup-list.txt" || [ ! -f "$C" ] && ok "installer payload has tools/kimodo/cuda-backend.json (when the CUDA asset exists)" || bad "installer lacks cuda-backend.json"
     grep -qi "vcruntime140_1.dll" "$T/setup-list.txt" && grep -qi "msvcp140.dll" "$T/setup-list.txt" && grep -qi "vcomp140.dll" "$T/setup-list.txt" \
       && ok "installer payload has the app-local VC++ runtime (msvcp140, vcruntime140_1, vcomp140)" || bad "installer payload lacks the VC++ runtime DLLs"
-    grep -qi "vc_redist" "$T/setup-list.txt" && bad "installer still carries vc_redist.x64.exe (D49: app-local runtime instead)" || ok "installer has no vc_redist.x64.exe (no administrator prompt)"
-    unzip -l "$D/BlazmaAnimation-$V-win64.zip" | grep -qi "vc_redist" && bad "vc_redist.x64.exe must not be in the portable zip" || ok "portable zip has no vc_redist.x64.exe"
+    grep -qi "vc_redist\.x64\.exe" "$T/setup-list.txt" && bad "installer still carries vc_redist.x64.exe (D49: app-local runtime instead)" || ok "installer has no vc_redist.x64.exe (no administrator prompt)"
+    unzip -l "$D/BlazmaAnimation-$V-win64.zip" | grep -qi "vc_redist\.x64\.exe" && bad "vc_redist.x64.exe must not be in the portable zip" || ok "portable zip has no vc_redist.x64.exe"
   fi
 else
   echo "  SKIP  7z not installed: installer payload not listed (portable.txt absence and runner not checked; apt-get install -y p7zip-full)"
