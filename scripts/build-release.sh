@@ -10,6 +10,9 @@
 #   APPIMAGETOOL   path to appimagetool (default: release $APPIMAGETOOL_VERSION downloaded once into build/cache from the official
 #                  AppImage GitHub releases and checked against $APPIMAGETOOL_SHA256; a mismatch stops the build)
 #   SKIP_TESTS=1   same as --skip-tests
+#   VC_RUNTIME_WIN folder with the Microsoft Visual C++ runtime DLLs (msvcp140*.dll, vcruntime140*.dll, concrt140.dll, vcomp140.dll)
+#                  and SHA256SUMS-vcruntime.txt, copied next to kimodo-runner.exe (DECISIONS D49). Default build/cache/vcruntime-win64
+#                  (release.yml fills it from Visual Studio's redist folder). Required when a Windows runner is bundled.
 #   KIMODO_RUNNER_WIN / KIMODO_RUNNER_LINUX   optional: folder (or .zip) with a kimodo-runner build (the artifacts of the manual
 #                  `kimodo-runner` workflow: kimodo-runner[.exe], kimodo + GGML libraries incl. the run-time backends ggml-cpu-*,
 #                  ggml-vulkan and optionally ggml-cuda + CUDA runtime DLLs + NVIDIA_CUDA_NOTICE.txt, SHA256SUMS*.txt). Default: build/cache/kimodo-runner-win64
@@ -111,24 +114,6 @@ if [ $SKIP_LINUX = 0 ]; then
   chmod +x "$WORK/tools-linux/blazma-mcp" "$WORK/tools-linux/blazma-anim"
 fi
 
-# ---------------------------------------------------------------- 3a. VC++ runtime (installer only; kimodo-runner.exe is built with MSVC)
-VCREDIST=""
-fetch_vcredist() {
-  VCREDIST="$CACHE/vc_redist.x64.exe"
-  if [ ! -f "$VCREDIST" ]; then
-    curl -fL --retry 3 -o "$VCREDIST.part" https://aka.ms/vs/17/release/vc_redist.x64.exe || die "vc_redist.x64.exe download failed"
-    mv "$VCREDIST.part" "$VCREDIST"
-  fi
-  [ "$(head -c2 "$VCREDIST")" = MZ ] || { rm -f "$VCREDIST"; die "vc_redist.x64.exe is not a PE file"; }
-  if command -v osslsigncode >/dev/null; then
-    osslsigncode verify -in "$VCREDIST" 2>&1 | tee "$WORK/vcredist-verify.txt" | tail -3
-    grep -q "Microsoft" "$WORK/vcredist-verify.txt" && grep -qi "succeeded" "$WORK/vcredist-verify.txt" \
-      || { rm -f "$VCREDIST"; die "vc_redist.x64.exe is not validly signed by Microsoft"; }
-  else
-    echo "WARNING: osslsigncode not installed (apt-get install -y osslsigncode) — signature NOT verified. SHA-256: $(sha256sum "$VCREDIST" | cut -d' ' -f1)"
-  fi
-}
-
 # ---------------------------------------------------------------- 3b. optional kimodo-runner (never model weights)
 stage_runner() { # source (dir or zip), exe name, dest-dir → copies runner + libraries, checks SHA256SUMS.txt if present
   local src="$1" exe="$2" dst="$3" tmp
@@ -141,7 +126,7 @@ stage_runner() { # source (dir or zip), exe name, dest-dir → copies runner + l
   done
   find "$dir" -maxdepth 1 -type f -name '*.gguf' | grep -q . && die "kimodo-runner: $1 contains model weights — never bundle them"
   mkdir -p "$dst"
-  find "$dir" -maxdepth 1 \( -type f -o -type l \) \( -name "$exe" -o -name '*.dll' -o -name '*.so*' -o -name 'SHA256SUMS*.txt' -o -name '*NOTICE*.txt' \) -exec cp -P {} "$dst/" \;
+  find "$dir" -maxdepth 1 \( -type f -o -type l \) \( -name "$exe" -o -name '*.dll' -o -name '*.so*' -o -name 'SHA256SUMS*.txt' -o -name '*NOTICE*.txt' -o -name 'CUDA_BUILD.txt' \) -exec cp -P {} "$dst/" \;
   # One runner, run-time GGML backends (DECISIONS D44): at least the CPU backends must be there, or nothing can run.
   find "$dst" -maxdepth 1 -name '*ggml-cpu*' | grep -q . || die "kimodo-runner: no ggml-cpu backend library in $1 (old single-backend build?)"
   if [ -f "$dst/ggml-cuda.dll" ]; then
@@ -156,6 +141,48 @@ if [ -e "$RUNNER_WIN" ]; then log "kimodo-runner (Windows)"; stage_runner "$RUNN
 else echo "NOTE: no Windows kimodo-runner at $RUNNER_WIN — the release will not include it"; fi
 if [ $SKIP_LINUX = 0 ] && [ -e "$RUNNER_LINUX" ]; then log "kimodo-runner (Linux)"; stage_runner "$RUNNER_LINUX" kimodo-runner "$WORK/runner-linux"; HAVE_RUNNER_LINUX=1; fi
 
+# ---------------------------------------------------------------- 3b'. Visual C++ runtime next to kimodo-runner.exe (DECISIONS D49)
+# kimodo-runner.exe, kimodo.dll and the GGML libraries are built with MSVC: they need MSVCP140 / VCRUNTIME140(_1) and the CPU
+# backends VCOMP140 (OpenMP). Shipping these Microsoft "Distributable Code" files app-locally in tools/kimodo means no
+# administrator rights and no vc_redist.x64.exe (1.0.0 needed both, and a declined UAC prompt left Kimodo broken). The files come
+# from Visual Studio's VC\Redist\MSVC\<version>\x64 folder (release.yml's vcruntime job checks their Microsoft signature there)
+# and must carry SHA256SUMS-vcruntime.txt; a local build can point VC_RUNTIME_WIN at such a folder.
+VC_RUNTIME_DLLS=(msvcp140.dll msvcp140_1.dll msvcp140_2.dll msvcp140_atomic_wait.dll msvcp140_codecvt_ids.dll vcruntime140.dll vcruntime140_1.dll concrt140.dll vcomp140.dll)
+VC_RUNTIME_OPTIONAL=(vcruntime140_threads.dll)
+VC_RUNTIME_MIN=14.40
+stage_vcruntime() { # source dir, runner stage dir
+  local src="$1" dst="$2" f low v
+  [ -d "$src" ] || die "kimodo-runner is bundled but the Visual C++ runtime folder $src is missing (release.yml's vcruntime job, or VC_RUNTIME_WIN=<folder with msvcp140.dll ... vcomp140.dll and SHA256SUMS-vcruntime.txt>)"
+  [ -f "$src/SHA256SUMS-vcruntime.txt" ] || die "Visual C++ runtime: $src/SHA256SUMS-vcruntime.txt missing"
+  (cd "$src" && sha256sum -c --quiet SHA256SUMS-vcruntime.txt) || die "Visual C++ runtime: checksum mismatch in $src"
+  # Checksum lists that came with the runner must not name the runtime files (a runner build may have carried its own copy).
+  for sums in "$dst"/SHA256SUMS*.txt; do
+    [ -f "$sums" ] || continue
+    for f in "${VC_RUNTIME_DLLS[@]}" "${VC_RUNTIME_OPTIONAL[@]}"; do sed -i "/[ *]$f\r\?\$/Id" "$sums"; done
+  done
+  for f in "${VC_RUNTIME_DLLS[@]}" "${VC_RUNTIME_OPTIONAL[@]}"; do
+    low="$(find "$src" -maxdepth 1 -iname "$f" | head -1)"
+    if [ -z "$low" ]; then
+      printf '%s\n' "${VC_RUNTIME_OPTIONAL[@]}" | grep -qx "$f" && continue
+      die "Visual C++ runtime: $f missing in $src"
+    fi
+    grep -qi " [*]\?$(basename "$low")\$" "$src/SHA256SUMS-vcruntime.txt" || die "Visual C++ runtime: $f is not listed in SHA256SUMS-vcruntime.txt"
+    file -b "$low" | grep -q "PE32+ executable.*x86-64" || die "Visual C++ runtime: $f is not a 64-bit Windows DLL"
+    v="$(python3 -I "$ROOT/scripts/pe-deps.py" version "$low" | awk '{print $2}')"
+    [ "$(printf '%s\n%s\n' "$VC_RUNTIME_MIN" "$v" | sort -V | head -1)" = "$VC_RUNTIME_MIN" ] || die "Visual C++ runtime: $f is version $v, older than $VC_RUNTIME_MIN"
+    find "$dst" -maxdepth 1 -iname "$f" -delete
+    cp "$low" "$dst/$f"
+  done
+  (cd "$dst" && for f in "${VC_RUNTIME_DLLS[@]}" "${VC_RUNTIME_OPTIONAL[@]}"; do [ -f "$f" ] && sha256sum "$f"; done > SHA256SUMS-vcruntime.txt)
+  python3 -I "$ROOT/scripts/pe-deps.py" version "$dst/msvcp140.dll" | awk '{print "Microsoft Visual C++ runtime " $2 " (app-local copy, see legal/MSVC_REDIST_NOTICE.txt)"}' > "$dst/VCRUNTIME_VERSION.txt"
+  for sums in "$dst"/SHA256SUMS*.txt; do (cd "$dst" && sha256sum -c --quiet "$(basename "$sums")") || die "tools/kimodo checksums broken after adding the runtime ($(basename "$sums"))"; done
+  # Every library in tools/kimodo must now find its imports there or in Windows (and be no newer than this runtime).
+  python3 -I "$ROOT/scripts/pe-deps.py" check "$dst" || die "tools/kimodo has unresolved DLL imports (see above)"
+  echo "Visual C++ runtime: $(cat "$dst/VCRUNTIME_VERSION.txt")"
+}
+VC_RUNTIME_SRC="${VC_RUNTIME_WIN:-$CACHE/vcruntime-win64}"
+if [ $HAVE_RUNNER_WIN = 1 ]; then log "Visual C++ runtime (app-local, tools/kimodo)"; stage_vcruntime "$VC_RUNTIME_SRC" "$WORK/runner-win"; fi
+
 # ---------------------------------------------------------------- 3c. optional CUDA backend as its own asset (DECISIONS D47)
 # ggml-cuda.dll + cudart/cublas/cublasLt are ~940 MB of the runner (≈300 MB of the installer). They leave tools/kimodo and become
 # blazma-cuda-backend-<version>-win-x64.zip; tools/kimodo/cuda-backend.json carries its URL, size and SHA-256 and every file's size
@@ -166,6 +193,18 @@ CUDA_ASSET="blazma-cuda-backend-$VERSION-win-x64.zip"
 HAVE_CUDA=0
 if [ $HAVE_RUNNER_WIN = 1 ] && [ -f "$WORK/runner-win/ggml-cuda.dll" ]; then
   log "CUDA backend → $CUDA_ASSET"
+  # The CUDA toolkit and GPU architectures of this build (kimodo-runner.yml writes CUDA_BUILD.txt since the CUDA 12.8 build; older
+  # artifacts were CUDA 12.4 without it). The app neither offers nor uses a package on a card newer than it supports (a GeForce RTX 50
+  # needs CUDA 12.8+ with sm_120): Kimodo runs on such a card through Vulkan.
+  CUDA_TOOLKIT=12.4; CUDA_CCS=""
+  if [ -f "$WORK/runner-win/CUDA_BUILD.txt" ]; then
+    CUDA_TOOLKIT="$(sed -n 's/^cuda=\([0-9.]*\).*/\1/p' "$WORK/runner-win/CUDA_BUILD.txt" | head -1)"
+    CUDA_CCS="$(sed -n 's/^architectures=//p' "$WORK/runner-win/CUDA_BUILD.txt" | tr ';' '\n' | sed -n 's/^\([0-9]\{2,3\}\).*/\1/p' | sort -un | paste -sd, -)"
+    [[ "$CUDA_TOOLKIT" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || die "CUDA_BUILD.txt: bad cuda= line"
+    rm -f "$WORK/runner-win/CUDA_BUILD.txt"
+    for sums in "$WORK/runner-win"/SHA256SUMS*.txt; do [ -f "$sums" ] && sed -i '/[ *]CUDA_BUILD\.txt\r\?$/d' "$sums"; done
+  fi
+  echo "CUDA package: toolkit $CUDA_TOOLKIT, architectures ${CUDA_CCS:-not listed (CUDA 12.4: up to compute capability 9.0)}"
   CD="$WORK/cuda/blazma-cuda-backend-$VERSION-win-x64"; rm -rf "$WORK/cuda"; mkdir -p "$CD"
   for f in "${CUDA_FILES[@]}"; do mv "$WORK/runner-win/$f" "$CD/"; done
   [ -f "$WORK/runner-win/SHA256SUMS-cuda.txt" ] && mv "$WORK/runner-win/SHA256SUMS-cuda.txt" "$CD/"
@@ -184,7 +223,8 @@ if [ $HAVE_RUNNER_WIN = 1 ] && [ -f "$WORK/runner-win/ggml-cuda.dll" ]; then
     echo '{'
     echo '  "format": 1,'
     echo "  \"version\": \"$VERSION\","
-    echo '  "cuda": "12.4",'
+    echo "  \"cuda\": \"$CUDA_TOOLKIT\","
+    [ -n "$CUDA_CCS" ] && echo "  \"computeCapabilities\": [$CUDA_CCS],"
     echo "  \"asset\": \"$CUDA_ASSET\","
     echo "  \"url\": \"https://github.com/$RELEASE_REPO/releases/download/v$VERSION/$CUDA_ASSET\","
     echo "  \"size\": $CUDA_SIZE,"
@@ -226,7 +266,6 @@ cp "$WORK/win/BlazmaAnimation.exe" "$WORK/win/BlazmaAnimation.pck" "$WSTAGE/"
 cp -r "$WIN_DATA" "$WSTAGE/"; find "$WSTAGE" -name '*.pdb' -delete
 mkdir -p "$WSTAGE/tools"; cp "$WORK/tools-win/blazma-mcp.exe" "$WORK/tools-win/blazma-anim.exe" "$WSTAGE/tools/"
 if [ $HAVE_RUNNER_WIN = 1 ]; then
-  log "VC++ runtime for the installer"; fetch_vcredist
   cp -r "$WORK/runner-win" "$WSTAGE/tools/kimodo"
   (cd "$WORK" && rm -rf "kimodo-runner-$VERSION-win64" && cp -r runner-win "kimodo-runner-$VERSION-win64" && zip -q -r -9 -X "$OUT/kimodo-runner-$VERSION-win64.zip" "kimodo-runner-$VERSION-win64")
 fi
@@ -239,15 +278,8 @@ Portable mode marker. While this file sits next to BlazmaAnimation.exe, settings
 are kept in the "userdata" folder next to the exe instead of %APPDATA%\BlazmaAnimation.
 Delete this file to use the normal per-user folder.
 TXT
-if [ $HAVE_RUNNER_WIN = 1 ]; then cat > "$WSTAGE/README-VC_REDIST.txt" <<'TXT'
-AI motion generation (tools\kimodo\kimodo-runner.exe) needs the Microsoft Visual C++ 2015-2022 x64 runtime.
-If you see "MSVCP140.dll was not found", install it once (needs administrator rights):
-  https://aka.ms/vs/17/release/vc_redist.x64.exe
-(the installer BlazmaAnimation-<version>-setup.exe does this for you). The rest of the app does not need it.
-TXT
-fi
 (cd "$WORK/stage" && zip -q -r -9 -X "$OUT/$WINNAME.zip" "$WINNAME")
-rm "$WSTAGE/portable.txt"; rm -f "$WSTAGE/README-VC_REDIST.txt"
+rm "$WSTAGE/portable.txt"
 
 if [ $SKIP_INSTALLER = 0 ]; then
   log "Windows installer (NSIS)"
@@ -256,7 +288,7 @@ if [ $SKIP_INSTALLER = 0 ]; then
   { find "$WSTAGE" -mindepth 1 -maxdepth 1 -type f -printf 'Delete "$INSTDIR\\%f"\n'
     find "$WSTAGE" -mindepth 1 -maxdepth 1 -type d -printf 'RMDir /r "$INSTDIR\\%f"\n'; } | sort > "$UNLIST"
   grep -q portable.txt "$UNLIST" && die "portable.txt must not be in the installer payload"
-  makensis -V2 -DVERSION="$VERSION" -DNUMVER="$NUMVER" -DSRCDIR="$WSTAGE" -DREPO="$ROOT" -DUNINSTLIST="$UNLIST" ${VCREDIST:+-DVCREDIST="$VCREDIST"} \
+  makensis -V2 -DVERSION="$VERSION" -DNUMVER="$NUMVER" -DSRCDIR="$WSTAGE" -DREPO="$ROOT" -DUNINSTLIST="$UNLIST" \
     -DOUTFILE="$OUT/BlazmaAnimation-$VERSION-setup.exe" "$ROOT/packaging/windows/installer.nsi" || die "makensis failed"
 fi
 
@@ -313,9 +345,22 @@ TXT
   tar --sort=name --owner=0 --group=0 --numeric-owner -C "$WORK/stage" -czf "$OUT/$LINNAME.tar.gz" "$LINNAME"
 fi
 
-# ---------------------------------------------------------------- 5. release notes (from docs/reports)
+# ---------------------------------------------------------------- 5. release notes (install block + this version's CHANGELOG section)
 log "release notes"
 NOTES="$OUT/RELEASE_NOTES-$VERSION.md"
+# The "## <version>" section of CHANGELOG.md (from its heading to the next "## "), without the heading itself.
+changelog_section() { # version
+  awk -v v="$1" '
+    /^## / { if (on) exit; split($0, h, " "); if (h[2] == v) { on = 1; next } }
+    on { print }
+  ' "$SRC/CHANGELOG.md" | sed -e '/./,$!d'
+}
+CHANGES="$(changelog_section "$VERSION")"
+[ -n "$CHANGES" ] || CHANGES="$(changelog_section "$NUMVER")"
+if [ -z "$CHANGES" ]; then
+  case "$VERSION" in *-*) echo "WARNING: CHANGELOG.md has no section for $VERSION — the release notes carry the install block only";;
+    *) die "CHANGELOG.md has no '## $VERSION' section: write the changes for this release first (docs/RELEASING.md)";; esac
+fi
 {
   echo "# Blazma Animation $VERSION"
   echo
@@ -325,25 +370,18 @@ NOTES="$OUT/RELEASE_NOTES-$VERSION.md"
   echo "- **Linux:** \`BlazmaAnimation-$VERSION-x86_64.AppImage\` (chmod +x ثم تشغيل) أو \`$LINNAME.tar.gz\`."
   echo "- لا يحتاج .NET ولا Godot. البرنامج غير موقَّع رقميًا: في Windows اضغط **More info** ثم **Run anyway** في SmartScreen."
   echo "- أدوات الذكاء الاصطناعي في مجلد \`tools\`؛ الشرح في \`docs/AGENT_SETUP_AR.md\`."
-  [ $HAVE_RUNNER_WIN = 1 ] && echo "- \`kimodo-runner\` (توليد الحركة محليًا) مضمَّن في \`tools/kimodo\`. نماذج Kimodo لا تُضمَّن: تُنزَّل من داخل البرنامج (الإعدادات ← AI) بضغطة من المستخدم بعد عرض الحجم والتراخيص."
+  [ $HAVE_RUNNER_WIN = 1 ] && echo "- \`kimodo-runner\` (توليد الحركة محليًا) مضمَّن في \`tools/kimodo\` مع مكتبات Microsoft Visual C++ اللازمة له، فلا يحتاج تثبيت vc_redist ولا صلاحيات مدير. نماذج Kimodo لا تُضمَّن: تُنزَّل من داخل البرنامج (الإعدادات ← AI) بضغطة من المستخدم بعد عرض الحجم والتراخيص."
   if [ $HAVE_CUDA = 1 ]; then
     echo "- **تسريع NVIDIA (CUDA) اختياري ومنفصل:** المثبّت يحمل واجهتَي المعالج وVulkan فقط. لبطاقات NVIDIA يظهر في الإعدادات ← AI زر «تنزيل تسريع بطاقة الرسومات (CUDA)» يُنزِّل \`$CUDA_ASSET\` ($((CUDA_SIZE / 1048576)) MB) عند الضغط فقط ويتحقق منه. بدونه تعمل بطاقات NVIDIA عبر Vulkan."
     echo "  - SHA-256: \`$CUDA_SHA\`"
   fi
   echo "- تحقق من الملفات بـ \`SHA256SUMS.txt\`."
   echo
-  echo "## ما تم إنجازه (من تقارير المراحل)"
-  for r in "$SRC"/docs/reports/PHASE*.md; do
-    [ -f "$r" ] || continue
+  if [ -n "$CHANGES" ]; then
+    echo "## What's new in $VERSION"
     echo
-    awk '
-      /^# /        { sub(/^# /, "### "); print; next }
-      /^التاريخ/   { print; next }
-      /^## (الاختبارات|قيود معروفة)/ { show=1; print "#" $0; next }
-      /^## /       { show=0; next }
-      show         { print }
-    ' "$r"
-  done
+    echo "$CHANGES" | sed -e 's/^### /#### /'
+  fi
 } > "$NOTES"
 
 # ---------------------------------------------------------------- 6. checksums

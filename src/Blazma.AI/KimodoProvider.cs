@@ -153,6 +153,13 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
                 foreach (var (k, v) in d)
                     if (k == "warnings" && v is JsonArray wa) warnings.AddRange(wa.Select(x => (string?)x ?? ""));
                     else details["runner." + k] = v?.ToJsonString().Trim('"');
+                if (KimodoDevicePlanner.NoGpu(RunnerDevices))
+                {
+                    // GGML skips a backend that does not load without saying why: find the reason from the files.
+                    var problems = GpuDiagnosis(s);
+                    details["gpuProblems"] = string.Join(",", problems.Select(p => p.Code));
+                    warnings.Add(KimodoGpuDiagnosis.Warning(problems).Replace(KimodoGpuDiagnosis.NoGpuWarning, NoGpuCheck, StringComparison.Ordinal));
+                }
             }
             catch (MotionGenerationException e)
             {
@@ -169,6 +176,9 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
         return new ProviderDiagnostics(info, details, HardwareProbe.Probe(), warnings);
     }
 
+    /// <summary>The start of the check warning when the runner offers no graphics card (<see cref="DiagnoseAsync"/>).</summary>
+    public const string NoGpuCheck = "kimodo-runner found no usable graphics card: Kimodo runs on the processor (slower).";
+
     public async Task<MotionResult> GenerateAsync(MotionRequest request, IProgress<GenerationProgress>? progress, CancellationToken ct)
     {
         request.Validate();
@@ -184,7 +194,18 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
             CancelIdleStop();
             progress?.Report(new GenerationProgress("start", 0.02, "starting kimodo-runner"));
             var runner = await EnsureRunnerAsync(s, ct).ConfigureAwait(false);
-            var attempts = KimodoDevicePlanner.Plan(s.Device, s.GpuDevice, RunnerDevices);
+            IReadOnlyList<GpuProblem>? noGpu = null;
+            if (s.Device != "cpu" && KimodoDevicePlanner.NoGpu(RunnerDevices))
+            {
+                noGpu = GpuDiagnosis(s);
+                Write($"kimodo-runner found no graphics card; {(s.Device == "gpu" ? "\"graphics card only\" cannot run" : "generating on the processor")}." + KimodoGpuDiagnosis.Describe(noGpu));
+            }
+            IReadOnlyList<KimodoAttempt> attempts;
+            try { attempts = KimodoDevicePlanner.Plan(s.Device, s.GpuDevice, RunnerDevices); }
+            catch (MotionGenerationException e) when (e.Code == "device_unavailable" && noGpu is { Count: > 0 })
+            {
+                throw new MotionGenerationException(e.Code, e.Message + KimodoGpuDiagnosis.Describe(noGpu), e);
+            }
             var fallbackWarnings = new List<string>();
             JsonObject result;
             KimodoAttempt attempt;
@@ -222,6 +243,11 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
             var warnings = motion.Warnings.ToList();
             if (fallbackWarnings.Count > 0)
                 warnings.Insert(0, $"Generated on {use.Summary} after {fallbackWarnings.Count} failed attempt(s): {string.Join(" ", fallbackWarnings)}");
+            if (noGpu is not null && !use.UsedGpu)
+            {
+                warnings.Insert(0, KimodoGpuDiagnosis.Warning(noGpu));
+                meta["kimodo.noGpu"] = string.Join(",", noGpu.Select(p => p.Code).DefaultIfEmpty("unknown"));
+            }
             motion = motion with { Metadata = meta, Warnings = warnings };
             Write($"generated on {use.Summary}" + (cudaHint ? " (CUDA is not installed: the optional CUDA download in Settings → AI is usually faster on this card)" : ""));
             progress?.Report(new GenerationProgress("done", 1));
@@ -231,6 +257,30 @@ public sealed class KimodoProvider : IMotionGenerationProvider, IDisposable
         {
             _gate.Release();
             ScheduleIdleStop();
+        }
+    }
+
+    /// <summary>Why the running kimodo-runner offers no graphics card (empty when there is one or the runner has not started).</summary>
+    public IReadOnlyList<GpuProblem> GpuProblems()
+    {
+        var s = Settings;
+        return KimodoDevicePlanner.NoGpu(RunnerDevices) ? GpuDiagnosis(s) : Array.Empty<GpuProblem>();
+    }
+
+    IReadOnlyList<GpuProblem> GpuDiagnosis(KimodoSettings s)
+    {
+        if (s.ResolveRunner() is not { } runner) return Array.Empty<GpuProblem>();
+        IReadOnlyList<string>? backends;
+        lock (_sync) backends = _hello?["backends"] is System.Text.Json.Nodes.JsonArray a ? a.Select(x => (string?)x ?? "").ToList() : null;
+        var windows = runner.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || OperatingSystem.IsWindows();
+        try
+        {
+            return KimodoGpuDiagnosis.Diagnose(runner, s.ResolveCudaBackend(), backends, OperatingSystem.IsWindows() ? Environment.SystemDirectory : null, windows);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
+        {
+            Write($"graphics card diagnosis failed: {e.Message}");
+            return Array.Empty<GpuProblem>();
         }
     }
 

@@ -27,7 +27,66 @@ env:
   GODOT_VERSION: 4.7.2
 
 jobs:
+  # The Microsoft Visual C++ runtime DLLs that kimodo-runner and its GGML libraries need, shipped next to them in tools/kimodo
+  # (app-local deployment, DECISIONS D49: no vc_redist.x64.exe, no administrator rights). Taken from the redistributable folder of
+  # the Visual Studio on the Windows image (VC\Redist\MSVC\<version>\x64\Microsoft.VC14x.CRT and .OpenMP, the files Microsoft lists
+  # as Distributable Code); each must carry a valid Microsoft Authenticode signature (checked by Windows here) and be 14.40 or newer.
+  # The release job verifies the SHA-256 list written here and that every DLL in tools/kimodo resolves its imports.
+  vcruntime:
+    if: ${{ inputs.kimodo_runner_run_id != '' }}
+    runs-on: windows-2022
+    steps:
+      - name: Collect and verify the Visual C++ runtime DLLs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $inst = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $inst) { throw 'no Visual Studio with the C++ tools on this image' }
+          $ver = (Get-Content (Join-Path $inst 'VC\Auxiliary\Build\Microsoft.VCRedistVersion.default.txt') -TotalCount 1).Trim()
+          $x64 = Join-Path $inst "VC\Redist\MSVC\$ver\x64"
+          $crt = Get-ChildItem $x64 -Directory -Filter 'Microsoft.VC14*.CRT' | Sort-Object Name | Select-Object -Last 1
+          $omp = Get-ChildItem $x64 -Directory -Filter 'Microsoft.VC14*.OpenMP' | Sort-Object Name | Select-Object -Last 1
+          if (-not $crt -or -not $omp) { throw "no Microsoft.VC14x.CRT / .OpenMP folder in $x64" }
+          Write-Output "Visual C++ redist $ver from $($crt.FullName) and $($omp.FullName)"
+          $out = 'vcruntime'
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          foreach ($f in 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'msvcp140_atomic_wait.dll', 'msvcp140_codecvt_ids.dll',
+                         'vcruntime140.dll', 'vcruntime140_1.dll', 'concrt140.dll') {
+            Copy-Item (Join-Path $crt.FullName $f) $out
+          }
+          $threads = Join-Path $crt.FullName 'vcruntime140_threads.dll'
+          if (Test-Path $threads) { Copy-Item $threads $out }
+          Copy-Item (Join-Path $omp.FullName 'vcomp140.dll') $out
+          $min = [Version]'14.40'
+          foreach ($f in Get-ChildItem $out -Filter *.dll) {
+            $sig = Get-AuthenticodeSignature $f.FullName
+            if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
+              throw "$($f.Name): not validly signed by Microsoft ($($sig.Status), $($sig.SignerCertificate.Subject))"
+            }
+            $vi = $f.VersionInfo
+            $v = [Version]::new($vi.FileMajorPart, $vi.FileMinorPart, $vi.FileBuildPart, $vi.FilePrivatePart)
+            if ($v -lt $min) { throw "$($f.Name) is version $v, older than $min" }
+            Write-Output ("{0,-28} {1}  signed by {2}" -f $f.Name, $v, $sig.SignerCertificate.Subject)
+          }
+          Push-Location $out
+          Get-ChildItem -File -Filter *.dll | Sort-Object Name | ForEach-Object {
+            "{0}  {1}" -f (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLowerInvariant(), $_.Name
+          } | Set-Content -Encoding ascii SHA256SUMS-vcruntime.txt
+          Get-Content SHA256SUMS-vcruntime.txt
+          Pop-Location
+          "Visual C++ runtime shipped app-local in tools/kimodo: $ver" | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vcruntime-win-x64
+          path: vcruntime/
+          retention-days: 7
+
   release:
+    needs: vcruntime
+    # Runs without the vcruntime job too (no runner bundled → no runtime needed), but never after it failed.
+    if: ${{ !cancelled() && (needs.vcruntime.result == 'success' || needs.vcruntime.result == 'skipped') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -83,6 +142,13 @@ jobs:
           gh run download "$RUN_ID" -n kimodo-runner-windows-x64-cuda -D build/cache/kimodo-runner-win64 || echo "no CUDA backend in run $RUN_ID (NVIDIA cards use Vulkan)"
           gh run download "$RUN_ID" -n kimodo-runner-linux-x64 -D build/cache/kimodo-runner-linux-x64 || echo "no Linux runner in run $RUN_ID"
           ls -la build/cache/kimodo-runner-win64
+
+      - name: Get the Visual C++ runtime DLLs (vcruntime job; copied next to kimodo-runner.exe, DECISIONS D49)
+        if: ${{ inputs.kimodo_runner_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: vcruntime-win-x64
+          path: build/cache/vcruntime-win64
 
       - name: Build release (tests, exports, tools, zip, installer, tar.gz, AppImage, checksums)
         run: scripts/build-release.sh "${{ inputs.version }}"

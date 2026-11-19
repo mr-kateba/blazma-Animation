@@ -6,8 +6,24 @@ using System.Runtime.Versioning;
 namespace Blazma.AI;
 
 /// <summary>One graphics adapter. <paramref name="Integrated"/> is true for a GPU that shares system memory (Intel UHD/Iris,
-/// AMD "Radeon Graphics" APUs), false for a discrete card, null when it cannot be told.</summary>
-public sealed record GpuInfo(string Name, string Vendor, long? VramBytes, string Source, bool? Integrated = null);
+/// AMD "Radeon Graphics" APUs), false for a discrete card, null when it cannot be told. <paramref name="ComputeCapability"/>: an NVIDIA
+/// card's CUDA compute capability (8.9 = Ada, 12.0 = GeForce RTX 50 / Blackwell) from nvidia-smi, null when unknown.</summary>
+public sealed record GpuInfo(string Name, string Vendor, long? VramBytes, string Source, bool? Integrated = null, double? ComputeCapability = null)
+{
+    /// <summary>The CUDA compute capability: nvidia-smi's value, else known from the name for cards a CUDA build may be too old for
+    /// (GeForce RTX 50 and RTX PRO Blackwell = 12.0, B100/B200 = 10.0); null when unknown or not NVIDIA.</summary>
+    public double? CudaComputeCapability
+    {
+        get
+        {
+            if (ComputeCapability is { } cc) return cc;
+            if (!(Vendor.Equals("NVIDIA", StringComparison.OrdinalIgnoreCase) || Name.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase))) return null;
+            if (System.Text.RegularExpressions.Regex.IsMatch(Name, @"\bRTX\s*50[5-9]0\b|\bRTX\s+PRO\s+\d+.*Blackwell|Blackwell", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return 12.0;
+            if (System.Text.RegularExpressions.Regex.IsMatch(Name, @"\bG?B[12]00\b")) return 10.0;
+            return null;
+        }
+    }
+}
 
 /// <summary>What the machine has, best effort and offline. Missing values are null, never guessed.</summary>
 public sealed record HardwareReport(
@@ -283,19 +299,28 @@ public static class HardwareProbe
 
     // ------------------------------------------------------------------ nvidia-smi
 
-    /// <summary>Parses <c>nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits</c> (memory in MiB).</summary>
+    /// <summary>Parses <c>nvidia-smi --query-gpu=name,memory.total[,compute_cap] --format=csv,noheader,nounits</c> (memory in MiB,
+    /// compute capability such as 12.0; older drivers do not know compute_cap).</summary>
     public static IReadOnlyList<GpuInfo> ParseNvidiaSmi(string output)
     {
         var list = new List<GpuInfo>();
         foreach (var raw in output.Split('\n'))
         {
             var line = raw.Trim();
+            double? cc = null;
+            var last = line.LastIndexOf(',');
+            if (last > 0 && line[(last + 1)..].Trim() is var c && c.Contains('.')
+                && double.TryParse(c, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) && v is > 0 and < 100)
+            {
+                cc = v;
+                line = line[..last].TrimEnd();
+            }
             var comma = line.LastIndexOf(',');
             if (comma <= 0) continue;
             var name = line[..comma].Trim();
             var mem = line[(comma + 1)..].Trim();
             long? bytes = long.TryParse(mem, NumberStyles.Integer, CultureInfo.InvariantCulture, out var mib) && mib > 0 ? mib * 1024 * 1024 : null;
-            if (name.Length > 0) list.Add(new GpuInfo(name, "NVIDIA", bytes, "nvidia-smi", false));
+            if (name.Length > 0) list.Add(new GpuInfo(name, "NVIDIA", bytes, "nvidia-smi", false, cc));
         }
         return list;
     }
@@ -311,13 +336,19 @@ public static class HardwareProbe
     {
         var exe = FindOnPath(OperatingSystem.IsWindows() ? "nvidia-smi.exe" : "nvidia-smi");
         if (exe is null) return Array.Empty<GpuInfo>();
+        // compute_cap (needed to tell whether the CUDA download supports the card) is unknown to old drivers: then without it.
+        return RunNvidiaSmi(exe, "name,memory.total,compute_cap", notes) ?? RunNvidiaSmi(exe, "name,memory.total", notes) ?? Array.Empty<GpuInfo>();
+    }
+
+    static IReadOnlyList<GpuInfo>? RunNvidiaSmi(string exe, string query, List<string> notes)
+    {
         try
         {
             var psi = new ProcessStartInfo(exe)
             {
                 UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true,
             };
-            foreach (var a in new[] { "--query-gpu=name,memory.total", "--format=csv,noheader,nounits" }) psi.ArgumentList.Add(a);
+            foreach (var a in new[] { "--query-gpu=" + query, "--format=csv,noheader,nounits" }) psi.ArgumentList.Add(a);
             using var p = Process.Start(psi);
             if (p is null) return Array.Empty<GpuInfo>();
             var stdout = p.StandardOutput.ReadToEndAsync();
@@ -328,7 +359,7 @@ public static class HardwareProbe
                 notes.Add("nvidia-smi did not answer within 5 s; NVIDIA VRAM comes from the driver information instead.");
                 return Array.Empty<GpuInfo>();
             }
-            return p.ExitCode == 0 && stdout.Wait(1000) ? ParseNvidiaSmi(stdout.Result) : Array.Empty<GpuInfo>();
+            return p.ExitCode == 0 && stdout.Wait(1000) ? ParseNvidiaSmi(stdout.Result) : null;
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
         {

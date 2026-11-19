@@ -1,10 +1,26 @@
-Microsoft Visual C++ Redistributable (vc_redist.x64.exe)
+Microsoft Visual C++ runtime (app-local copy in tools\kimodo)
 
-The Windows installer (not the portable zip, not the installed app folder) carries the unmodified, Microsoft-signed
-"Microsoft Visual C++ 2015-2022 Redistributable (x64)" downloaded from https://aka.ms/vs/17/release/vc_redist.x64.exe.
-It is installed only when the runtime is missing, because tools\kimodo\kimodo-runner.exe and its GGML libraries are
-built with MSVC and need MSVCP140.dll, VCRUNTIME140.dll and VCRUNTIME140_1.dll.
+tools\kimodo\kimodo-runner.exe and its GGML libraries are built with Microsoft Visual C++ and need the Visual C++ runtime.
+Blazma Animation ships an unmodified, Microsoft-signed copy of these runtime files next to them (app-local deployment), so
+AI motion generation works without administrator rights and without installing vc_redist.x64.exe:
 
-Microsoft permits redistribution of this package under the Visual Studio redistributable terms
-(https://visualstudio.microsoft.com/license-terms/). Its own licence terms are shown by its setup and apply to it;
-Microsoft is the copyright holder. Blazma Animation does not modify it.
+  msvcp140.dll, msvcp140_1.dll, msvcp140_2.dll, msvcp140_atomic_wait.dll, msvcp140_codecvt_ids.dll,
+  vcruntime140.dll, vcruntime140_1.dll, vcruntime140_threads.dll (when present), concrt140.dll   (Microsoft.VC14x.CRT)
+  vcomp140.dll                                                                                    (Microsoft.VC14x.OpenMP)
+
+They are copied at release time from the "VC\Redist\MSVC\<version>\x64" folder of Microsoft Visual Studio 2022 (the
+folder Microsoft designates for redistribution), checked to carry a valid Microsoft Authenticode signature and a version
+of at least 14.40, and listed with their SHA-256 in tools\kimodo\SHA256SUMS-vcruntime.txt (the exact version is in
+tools\kimodo\VCRUNTIME_VERSION.txt).
+
+These files are "Distributable Code" under the Microsoft Visual Studio licence terms (see the list of redistributable
+files, redist.txt, of Visual Studio 2022: https://learn.microsoft.com/visualstudio/releases/2022/redistribution, and
+https://visualstudio.microsoft.com/license-terms/). Microsoft permits distributing them, unmodified, with an application
+that uses them, including in the application's own folder ("app-local deployment",
+https://learn.microsoft.com/cpp/windows/deployment-in-visual-cpp). Copyright (c) Microsoft Corporation. All rights
+reserved. They remain subject to Microsoft's terms: they may not be modified, they are used only by the programs of
+this application, and Microsoft provides them "as is" without warranty. Blazma Animation's own licence does not apply
+to them.
+
+A system-wide Visual C++ runtime installed by Microsoft's vc_redist.x64.exe is not needed and not changed. Windows
+updates the system copy through Windows Update; the app-local copy is updated with each Blazma Animation release.

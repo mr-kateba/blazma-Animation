@@ -387,13 +387,25 @@ public partial class AiSettingsDialog : ConfirmationDialog
         ShowHardware(d.Hardware, d.Warnings);
         var lines = new List<string>();
         foreach (var w in d.Warnings)
-            if (w != d.Info.UnavailableReason) lines.Add(w.StartsWith("Runner probe failed", StringComparison.Ordinal) ? string.Format(CultureInfo.InvariantCulture, Tr("The runner did not answer: {0}"), w) : w);
+            if (w != d.Info.UnavailableReason) lines.Add(CheckLine(w));
         if (d.Info.UnavailableReason is { } why) lines.Insert(0, AiText.Reason(why));
         else if (lines.Count == 0) lines.Add(Tr("Everything needed for Kimodo was found and the runner answered."));
         foreach (var kv in d.Details)
             if (kv.Key.StartsWith("runner.", StringComparison.Ordinal) && kv.Key is not ("runner.devices" or "runner.deviceModes") && kv.Value is { Length: > 0 })
                 lines.Add($"{kv.Key[7..]}: {kv.Value}");
         _notes.Text = string.Join("\n", lines);
+    }
+
+    /// <summary>One warning of the check in the user's language: "Runner probe failed [code]: message" is translated by its code,
+    /// the "no graphics card" line names the reasons; anything else is isolated so it reads correctly inside Arabic.</summary>
+    static string CheckLine(string w)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(w, @"^Runner probe failed \[([a-z_]+)\]: (.*)$", System.Text.RegularExpressions.RegexOptions.Singleline);
+        if (m.Success)
+            return string.Format(CultureInfo.InvariantCulture, TranslationServer.Translate("The runner did not answer: {0}"),
+                AiText.Error(m.Groups[1].Value, m.Groups[2].Value) ?? AiText.Isolate(m.Groups[2].Value));
+        var t = AiText.Warning(w);
+        return ReferenceEquals(t, w) ? AiText.Isolate(w) : t;
     }
 
     // ---- optional CUDA backend (DECISIONS D47) ------------------------------------------------------------------------
@@ -405,8 +417,10 @@ public partial class AiSettingsDialog : ConfirmationDialog
         if (CudaDownloading) return;
         var st = App.CudaState();
         var pkg = App.CudaPackage();
-        var nvidia = CudaBackend.HasNvidiaGpu(CudaHardwareFn());
-        var offer = CudaBackend.ShouldOffer(st, CudaHardwareFn());
+        var hw = CudaHardwareFn();
+        var nvidia = CudaBackend.HasNvidiaGpu(hw);
+        var tooNew = CudaBackend.TooNew(pkg, hw);
+        var offer = CudaBackend.ShouldOffer(st, hw, pkg);
         _cudaBox.Visible = nvidia && st.Status != CudaBackendStatus.NotOffered || st.CanRemove;
         CudaButton.Visible = offer && pkg is not null;
         if (pkg is not null)
@@ -416,7 +430,10 @@ public partial class AiSettingsDialog : ConfirmationDialog
         CudaCancelButton.Visible = false;
         _cudaProgress.Text = "";
         _cudaLine.RemoveThemeColorOverride("font_color");
-        _cudaLine.Text = st.Status switch
+        _cudaLine.Text = tooNew is not null && st.Status is not CudaBackendStatus.Bundled
+            ? string.Format(CultureInfo.InvariantCulture, Tr("Your graphics card ({0}) is newer than this GPU acceleration package (built with CUDA {1}), so it is not offered or used: Kimodo runs on this card through Vulkan, which supports it."),
+                AiText.Ltr(tooNew.Name), AiText.Ltr(pkg!.Cuda))
+            : st.Status switch
         {
             CudaBackendStatus.Bundled => Tr("This copy of Blazma already includes GPU acceleration (CUDA) for NVIDIA cards."),
             CudaBackendStatus.Installed => string.Format(CultureInfo.InvariantCulture, Tr("GPU acceleration (CUDA) is installed ({0}). Kimodo uses it automatically on NVIDIA cards."), AiText.Ltr(AiModelsDialog.FormatSize(st.InstalledBytes))),

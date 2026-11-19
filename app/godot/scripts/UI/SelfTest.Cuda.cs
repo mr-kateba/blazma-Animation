@@ -13,8 +13,41 @@ namespace Blazma.UI.Views;
 /// </summary>
 public partial class SelfTest
 {
+    /// <summary>1.0.1: generation errors and the "no graphics card" notice in Arabic, with the English pieces isolated (FSI/LRI … PDI).</summary>
+    async Task CheckAiErrorTexts()
+    {
+        App.SetLanguage("ar");
+        await Settle();
+        static bool Ar(string t) => t.Any(c => c is >= '\u0600' and <= '\u06FF');
+        var problems = new[] { new GpuProblem("Vulkan", "missing_dependency", "ggml-vulkan.dll", "MSVCP140.dll"), new GpuProblem("Vulkan", "no_vulkan_device") };
+        var userError = "Step 1 (\"خليه يجري\"): No graphics card usable by Kimodo was found (no CUDA or Vulkan device). Update the graphics driver, or choose \"Processor only\"."
+            + KimodoGpuDiagnosis.Describe(problems);
+        Check("ai errors: the 1.0.0 'no graphics card' failure reads in Arabic with the step text isolated", () =>
+        {
+            var t = AiText.Failure("device_unavailable", userError);
+            return Ar(t) && !t.Contains("No graphics card", StringComparison.Ordinal) && t.Contains("\u2068خليه يجري\u2069", StringComparison.Ordinal)
+                && t.Contains("\u2066MSVCP140.dll\u2069", StringComparison.Ordinal) && t.Contains("Vulkan", StringComparison.Ordinal) ? null : t;
+        });
+        Check("ai errors: the 'generated on the processor' notice is translated with its reason", () =>
+        {
+            var t = AiText.Warning(KimodoGpuDiagnosis.Warning(problems));
+            return t.StartsWith("لم يُعثر على بطاقة رسوميات صالحة، فتم التوليد على المعالج", StringComparison.Ordinal) && t.Contains("126", StringComparison.Ordinal) ? null : t;
+        });
+        Check("ai errors: out of memory, a missing runtime and an unknown English error are Arabic or isolated", () =>
+        {
+            var oom = AiText.Failure("generation_failed", "Step 2 (\"يتشقبل\"): Kimodo generation failed: GGML motion weight allocation failed (out of device memory)");
+            var dll = AiText.Failure("runner_crashed", "kimodo-runner exited unexpectedly (exit code -1073741515) A library kimodo-runner needs is missing (0xC0000135, ...).");
+            var other = AiText.Failure("something_new", "Some English message");
+            return Ar(oom) && !oom.Contains("allocation failed", StringComparison.Ordinal) && Ar(dll) && dll.Contains("Visual C++", StringComparison.Ordinal)
+                && Ar(other) && other.Contains("\u2068Some English message\u2069", StringComparison.Ordinal) ? null : $"{oom} | {dll} | {other}";
+        });
+        App.SetLanguage("en");
+        await Settle();
+    }
+
     async Task RunCuda()
     {
+        await CheckAiErrorTexts();
         var dlg = _w.AiSettingsDlg;
         var s = App.Settings;
         var saved = (s.KimodoRunner, s.KimodoModels, s.KimodoDevice, s.KimodoTextModel);
@@ -69,6 +102,13 @@ public partial class SelfTest
                 _w.OpenAiSettings();
                 await Settle();
                 Check($"cuda {lang} no NVIDIA card: no GPU acceleration section", () => !dlg.CudaSectionVisible ? null : dlg.CudaLineText);
+                // A GeForce RTX 50 (compute capability 12.0) with this CUDA 12.4 package: not offered, the section says Vulkan is used.
+                pc = new HardwareReport("Windows", "X64", 8, 16 * HardwareReport.GiB, new[] { new GpuInfo("NVIDIA GeForce RTX 5070", "NVIDIA", 12 * HardwareReport.GiB, "nvidia-smi", false, 12.0) }, Array.Empty<string>());
+                dlg.RefreshCuda();
+                await Settle();
+                Check($"cuda {lang} GeForce RTX 50 with a CUDA 12.4 package: not offered, Vulkan is named", () =>
+                    dlg.CudaSectionVisible && !dlg.CudaButton.Visible && dlg.CudaLineText.Contains("RTX 5070") && dlg.CudaLineText.Contains("Vulkan")
+                    && dlg.CudaLineText.Contains("12.4") && (en || HasArabic(dlg.CudaLineText)) ? null : $"{dlg.CudaSectionVisible} {dlg.CudaButton.Visible} '{dlg.CudaLineText}'");
                 pc = nvidia;
                 dlg.RefreshCuda();
                 await Settle();

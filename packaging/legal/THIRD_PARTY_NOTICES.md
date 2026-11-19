@@ -50,4 +50,4 @@ No model weights are shipped. The Kimodo models the user downloads from Hugging 
 licences (NVIDIA Open Model License for the SOMA motion model; Meta Llama 3 Community License for the text encoder,
 "Built with Meta Llama 3"); their licence and NOTICE files are downloaded next to the models.
 
-- Microsoft Visual C++ Redistributable (installer only, installed if missing): see legal/MSVC_REDIST_NOTICE.txt
+- Microsoft Visual C++ runtime DLLs (msvcp140*, vcruntime140*, concrt140, vcomp140), shipped unmodified next to kimodo-runner in tools/kimodo (app-local deployment, Microsoft "Distributable Code"): see legal/MSVC_REDIST_NOTICE.txt

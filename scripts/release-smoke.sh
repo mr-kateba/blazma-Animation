@@ -21,6 +21,15 @@ chk "SHA256SUMS.txt matches every artifact" bash -c "cd '$D' && sha256sum -c SHA
 for f in "BlazmaAnimation-$V-win64.zip" "BlazmaAnimation-$V-setup.exe" "BlazmaAnimation-$V-linux-x64.tar.gz" "BlazmaAnimation-$V-x86_64.AppImage" "RELEASE_NOTES-$V.md"; do
   [ -s "$D/$f" ] && ok "present: $f" || bad "missing: $f"; done
 
+echo "== release notes"
+N="$D/RELEASE_NOTES-$V.md"
+grep -q "^# Blazma Animation $V\$" "$N" && ok "release notes title" || bad "release notes title"
+grep -q "## التثبيت" "$N" && ok "release notes have the install block" || bad "release notes lack the install block"
+if grep -q "^## ${V%%-*} " "$ROOT/CHANGELOG.md" || grep -q "^## $V " "$ROOT/CHANGELOG.md"; then
+  grep -q "^## What's new in $V\$" "$N" && ok "release notes carry this version's CHANGELOG section" || bad "release notes lack the CHANGELOG section"
+fi
+grep -qE "PHASE|بانتظار تجربتك" "$N" && bad "release notes still quote the old phase reports" || ok "release notes do not quote the phase reports"
+
 echo "== Windows zip (structural)"
 Z="$D/BlazmaAnimation-$V-win64.zip"; P="BlazmaAnimation-$V-win64"
 chk "zip integrity (unzip -t)" unzip -tq "$Z"
@@ -42,6 +51,17 @@ if [ -f "$D/kimodo-runner-$V-win64.zip" ]; then
   for f in kimodo.dll ggml.dll ggml-base.dll ggml-cpu-x64.dll ggml-cpu-haswell.dll ggml-vulkan.dll; do
     [ -s "$W/tools/kimodo/$f" ] && ok "tools/kimodo/$f present" || bad "tools/kimodo/$f missing (multi-backend runner)"
   done
+  # The Microsoft Visual C++ runtime next to the runner (DECISIONS D49): no vc_redist, no administrator rights.
+  for f in msvcp140.dll msvcp140_1.dll msvcp140_2.dll msvcp140_atomic_wait.dll msvcp140_codecvt_ids.dll vcruntime140.dll vcruntime140_1.dll concrt140.dll vcomp140.dll; do
+    isa "PE32+ executable.*x86-64" "$W/tools/kimodo/$f" && ok "tools/kimodo/$f present (app-local VC++ runtime)" || bad "tools/kimodo/$f missing (app-local VC++ runtime)"
+  done
+  [ -s "$W/tools/kimodo/SHA256SUMS-vcruntime.txt" ] && (cd "$W/tools/kimodo" && sha256sum -c --quiet SHA256SUMS-vcruntime.txt) >/dev/null 2>&1 \
+    && ok "tools/kimodo/SHA256SUMS-vcruntime.txt verifies" || bad "tools/kimodo/SHA256SUMS-vcruntime.txt missing or wrong"
+  [ -s "$W/legal/MSVC_REDIST_NOTICE.txt" ] && grep -q "app-local" "$W/legal/MSVC_REDIST_NOTICE.txt" && ok "legal/MSVC_REDIST_NOTICE.txt (app-local runtime terms)" || bad "legal/MSVC_REDIST_NOTICE.txt missing or outdated"
+  python3 -I "$ROOT/scripts/pe-deps.py" check "$W/tools/kimodo" >"$T/pe-deps.txt" 2>&1 && ok "every DLL in tools/kimodo resolves its imports there or in Windows ($(grep -o 'runtime in the folder: .*' "$T/pe-deps.txt"))" \
+    || { bad "tools/kimodo has unresolved DLL imports"; grep MISSING "$T/pe-deps.txt" | head; }
+  unzip -l "$D/kimodo-runner-$V-win64.zip" | grep -qi "vcruntime140.dll" && ok "kimodo-runner zip carries the VC++ runtime" || bad "kimodo-runner zip lacks the VC++ runtime"
+  [ ! -e "$W/README-VC_REDIST.txt" ] && ok "no README-VC_REDIST.txt (nothing to install by hand)" || bad "README-VC_REDIST.txt still in the zip"
   # The CUDA backend is a separate, optional download (DECISIONS D47): never in the app zip.
   for f in ggml-cuda.dll cudart64_12.dll cublas64_12.dll cublasLt64_12.dll; do
     [ -e "$W/tools/kimodo/$f" ] && bad "tools/kimodo/$f is in the app zip (CUDA must be the separate asset)" || ok "no $f in the app zip"
@@ -100,8 +120,10 @@ if command -v 7z >/dev/null; then
     grep -q "ggml-vulkan.dll" "$T/setup-list.txt" && grep -q "ggml-cpu-x64.dll" "$T/setup-list.txt" && ok "installer payload has the GGML backends" || bad "installer payload lacks ggml-vulkan.dll / ggml-cpu-*.dll"
     grep -qiE "ggml-cuda|cublas|cudart" "$T/setup-list.txt" && bad "installer payload contains CUDA files (must be the separate asset)" || ok "installer payload has no CUDA files"
     grep -q "cuda-backend.json" "$T/setup-list.txt" || [ ! -f "$C" ] && ok "installer payload has tools/kimodo/cuda-backend.json (when the CUDA asset exists)" || bad "installer lacks cuda-backend.json"
-    grep -q "vc_redist.x64.exe" "$T/setup-list.txt" && ok "installer payload has vc_redist.x64.exe (VC++ runtime)" || bad "installer payload lacks vc_redist.x64.exe"
-    unzip -l "$D/BlazmaAnimation-$V-win64.zip" | grep -q "vc_redist" && bad "vc_redist.x64.exe must not be in the portable zip" || ok "portable zip has no vc_redist.x64.exe"
+    grep -qi "vcruntime140_1.dll" "$T/setup-list.txt" && grep -qi "msvcp140.dll" "$T/setup-list.txt" && grep -qi "vcomp140.dll" "$T/setup-list.txt" \
+      && ok "installer payload has the app-local VC++ runtime (msvcp140, vcruntime140_1, vcomp140)" || bad "installer payload lacks the VC++ runtime DLLs"
+    grep -qi "vc_redist" "$T/setup-list.txt" && bad "installer still carries vc_redist.x64.exe (D49: app-local runtime instead)" || ok "installer has no vc_redist.x64.exe (no administrator prompt)"
+    unzip -l "$D/BlazmaAnimation-$V-win64.zip" | grep -qi "vc_redist" && bad "vc_redist.x64.exe must not be in the portable zip" || ok "portable zip has no vc_redist.x64.exe"
   fi
 else
   echo "  SKIP  7z not installed: installer payload not listed (portable.txt absence and runner not checked; apt-get install -y p7zip-full)"
