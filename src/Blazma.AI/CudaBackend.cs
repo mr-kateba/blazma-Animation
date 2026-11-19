@@ -20,11 +20,27 @@ public sealed record CudaBackendPackage(string Version, string Cuda, string Asse
 {
     public const string FileName = "cuda-backend.json";
 
+    /// <summary>The GPU architectures ggml-cuda was compiled for, as compute capabilities × 10 (86 = 8.6, 120 = 12.0), from
+    /// cuda-backend.json's "computeCapabilities"; empty for a package that does not list them (1.0.0/1.0.1: CUDA 12.4, see
+    /// <see cref="MaxComputeCapability"/>).</summary>
+    public IReadOnlyList<int> ComputeCapabilities { get; init; } = Array.Empty<int>();
+
+    /// <summary>The newest card generation this package runs on. From <see cref="ComputeCapabilities"/> when listed; otherwise from the
+    /// CUDA version: before CUDA 12.8 nothing newer than Hopper (9.0) can be built, so a GeForce RTX 50 (Blackwell, 12.0) is not supported
+    /// (it could only JIT-compile old PTX, which is slow and untested, so Blazma uses Vulkan there instead).</summary>
+    public double MaxComputeCapability =>
+        ComputeCapabilities.Count > 0 ? ComputeCapabilities.Max() / 10.0
+        : System.Version.TryParse(Cuda, out var v) && (v.Major > 12 || (v.Major == 12 && v.Minor >= 8)) ? 12.0 : 9.0;
+
+    /// <summary>True when the card can use this package (unknown compute capability: assumed yes, like before 1.0.1).</summary>
+    public bool Supports(GpuInfo gpu) => gpu.CudaComputeCapability is not { } cc || cc <= MaxComputeCapability + 1e-6;
+
     /// <summary>Disk space the unpacked files take.</summary>
     public long InstalledBytes => Files.Sum(f => f.Size);
 
     sealed record JFile(string Name, long Size, string Sha256);
-    sealed record JPackage(int Format, string Version, string Cuda, string Asset, string Url, long Size, string Sha256, string Library, JFile[] Files);
+    sealed record JPackage(int Format, string Version, string Cuda, string Asset, string Url, long Size, string Sha256, string Library, JFile[] Files,
+        int[]? ComputeCapabilities = null);
 
     internal static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true, UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip };
 
@@ -44,8 +60,10 @@ public sealed record CudaBackendPackage(string Version, string Cuda, string Asse
             if (!PlainName(f.Name) || f.Size < 0 || !Hex(f.Sha256)) throw new InvalidDataException($"bad file entry '{f.Name}'");
         if (p.Files.Select(f => f.Name.ToLowerInvariant()).Distinct().Count() != p.Files.Length) throw new InvalidDataException("duplicate file names");
         if (!p.Files.Any(f => f.Name == p.Library)) throw new InvalidDataException("the library is not one of the files");
+        if (p.ComputeCapabilities is { } ccs && (ccs.Length > 64 || ccs.Any(c => c is < 10 or > 999))) throw new InvalidDataException("bad computeCapabilities");
         return new CudaBackendPackage(p.Version ?? "", p.Cuda ?? "", p.Asset, url, p.Size, p.Sha256.ToLowerInvariant(), p.Library,
-            p.Files.Select(f => new CudaBackendFile(f.Name, f.Size, f.Sha256.ToLowerInvariant())).ToList());
+            p.Files.Select(f => new CudaBackendFile(f.Name, f.Size, f.Sha256.ToLowerInvariant())).ToList())
+        { ComputeCapabilities = p.ComputeCapabilities?.Distinct().Order().ToList() ?? (IReadOnlyList<int>)Array.Empty<int>() };
     }
 
     /// <summary>The package described next to <paramref name="runnerPath"/> (the bundled kimodo-runner), or null when this build has none
@@ -161,9 +179,19 @@ public static class CudaBackend
     public static bool HasNvidiaGpu(HardwareReport hw) =>
         hw.Gpus.Any(g => g.Vendor.Equals("NVIDIA", StringComparison.OrdinalIgnoreCase) || g.Name.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>The download button is shown: this build offers the package, an NVIDIA card is present, and it is not (or not the right one) installed.</summary>
-    public static bool ShouldOffer(CudaBackendState state, HardwareReport hw) =>
-        state.Status is CudaBackendStatus.NotInstalled or CudaBackendStatus.Outdated && HasNvidiaGpu(hw);
+    /// <summary>The download button is shown: this build offers the package, an NVIDIA card it supports is present, and it is not (or not
+    /// the right one) installed. A GeForce RTX 50 (Blackwell) with a package built before CUDA 12.8 is not offered (<see cref="TooNew"/>).</summary>
+    public static bool ShouldOffer(CudaBackendState state, HardwareReport hw, CudaBackendPackage? package = null) =>
+        state.Status is CudaBackendStatus.NotInstalled or CudaBackendStatus.Outdated && HasNvidiaGpu(hw) && TooNew(package, hw) is null;
+
+    /// <summary>The NVIDIA card the package cannot run on when no NVIDIA card in the machine can use it (null: fine, unknown, or no package).
+    /// Then the CUDA backend is neither offered nor used, and Kimodo runs on that card through Vulkan.</summary>
+    public static GpuInfo? TooNew(CudaBackendPackage? package, HardwareReport hw)
+    {
+        if (package is null) return null;
+        var nvidia = hw.Gpus.Where(g => g.Vendor.Equals("NVIDIA", StringComparison.OrdinalIgnoreCase) || g.Name.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase)).ToList();
+        return nvidia.Count > 0 && nvidia.All(g => !package.Supports(g)) ? nvidia[0] : null;
+    }
 
     /// <summary>
     /// Removes what the installer put into <paramref name="directory"/>: the files listed in its marker, the marker, the download and

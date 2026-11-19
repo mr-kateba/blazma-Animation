@@ -91,7 +91,9 @@ public partial class AppController
         if (Settings.KimodoGpu.Length > 0) s = s with { GpuDevice = Settings.KimodoGpu };
         if (Settings.KimodoTimeoutSeconds > 0) s = s with { GenerateTimeout = TimeSpan.FromSeconds(Settings.KimodoTimeoutSeconds) };
         // The optional CUDA backend the user downloaded (DECISIONS D47), when it matches this runner build.
-        if (s.CudaBackendDirectory is null && CudaState().Status == CudaBackendStatus.Installed) s = s with { CudaBackendDirectory = CudaDirectory() };
+        // Not on a card the package was not built for (a GeForce RTX 50 with the CUDA 12.4 package): Kimodo uses Vulkan there.
+        if (s.CudaBackendDirectory is null && CudaState().Status == CudaBackendStatus.Installed && CudaBackend.TooNew(CudaPackage(), CudaHardware()) is null)
+            s = s with { CudaBackendDirectory = CudaDirectory() };
         return s;
     }
 
@@ -126,7 +128,16 @@ public partial class AppController
     public CudaBackendState CudaState() => CudaBackend.State(CudaPackage(), CudaDirectory(), CudaRunner());
 
     /// <summary>True when the download is offered (package available, not installed): the "generated on" hint can point to it.</summary>
-    public bool CudaDownloadOffered() => CudaState().Status is CudaBackendStatus.NotInstalled or CudaBackendStatus.Outdated;
+    public bool CudaDownloadOffered() =>
+        CudaState().Status is CudaBackendStatus.NotInstalled or CudaBackendStatus.Outdated && CudaBackend.TooNew(CudaPackage(), CudaHardware()) is null;
+
+    HardwareReport? _cudaHardware;
+
+    /// <summary>The machine's graphics cards for the CUDA checks (probed once, nvidia-smi included; tests set <see cref="CudaHardwareOverride"/>).</summary>
+    public HardwareReport CudaHardware() => CudaHardwareOverride?.Invoke() ?? (_cudaHardware ??= HardwareProbe.Probe());
+
+    /// <summary>Tests only: the hardware the CUDA checks see.</summary>
+    public Func<HardwareReport>? CudaHardwareOverride { get; set; }
 
     /// <summary>After installing or removing the CUDA backend: the runner restarts with (or without) it.</summary>
     public void CudaBackendChanged()

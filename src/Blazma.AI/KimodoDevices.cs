@@ -75,7 +75,8 @@ public sealed record KimodoAttempt(string Device, string? Gpu)
 /// The order in which a generation tries devices (DECISIONS D44), the same idea as Blazma AI's llama.cpp variants:
 /// newest/fastest first, every failure falls through to the next one. Auto: each graphics card backend in turn
 /// (CUDA, then Vulkan; integrated graphics last), then graphics card + processor (the text encoder, the largest part,
-/// moves to the processor — what helps when the card runs out of memory), then the processor alone.
+/// moves to the processor — what helps when the card runs out of memory), then the processor alone. Without any graphics
+/// card Auto and "graphics card + processor" run on the processor (1.0.1); only "graphics card only" fails then.
 /// </summary>
 public static class KimodoDevicePlanner
 {
@@ -97,7 +98,7 @@ public static class KimodoDevicePlanner
     /// <param name="mode">auto | gpu | cpu | hybrid (<see cref="KimodoSettings.Device"/>).</param>
     /// <param name="gpu">Optional GGML device name (<see cref="KimodoSettings.GpuDevice"/>).</param>
     /// <param name="devices">The runner's devices; null for a runner older than 0.3, which only knows auto | cpu | vulkan.</param>
-    /// <exception cref="MotionGenerationException">device_unavailable when the mode needs a graphics card and there is none.</exception>
+    /// <exception cref="MotionGenerationException">device_unavailable when "graphics card only" finds no graphics card.</exception>
     public static IReadOnlyList<KimodoAttempt> Plan(string mode, string? gpu, IReadOnlyList<KimodoDevice>? devices)
     {
         mode = KimodoSettings.NormalizeDevice(mode);
@@ -116,25 +117,31 @@ public static class KimodoDevicePlanner
         List<KimodoDevice> gpus;
         if (gpu is { Length: > 0 } wanted && ranked.FirstOrDefault(d => d.Name.Equals(wanted, StringComparison.OrdinalIgnoreCase)) is { } named)
             gpus = new() { named };
-        else if (gpu is { Length: > 0 } && mode != "auto")
+        else if (gpu is { Length: > 0 } && mode == "gpu" && ranked.Count > 0)
             throw new MotionGenerationException("device_unavailable",
                 $"The graphics card '{gpu}' is not available. kimodo-runner sees: {Describe(ranked)}.");
         else
             gpus = ranked.GroupBy(d => d.Backend, StringComparer.OrdinalIgnoreCase).Select(g => g.First()).ToList();
 
-        if (gpus.Count == 0 && mode != "auto")
-            throw new MotionGenerationException("device_unavailable",
-                "No graphics card usable by Kimodo was found (no CUDA or Vulkan device). Update the graphics driver, or choose \"Processor only\".");
+        // No graphics card at all (no CUDA or Vulkan device, or their libraries did not load): Auto and "graphics card + processor"
+        // run on the processor instead of failing (the caller tells the user why, KimodoGpuDiagnosis). Only "graphics card only" refuses.
+        if (gpus.Count == 0)
+            return mode == "gpu"
+                ? throw new MotionGenerationException("device_unavailable",
+                    "No graphics card usable by Kimodo was found (no CUDA or Vulkan device). Update the graphics driver, or choose \"Processor only\".")
+                : new[] { new KimodoAttempt("cpu", null) };
         var list = new List<KimodoAttempt>();
         if (mode is "auto" or "gpu") list.AddRange(gpus.Select(g => new KimodoAttempt("gpu", g.Name)));
         if (mode == "hybrid") list.AddRange(gpus.Select(g => new KimodoAttempt("hybrid", g.Name)));
-        if (mode == "auto")
-        {
-            if (gpus.Count > 0) list.Add(new KimodoAttempt("hybrid", gpus[0].Name));
-            list.Add(new KimodoAttempt("cpu", null));
-        }
+        if (mode == "auto") list.Add(new KimodoAttempt("hybrid", gpus[0].Name));
+        // Auto and "graphics card + processor" end on the processor alone (CUDA → Vulkan → graphics card + processor → processor).
+        if (mode is "auto" or "hybrid") list.Add(new KimodoAttempt("cpu", null));
         return list;
     }
+
+    /// <summary>True when <paramref name="devices"/> (the runner's list) has no graphics card, so a mode other than "processor only"
+    /// runs on the processor (null: an old runner that does not list its devices).</summary>
+    public static bool NoGpu(IReadOnlyList<KimodoDevice>? devices) => devices is not null && !devices.Any(d => d.IsGpu);
 
     static string Describe(IReadOnlyList<KimodoDevice> gpus) =>
         gpus.Count == 0 ? "no graphics card" : string.Join(", ", gpus.Select(g => $"{g.Name} = {g.Label}"));

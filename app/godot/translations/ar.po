@@ -4153,7 +4153,7 @@ msgid "Low confidence"
 msgstr "ثقة منخفضة"
 
 msgid "Corrected: “{0}” was read as {1}"
-msgstr "صُحّحت: قُرئت «{0}» كـ {1}"
+msgstr "فُهمت «{0}» على أنها «{1}»"
 
 msgid "Use “{0}”"
 msgstr "استخدم «{0}»"
@@ -4272,3 +4272,85 @@ msgstr "الاختصارات (JSON)"
 
 msgid "Search"
 msgstr "بحث"
+
+# 1.0.1: generation errors in Arabic (bidi-safe), and why no graphics card was found
+msgid "Generation failed at step {0} (“{1}”): {2}"
+msgstr "فشل التوليد في الخطوة {0} («{1}»): {2}"
+
+msgid "The Kimodo runner could not start: a library it needs is missing (usually the Microsoft Visual C++ runtime, which Blazma ships next to it). Reinstall Blazma Animation."
+msgstr "تعذّر تشغيل مشغّل Kimodo: مكتبة يحتاجها غير موجودة (غالبًا مكتبات Microsoft Visual C++ التي يأتي بها Blazma بجانبه). أعد تثبيت Blazma Animation."
+
+msgid "The Kimodo runner could not start: a library it uses is too old (usually the Microsoft Visual C++ runtime). Reinstall Blazma Animation."
+msgstr "تعذّر تشغيل مشغّل Kimodo: مكتبة يستخدمها قديمة (غالبًا مكتبات Microsoft Visual C++). أعد تثبيت Blazma Animation."
+
+msgid "The Kimodo runner ran out of memory and stopped. Choose “Graphics card + processor” or “Processor only” in the AI settings, a shorter motion, or a lighter model package."
+msgstr "نفدت ذاكرة مشغّل Kimodo فتوقف. اختر «بطاقة الرسوميات + المعالج» أو «المعالج فقط» في إعدادات الذكاء الاصطناعي، أو حركة أقصر، أو حزمة نماذج أخف."
+
+msgid "The Kimodo runner was stopped (the settings changed or the app is closing). Try again."
+msgstr "أُوقف مشغّل Kimodo (تغيّرت الإعدادات أو البرنامج يُغلق). حاول مرة أخرى."
+
+msgid "This kimodo-runner does not match this version of Blazma. Reinstall Blazma Animation. Details: {0}"
+msgstr "مشغّل kimodo-runner هذا لا يطابق هذا الإصدار من Blazma. أعد تثبيت Blazma Animation. التفاصيل: {0}"
+
+msgid "A Kimodo model file was not found: {0}. Download the models again in Settings → AI."
+msgstr "لم يُعثر على ملف من ملفات نموذج Kimodo: {0}. نزّل النماذج من جديد من الإعدادات ← الذكاء الاصطناعي."
+
+msgid "There is not enough memory to load the Kimodo models. Close other programs, choose a lighter model package, or choose “Graphics card + processor” or “Processor only” in the AI settings."
+msgstr "الذاكرة لا تكفي لتحميل نماذج Kimodo. أغلق البرامج الأخرى، أو اختر حزمة نماذج أخف، أو اختر «بطاقة الرسوميات + المعالج» أو «المعالج فقط» في إعدادات الذكاء الاصطناعي."
+
+msgid "The Kimodo models could not be loaded: {0}"
+msgstr "تعذّر تحميل نماذج Kimodo: {0}"
+
+msgid "The graphics card or the computer ran out of memory while generating. Try “Graphics card + processor” or “Processor only” in the AI settings, a shorter motion, or a lighter model package."
+msgstr "نفدت ذاكرة بطاقة الرسوميات أو الجهاز أثناء التوليد. جرّب «بطاقة الرسوميات + المعالج» أو «المعالج فقط» في إعدادات الذكاء الاصطناعي، أو حركة أقصر، أو حزمة نماذج أخف."
+
+msgid "The NVIDIA driver reported an error (CUDA). Update the NVIDIA driver, or remove GPU acceleration (CUDA) in Settings → AI to use Vulkan. Details: {0}"
+msgstr "أبلغ تعريف NVIDIA عن خطأ (CUDA). حدّث تعريف NVIDIA، أو أزل تسريع بطاقة الرسومات (CUDA) من الإعدادات ← الذكاء الاصطناعي ليُستخدم Vulkan. التفاصيل: {0}"
+
+msgid "Kimodo could not generate this motion: {0}"
+msgstr "تعذّر على Kimodo توليد هذه الحركة: {0}"
+
+msgid "No graphics card usable by Kimodo was found. Update the graphics driver, or choose “Processor only” in the AI settings."
+msgstr "لم يُعثر على بطاقة رسوميات يستطيع Kimodo استخدامها. حدّث تعريف بطاقة الرسوميات، أو اختر «المعالج فقط» في إعدادات الذكاء الاصطناعي."
+
+msgid "The chosen graphics card is not available any more. Choose another one, or “Automatic”, in the AI settings."
+msgstr "بطاقة الرسوميات المختارة لم تعد متاحة. اختر غيرها، أو «تلقائي»، في إعدادات الذكاء الاصطناعي."
+
+msgid "This kimodo-runner is too old for “Graphics card + processor”. Reinstall Blazma Animation, or choose another device."
+msgstr "مشغّل kimodo-runner هذا أقدم من أن يدعم «بطاقة الرسوميات + المعالج». أعد تثبيت Blazma Animation، أو اختر جهازًا آخر."
+
+msgid "The processor part of Kimodo (ggml-cpu) could not be loaded. Reinstall Blazma Animation."
+msgstr "تعذّر تحميل جزء المعالج من Kimodo (ggml-cpu). أعد تثبيت Blazma Animation."
+
+msgid "Kimodo returned a motion Blazma cannot use: {0}"
+msgstr "أعاد Kimodo حركة لا يستطيع Blazma استخدامها: {0}"
+
+msgid "No usable graphics card was found, so the motion was generated on the processor."
+msgstr "لم يُعثر على بطاقة رسوميات صالحة، فتم التوليد على المعالج."
+
+msgid "kimodo-runner found no usable graphics card: Kimodo runs on the processor (slower)."
+msgstr "لم يجد kimodo-runner بطاقة رسوميات صالحة: سيعمل Kimodo على المعالج (أبطأ)."
+
+msgid "{0} is missing next to kimodo-runner. Reinstall Blazma Animation."
+msgstr "الملف {0} غير موجود بجانب kimodo-runner. أعد تثبيت Blazma Animation."
+
+msgid "{0} could not load because {1} is missing (Windows error 126). Reinstall Blazma Animation."
+msgstr "تعذّر تحميل {0} لأن {1} غير موجود (خطأ Windows رقم 126). أعد تثبيت Blazma Animation."
+
+msgid "{0} could not load because {1} in {2} is too old (Windows error 127). Reinstall Blazma Animation."
+msgstr "تعذّر تحميل {0} لأن {1} الموجود في {2} قديم (خطأ Windows رقم 127). أعد تثبيت Blazma Animation."
+
+msgid "The graphics driver has no Vulkan support installed (vulkan-1.dll is missing). Install the latest driver from your graphics card maker (NVIDIA, AMD or Intel)."
+msgstr "تعريف بطاقة الرسوميات لا يتضمن دعم Vulkan (الملف vulkan-1.dll غير موجود). ثبّت أحدث تعريف من الشركة المصنّعة لبطاقتك (NVIDIA أو AMD أو Intel)."
+
+msgid "The NVIDIA driver is not installed (nvcuda.dll is missing), so GPU acceleration (CUDA) cannot run. Install the latest NVIDIA driver."
+msgstr "تعريف NVIDIA غير مثبّت (الملف nvcuda.dll غير موجود)، لذا لا يعمل تسريع بطاقة الرسومات (CUDA). ثبّت أحدث تعريف من NVIDIA."
+
+msgid "No graphics driver offers Vulkan: the driver is too old or a generic Windows driver, or this is a remote desktop session. Install the latest driver from your graphics card maker."
+msgstr "لا يوفّر أي تعريف لبطاقة الرسوميات Vulkan: التعريف قديم أو تعريف Windows العام، أو أنك في جلسة سطح مكتب بعيد. ثبّت أحدث تعريف من الشركة المصنّعة لبطاقتك."
+
+msgid "GPU acceleration (CUDA) is installed, but the NVIDIA driver offers no CUDA device. Update the NVIDIA driver."
+msgstr "تسريع بطاقة الرسومات (CUDA) مثبّت، لكن تعريف NVIDIA لا يوفّر جهاز CUDA. حدّث تعريف NVIDIA."
+
+msgid "Your graphics card ({0}) is newer than this GPU acceleration package (built with CUDA {1}), so it is not offered or used: Kimodo runs on this card through Vulkan, which supports it."
+msgstr "بطاقة الرسوميات لديك ({0}) أحدث من حزمة التسريع هذه (مبنية بـ CUDA {1})، لذا لا تُعرض ولا تُستخدم: يعمل Kimodo على هذه البطاقة عبر Vulkan الذي يدعمها."

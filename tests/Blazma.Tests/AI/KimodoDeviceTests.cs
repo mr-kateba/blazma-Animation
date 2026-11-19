@@ -24,7 +24,7 @@ public class KimodoDeviceTests
         Assert.Equal(new[] { "gpu on CUDA0", "gpu on Vulkan0", "hybrid on CUDA0", "cpu" },
             KimodoDevicePlanner.Plan("auto", null, devices).Select(a => a.ToString()));
         Assert.Equal(new[] { "gpu on CUDA0", "gpu on Vulkan0" }, KimodoDevicePlanner.Plan("gpu", null, devices).Select(a => a.ToString()));
-        Assert.Equal(new[] { "hybrid on CUDA0", "hybrid on Vulkan0" }, KimodoDevicePlanner.Plan("hybrid", null, devices).Select(a => a.ToString()));
+        Assert.Equal(new[] { "hybrid on CUDA0", "hybrid on Vulkan0", "cpu" }, KimodoDevicePlanner.Plan("hybrid", null, devices).Select(a => a.ToString()));
         Assert.Equal(new[] { "cpu" }, KimodoDevicePlanner.Plan("cpu", null, devices).Select(a => a.ToString()));
         // A chosen card is the only one tried; Auto still ends on the processor.
         Assert.Equal(new[] { "gpu on Vulkan1", "hybrid on Vulkan1", "cpu" }, KimodoDevicePlanner.Plan("auto", "vulkan1", devices).Select(a => a.ToString()));
@@ -39,7 +39,12 @@ public class KimodoDeviceTests
         var cpuOnly = new[] { D("CPU", "cpu", "CPU") };
         Assert.Equal(new[] { "cpu" }, KimodoDevicePlanner.Plan("auto", null, cpuOnly).Select(a => a.ToString()));
         Assert.Equal("device_unavailable", Assert.Throws<MotionGenerationException>(() => KimodoDevicePlanner.Plan("gpu", null, cpuOnly)).Code);
-        Assert.Equal("device_unavailable", Assert.Throws<MotionGenerationException>(() => KimodoDevicePlanner.Plan("hybrid", null, cpuOnly)).Code);
+        // No graphics card at all: Auto and "graphics card + processor" run on the processor (1.0.1); a chosen card that is gone too.
+        Assert.Equal(new[] { "cpu" }, KimodoDevicePlanner.Plan("hybrid", null, cpuOnly).Select(a => a.ToString()));
+        Assert.Equal(new[] { "cpu" }, KimodoDevicePlanner.Plan("auto", "CUDA0", cpuOnly).Select(a => a.ToString()));
+        Assert.Equal(new[] { "cpu" }, KimodoDevicePlanner.Plan("hybrid", "Vulkan0", cpuOnly).Select(a => a.ToString()));
+        Assert.True(KimodoDevicePlanner.NoGpu(cpuOnly));
+        Assert.False(KimodoDevicePlanner.NoGpu(null));
         var e = Assert.Throws<MotionGenerationException>(() => KimodoDevicePlanner.Plan("gpu", "CUDA3", new[] { D("Vulkan0", "gpu", "Vulkan") }));
         Assert.Contains("Vulkan0", e.Message);
         // A 0.2 runner lists no devices: its own device values.
@@ -115,6 +120,36 @@ public class KimodoDeviceTests
         var e2 = await Assert.ThrowsAsync<MotionGenerationException>(() => none.GenerateAsync(Req(), null, CancellationToken.None));
         Assert.Equal("device_unavailable", e2.Code);
         Assert.Contains("Processor only", e2.Message);
+    }
+
+    [Theory]
+    [InlineData("auto")]
+    [InlineData("hybrid")]
+    public async Task No_Gpu_Runs_On_The_Processor_And_Says_Why(string device)
+    {
+        // The user's 1.0.0 report: no CUDA or Vulkan device. Automatic (and the advisor's "graphics card + processor") must still generate.
+        using var k = new KimodoProvider(With("", device: device));
+        var r = await k.GenerateAsync(Req(), null, CancellationToken.None);
+        Assert.Equal("cpu", r.Metadata["kimodo.device"]);
+        Assert.StartsWith("processor", r.Metadata["kimodo.generatedOn"]);
+        Assert.True(r.Metadata.ContainsKey("kimodo.noGpu"));
+        Assert.StartsWith(KimodoGpuDiagnosis.NoGpuWarning, r.Warnings[0]);
+        Assert.DoesNotContain(r.Warnings, w => w.Contains("failed attempt"));
+        Assert.Contains(k.RecentLog(), l => l.Contains("found no graphics card") && l.Contains("generating on the processor"));
+        // The check (فحص) says the same and names the reason.
+        var d = await k.DiagnoseAsync(true, CancellationToken.None);
+        Assert.Contains(d.Warnings, w => w.StartsWith(KimodoProvider.NoGpuCheck, StringComparison.Ordinal));
+        Assert.True(d.Details.ContainsKey("gpuProblems"));
+    }
+
+    [Fact]
+    public async Task A_Gpu_Run_Carries_No_No_Gpu_Warning()
+    {
+        using var k = new KimodoProvider(With("vulkan"));
+        var r = await k.GenerateAsync(Req(), null, CancellationToken.None);
+        Assert.False(r.Metadata.ContainsKey("kimodo.noGpu"));
+        Assert.DoesNotContain(r.Warnings, w => w.StartsWith(KimodoGpuDiagnosis.NoGpuWarning, StringComparison.Ordinal));
+        Assert.Empty(k.GpuProblems());
     }
 
     [Fact]

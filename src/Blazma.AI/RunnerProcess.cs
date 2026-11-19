@@ -215,7 +215,7 @@ internal sealed class RunnerProcess : IDisposable
         {
             if (_process.WaitForExit(2000))
             {
-                code = $" (exit code {_process.ExitCode})";
+                code = $" (exit code {_process.ExitCode})" + ExitCodeHint(_process.ExitCode);
                 // The process is gone, so stderr reaches end of input shortly: let its last lines arrive.
                 _stderrDone.Wait(1000);
             }
@@ -225,6 +225,18 @@ internal sealed class RunnerProcess : IDisposable
         return new MotionGenerationException("runner_crashed",
             $"{what}{code}." + (tail.Length > 0 ? $" Last log lines:\n{tail}" : ""), inner);
     }
+
+    /// <summary>Windows loader failures, which end the process before it prints anything (DECISIONS D49).</summary>
+    internal static string ExitCodeHint(int exitCode) => unchecked((uint)exitCode) switch
+    {
+        0xC0000135 => " " + MissingLibraryHint,
+        0xC0000139 => " " + OldLibraryHint,
+        0xC000007B => " A library next to kimodo-runner is not a 64-bit Windows library (0xC000007B): reinstall Blazma Animation.",
+        _ => "",
+    };
+
+    internal const string MissingLibraryHint = "A library kimodo-runner needs is missing (0xC0000135, usually the Microsoft Visual C++ runtime, which Blazma ships in tools\\kimodo): reinstall Blazma Animation.";
+    internal const string OldLibraryHint = "A library kimodo-runner uses is too old (0xC0000139, usually an old Microsoft Visual C++ runtime): reinstall Blazma Animation.";
 
     void FailAll(MotionGenerationException e)
     {

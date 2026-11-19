@@ -108,7 +108,17 @@ foreach (var line in queue.GetConsumingEnumerable())
         case "hello":
             var proto = int.TryParse(Environment.GetEnvironmentVariable("FAKE_KIMODO_PROTOCOL"), out var pv) ? pv : 1;
             var hello = new JsonObject { ["protocol"] = proto, ["runner"] = "fake-kimodo-runner", ["version"] = "0.0-test", ["kimodoAbi"] = 1, ["skeletons"] = new JsonArray("soma30") };
-            if (DeviceList() is { } devs) { hello["devices"] = devs; hello["deviceModes"] = new JsonArray("auto", "gpu", "cpu", "hybrid"); }
+            if (DeviceList() is { } devs)
+            {
+                hello["devices"] = devs;
+                hello["deviceModes"] = new JsonArray("auto", "gpu", "cpu", "hybrid");
+                // Like GGML: a backend whose library did not load is not registered at all.
+                var regs = new JsonArray();
+                if (fakeDevices!.Contains("cuda")) regs.Add("CUDA");
+                if (fakeDevices!.Contains("vulkan") || fakeDevices!.Contains("igpu")) regs.Add("Vulkan");
+                regs.Add("CPU");
+                hello["backends"] = regs;
+            }
             Result(id, hello);
             break;
         case "diagnose":

@@ -389,7 +389,7 @@ public partial class GenerateMotionDialog : ConfirmationDialog
         error.Contains("is not available", StringComparison.Ordinal) ? AiText.Reason(error[(error.IndexOf(':') + 1)..].Trim())
         : error.Contains("no bone mapped to 'pelvis'", StringComparison.Ordinal) || error.Contains("mapped to 'pelvis'", StringComparison.Ordinal)
             ? Tr("This character has no bone mapped to the pelvis. Map its bones first (Rigging menu).")
-        : error;
+        : AiText.Isolate(error);
 
     void Problem(string message)
     {
@@ -532,7 +532,7 @@ public partial class GenerateMotionDialog : ConfirmationDialog
             {
                 var r = new HBoxContainer();
                 r.AddThemeConstantOverride("separation", 8);
-                var msg = W.Label(g.Applied ? string.Format(CultureInfo.InvariantCulture, Tr("Corrected: “{0}” was read as {1}"), g.Word, string.Join(", ", g.Candidates)) : g.Message, g.Applied ? "Faint" : "Dim", false);
+                var msg = W.Label(g.Applied ? string.Format(CultureInfo.InvariantCulture, Tr("Corrected: “{0}” was read as {1}"), AiText.Isolate(g.Word), AiText.Isolate(string.Join(", ", g.Candidates))) : g.Message, g.Applied ? "Faint" : "Dim", false);
                 msg.TextDirection = Control.TextDirection.Auto;
                 r.AddChild(msg);
                 if (!g.Applied && g.Candidates.Count > 0)

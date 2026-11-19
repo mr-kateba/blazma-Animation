@@ -23,6 +23,12 @@ on:
         description: "Also build GGML's CUDA backend for Windows (NVIDIA; takes much longer)"
         type: boolean
         default: true
+      cuda_version:
+        description: "CUDA toolkit for the CUDA backend (12.8 or later is needed for GeForce RTX 50 / Blackwell, sm_120)"
+        default: "12.8.1"
+      cuda_architectures:
+        description: "CMAKE_CUDA_ARCHITECTURES (GGML's default list plus Blackwell 12.0)"
+        default: "50-virtual;61-virtual;70-virtual;75-virtual;80-virtual;86-real;89-real;90-virtual;120-real;120-virtual"
 
 permissions:
   contents: read
@@ -162,10 +168,10 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install the CUDA toolkit 12.4 (compiler, runtime, cuBLAS only)
+      - name: Install the CUDA toolkit (compiler, runtime, cuBLAS only)
         uses: Jimver/cuda-toolkit@b8bf9c6c28f8a92fbb04dcfcaee872e60c57462d # v0.2.36
         with:
-          cuda: "12.4.1"
+          cuda: ${{ inputs.cuda_version }}
           method: network
           sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "thrust", "visual_studio_integration"]'
           use-github-cache: false
@@ -176,7 +182,9 @@ jobs:
         run: |
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
           rem kimodo.cpp does not use flash attention: skip those kernels (most of GGML's CUDA build time).
-          cmake -S ai/kimodo -B ai/kimodo/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKIMODO_RUNNER_VULKAN=OFF -DKIMODO_RUNNER_CUDA=ON -DGGML_CUDA_FA=OFF -DGGML_CUDA_NCCL=OFF
+          rem The architectures: GGML's default list (older cards through PTX) plus native Blackwell (12.0, GeForce RTX 50), which
+          rem needs CUDA 12.8 or later. The release writes them into cuda-backend.json so the app only offers the package to cards it runs on.
+          cmake -S ai/kimodo -B ai/kimodo/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKIMODO_RUNNER_VULKAN=OFF -DKIMODO_RUNNER_CUDA=ON -DGGML_CUDA_FA=OFF -DGGML_CUDA_NCCL=OFF "-DCMAKE_CUDA_ARCHITECTURES=${{ inputs.cuda_architectures }}"
 
       - name: Build
         shell: cmd
@@ -193,6 +201,11 @@ jobs:
           foreach ($f in "cudart64_12.dll", "cublas64_12.dll", "cublasLt64_12.dll") {
             Copy-Item (Join-Path $env:CUDA_PATH "bin/$f") $out
           }
+          # What scripts/build-release.sh writes into cuda-backend.json ("cuda", "computeCapabilities").
+          $nvcc = & (Join-Path $env:CUDA_PATH "bin/nvcc.exe") --version | Select-String -Pattern 'release ([0-9.]+), V([0-9.]+)'
+          $ver = if ($nvcc) { $nvcc.Matches[0].Groups[2].Value } else { "${{ inputs.cuda_version }}" }
+          "cuda=$ver`narchitectures=${{ inputs.cuda_architectures }}" | Set-Content -Encoding ascii (Join-Path $out "CUDA_BUILD.txt")
+          Get-Content (Join-Path $out "CUDA_BUILD.txt")
           Get-ChildItem $out | Select-Object Name, Length | Format-Table -AutoSize
 
       - name: Check ggml-cuda.dll's dependencies and that the runner still works without an NVIDIA driver

@@ -330,6 +330,71 @@ public sealed class CudaBackendTests : IDisposable
         Assert.Empty(_requests);
     }
 
+    static HardwareReport Pc(params GpuInfo[] gpus) => new("Windows", "X64", 8, 16 * HardwareReport.GiB, gpus, Array.Empty<string>());
+
+    [Fact]
+    public void NvidiaSmi_Compute_Capability_And_Names()
+    {
+        var g = HardwareProbe.ParseNvidiaSmi("NVIDIA GeForce RTX 5070, 12227, 12.0\nNVIDIA GeForce RTX 3060, 12288, 8.6\n");
+        Assert.Equal(new double?[] { 12.0, 8.6 }, g.Select(x => x.ComputeCapability));
+        Assert.Equal(12227L * 1024 * 1024, g[0].VramBytes);
+        Assert.Equal("NVIDIA GeForce RTX 5070", g[0].Name);
+        // An old driver without compute_cap: the two-column answer still parses.
+        var old = Assert.Single(HardwareProbe.ParseNvidiaSmi("NVIDIA GeForce GTX 1080, 8192\n"));
+        Assert.Null(old.ComputeCapability);
+        Assert.Equal(8192L * 1024 * 1024, old.VramBytes);
+        // Without nvidia-smi the name tells the Blackwell cards a CUDA 12.4 build cannot run natively.
+        Assert.Equal(12.0, new GpuInfo("NVIDIA GeForce RTX 5070", "NVIDIA", null, "registry").CudaComputeCapability);
+        Assert.Equal(12.0, new GpuInfo("NVIDIA GeForce RTX 5090 D", "NVIDIA", null, "registry").CudaComputeCapability);
+        Assert.Equal(12.0, new GpuInfo("NVIDIA RTX PRO 6000 Blackwell Workstation Edition", "NVIDIA", null, "registry").CudaComputeCapability);
+        Assert.Null(new GpuInfo("NVIDIA GeForce RTX 4070", "NVIDIA", null, "registry").CudaComputeCapability);
+        Assert.Null(new GpuInfo("AMD Radeon RX 7600", "AMD", null, "registry").CudaComputeCapability);
+        Assert.Equal(8.9, new GpuInfo("NVIDIA GeForce RTX 5070", "NVIDIA", null, "nvidia-smi", false, 8.9).CudaComputeCapability); // nvidia-smi wins
+    }
+
+    [Fact]
+    public void Cuda_12_4_Package_Is_Not_Offered_Or_Used_On_Blackwell()
+    {
+        var p124 = Package();
+        Assert.Equal("12.4", p124.Cuda);
+        Assert.Empty(p124.ComputeCapabilities);
+        Assert.Equal(9.0, p124.MaxComputeCapability);
+        var rtx5070 = new GpuInfo("NVIDIA GeForce RTX 5070", "NVIDIA", 12 * HardwareReport.GiB, "nvidia-smi", false, 12.0);
+        var rtx5070NoSmi = new GpuInfo("NVIDIA GeForce RTX 5070", "NVIDIA", 12 * HardwareReport.GiB, "registry", false);
+        var rtx4070 = new GpuInfo("NVIDIA GeForce RTX 4070", "NVIDIA", 12 * HardwareReport.GiB, "nvidia-smi", false, 8.9);
+        var unknown = new GpuInfo("NVIDIA GeForce RTX 3060", "NVIDIA", 12 * HardwareReport.GiB, "registry", false);
+        Assert.False(p124.Supports(rtx5070));
+        Assert.False(p124.Supports(rtx5070NoSmi));
+        Assert.True(p124.Supports(rtx4070));
+        Assert.True(p124.Supports(unknown)); // unknown: as before (offered)
+
+        var missing = new CudaBackendState(CudaBackendStatus.NotInstalled, Dir, null, 0, 0);
+        Assert.False(CudaBackend.ShouldOffer(missing, Pc(rtx5070), p124));
+        Assert.Same(rtx5070, CudaBackend.TooNew(p124, Pc(rtx5070)));
+        Assert.Same(rtx5070NoSmi, CudaBackend.TooNew(p124, Pc(rtx5070NoSmi)));
+        Assert.True(CudaBackend.ShouldOffer(missing, Pc(rtx4070), p124));
+        Assert.Null(CudaBackend.TooNew(p124, Pc(rtx4070)));
+        // One card that can use it is enough; no package or no NVIDIA card: nothing to say.
+        Assert.Null(CudaBackend.TooNew(p124, Pc(rtx5070, rtx4070)));
+        Assert.Null(CudaBackend.TooNew(null, Pc(rtx5070)));
+        Assert.Null(CudaBackend.TooNew(p124, Pc(new GpuInfo("AMD Radeon RX 7600", "AMD", null, "registry"))));
+
+        // A CUDA 12.8 build with sm_120 (kimodo-runner.yml's new default) runs on it.
+        var o = JsonNode.Parse(Json())!.AsObject();
+        o["cuda"] = "12.8.93";
+        o["computeCapabilities"] = new JsonArray(50, 61, 70, 75, 80, 86, 89, 90, 120);
+        var p128 = CudaBackendPackage.Parse(o.ToJsonString());
+        Assert.Equal(12.0, p128.MaxComputeCapability);
+        Assert.True(p128.Supports(rtx5070));
+        Assert.True(CudaBackend.ShouldOffer(missing, Pc(rtx5070), p128));
+        o["computeCapabilities"] = new JsonArray(86, 89, 90);
+        Assert.False(CudaBackendPackage.Parse(o.ToJsonString()).Supports(rtx5070)); // the list wins over the version
+        o.Remove("computeCapabilities");
+        Assert.Equal(12.0, CudaBackendPackage.Parse(o.ToJsonString()).MaxComputeCapability); // 12.8 without a list
+        o["computeCapabilities"] = new JsonArray(5000);
+        Assert.Throws<InvalidDataException>(() => CudaBackendPackage.Parse(o.ToJsonString()));
+    }
+
     [Fact]
     public void Offer_And_Hint_Need_An_NVIDIA_Card()
     {
