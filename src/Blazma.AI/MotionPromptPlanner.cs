@@ -93,7 +93,7 @@ public static partial class MotionPromptPlanner
         ["kick"] = ("kick", 0), ["punch"] = ("punch", 0), ["slap"] = ("punch", 1), ["slash"] = ("punch", 1), ["stab"] = ("punch", 1), ["headbutt"] = ("punch", 1),
         ["wave"] = ("wave", 0), ["point"] = ("point", 0), ["salute"] = ("salute", 0), ["bow"] = ("bow", 0), ["clap"] = ("clap", 0),
         ["dance"] = ("dance", 0), ["idle"] = ("idle", 0), ["stop"] = ("idle", 1),
-        ["step_back"] = ("step_back", 0), ["dodge"] = ("dodge", 0), ["roll"] = ("roll", 0), ["climb"] = ("climb", 0), ["swim"] = ("swim", 0),
+        ["step_back"] = ("step_back", 0), ["dodge"] = ("dodge", 0), ["roll"] = ("roll", 0), ["flip"] = ("flip", 0), ["backflip"] = ("flip", 1), ["climb"] = ("climb", 0), ["swim"] = ("swim", 0),
         ["throw"] = ("throw", 0), ["catch"] = ("catch", 0), ["pick_up"] = ("pick_up", 0), ["carry"] = ("carry", 0),
         ["push"] = ("push", 0), ["pull"] = ("pull", 0), ["block"] = ("block", 0),
         ["cheer"] = ("cheer", 0), ["celebrate"] = ("cheer", 1), ["cry"] = ("cry", 0), ["laugh"] = ("laugh", 1), ["smile"] = ("laugh", 0),
@@ -112,7 +112,7 @@ public static partial class MotionPromptPlanner
         ["crouch"] = 1.5, ["kneel"] = 1.8, ["sit"] = 2, ["stand_up"] = 1.5, ["lie_down"] = 2.5, ["sleep"] = 3, ["crawl"] = 3.5,
         ["kick"] = 1.2, ["punch"] = 1, ["slap"] = 1, ["slash"] = 1.2, ["stab"] = 1.2, ["headbutt"] = 1.2,
         ["wave"] = 2, ["point"] = 1.5, ["salute"] = 1.5, ["bow"] = 2, ["clap"] = 2.5, ["dance"] = 4, ["idle"] = 1.5, ["stop"] = 1.5,
-        ["step_back"] = 1.2, ["dodge"] = 1, ["roll"] = 1.5, ["climb"] = 3, ["swim"] = 4, ["throw"] = 1.2, ["catch"] = 1.2, ["pick_up"] = 1.8, ["carry"] = 4,
+        ["step_back"] = 1.2, ["dodge"] = 1, ["roll"] = 1.5, ["flip"] = 1.5, ["backflip"] = 1.5, ["climb"] = 3, ["swim"] = 4, ["throw"] = 1.2, ["catch"] = 1.2, ["pick_up"] = 1.8, ["carry"] = 4,
         ["push"] = 2, ["pull"] = 2, ["block"] = 1.2, ["cheer"] = 3, ["celebrate"] = 3.5, ["cry"] = 3.5, ["laugh"] = 3, ["smile"] = 2, ["think"] = 3,
         ["talk"] = 3, ["phone_call"] = 4, ["shout"] = 2.5, ["sing"] = 4, ["get_hit"] = 1.5, ["startle"] = 1.2, ["tremble"] = 3,
         ["fight_stance"] = 1.8, ["aim"] = 2, ["shoot"] = 1.5, ["drink"] = 2.5, ["eat"] = 3, ["yawn"] = 2.5, ["stretch"] = 3, ["nod"] = 1.2,
@@ -351,7 +351,9 @@ public static partial class MotionPromptPlanner
         var found = new List<(FuzzyKey Key, double Dist, int Len)>();
         foreach (var stem in stems)
         {
-            var limit = MaxApply(stem.Length, arabic) + (arabic ? 0.5 : 0);
+            // A hint ("did you mean") may be a little further than a fix, but only for longer words: a 4-5 letter Arabic word one
+            // letter away from a dictionary word is usually another word altogether («خليه» is not «خلسه»).
+            var limit = MaxApply(stem.Length, arabic) + (arabic && stem.Length >= 6 ? 0.5 : 0);
             if (stem.Length <= 3) continue;
             for (var len = stem.Length - 2; len <= stem.Length + 2; len++)
             {
@@ -370,10 +372,10 @@ public static partial class MotionPromptPlanner
         var distinct = top.Select(f => (f.Key.Entry.Kind, f.Key.Entry.Value)).Distinct().Count();
         var first = top[0];
         var conf = Math.Round(Math.Max(0.3, 1 - first.Dist / first.Len), 2);
-        var names = found.OrderBy(f => f.Dist).Select(f => f.Key.Display).Distinct().Take(3).ToList();
+        var names = found.Where(f => 1 - f.Dist / f.Len >= 0.6).OrderBy(f => f.Dist).Select(f => f.Key.Display).Distinct().Take(3).ToList();
         if (distinct == 1 && first.Dist <= MaxApply(first.Len, arabic) && conf >= 0.6)
             return new Res(first.Key.Entry, conf, false, first.Key.Display, new[] { first.Key.Display });
-        return new Res(null, 0, false, null, names);
+        return names.Count == 0 ? null : new Res(null, 0, false, null, names);
     }
 
     static bool Soft(char c) => c is 'ا' or 'و' or 'ي' or 'ه';
@@ -718,8 +720,14 @@ public static partial class MotionPromptPlanner
     static Reading Read(string source, List<Token> tokens, List<Item> items)
     {
         var words = items.Where(i => !i.Punct && i.Entry?.Kind is not K.Connector).ToList();
-        // Drop a leading joint «و»/"and" left by the split.
+        // Drop a leading joint «و»/"and" left by the split, and a causative «خليه» / «اجعلها» ("make him …") with the person words after
+        // it («خلي الرجال يمشي» → «يمشي»): the step shows the action the user asked for.
         while (words.Count > 0 && words[0].Entry?.Kind == K.And) words.RemoveAt(0);
+        if (words.Count > 1 && words[0].Entry is { Kind: K.Filler, Value: "causative" })
+        {
+            words.RemoveAt(0);
+            while (words.Count > 1 && words[0].Entry is { Kind: K.Filler } && !Unknown(words[0]) && words[0].Seconds is null) words.RemoveAt(0);
+        }
         var text = words.Count == 0 ? "" : source[tokens[words[0].Start].Start..tokens[words[^1].End - 1].End].Trim();
         var arabic = HasArabic(text);
 
@@ -986,6 +994,8 @@ public static partial class MotionPromptPlanner
             "step_back" => steps is not null ? "a person takes " + steps + " backward" + adv : "a person steps backward" + adv,
             "dodge" => "a person dodges " + (dir is "left" or "right" ? DirText(dir, "") : "to the side") + adv,
             "roll" => "a person rolls forward on the ground",
+            "flip" => dir == "backward" ? "a person does a backflip" : "a person does a forward flip",
+            "backflip" => "a person does a backflip",
             "climb" => "a person climbs up" + adv,
             "swim" => "a person swims in place with freestyle arm strokes" + adv,
             "throw" => "a person throws something forward" + adv,
