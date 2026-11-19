@@ -21,6 +21,88 @@ public class MotionPromptPlannerTests
     }
 
     [Fact]
+    public void UsersGulfSentence_Run_Flip_Die_WithoutFillerOrScaryHints()
+    {
+        // The 1.0.0 report: «خليه يجري و يتشقبل و يموت» showed «خليه يجري», hinted «خلسه» and read «يتشقبل» as rolling on the ground.
+        var p = MotionPromptPlanner.Plan("خليه يجري و يتشقبل و يموت", 6);
+        Assert.Equal(new[] { "run", "flip", "die" }, Actions(p));
+        Assert.Equal(new[] { "يجري", "يتشقبل", "يموت" }, p.Segments.Select(s => s.Text));
+        Assert.Equal("a person runs forward", p.Segments[0].Caption);
+        Assert.Equal("a person does a forward flip", p.Segments[1].Caption);
+        Assert.Equal("a person falls to the ground and dies", p.Segments[2].Caption);
+        Assert.All(p.Segments, s => Assert.Empty(s.Suggestions));
+        Assert.All(p.Segments, s => Assert.Equal(1, s.Confidence));
+        Assert.DoesNotContain(p.Warnings, w => w.Contains("خلسه") || w.Contains("was read as"));
+    }
+
+    [Theory]
+    [InlineData("خليه يمشي", "walk", "يمشي")]
+    [InlineData("خلّيه يمشي", "walk", "يمشي")]
+    [InlineData("خله يرقص", "dance", "يرقص")]
+    [InlineData("خلها تقفز", "jump", "تقفز")]
+    [InlineData("خليها تقفز", "jump", "تقفز")]
+    [InlineData("خليه يطيح", "fall", "يطيح")]
+    [InlineData("خليه ينط", "jump", "ينط")]
+    [InlineData("خلي الشخصية تمشي", "walk", "تمشي")]
+    [InlineData("خلي الرجال يركض", "run", "يركض")]
+    [InlineData("خلّ الولد يرقص", "dance", "يرقص")]
+    [InlineData("اجعله يجلس", "sit", "يجلس")]
+    [InlineData("اجعلها تلوح", "wave", "تلوح")]
+    [InlineData("خلوه يركض بسرعة", "run", "يركض بسرعة")]
+    public void GulfCausatives_AreFillers_AndTheStepShowsTheAction(string prompt, string action, string text)
+    {
+        var p = MotionPromptPlanner.Plan(prompt, 3);
+        var s = Assert.Single(p.Segments);
+        Assert.Equal(action, s.Action);
+        Assert.Equal(text, s.Text);
+        Assert.True(s.Understood);
+        Assert.Empty(s.Suggestions);
+        Assert.Empty(s.Unrecognized);
+    }
+
+    [Theory]
+    [InlineData("يتشقلب", "a person does a forward flip")]
+    [InlineData("تشقلب", "a person does a forward flip")]
+    [InlineData("شقلبة", "a person does a forward flip")]
+    [InlineData("يتشقبل", "a person does a forward flip")]
+    [InlineData("يعمل شقلبة", "a person does a forward flip")]
+    [InlineData("يتشقلب للخلف", "a person does a backflip")]
+    [InlineData("front flip", "a person does a forward flip")]
+    [InlineData("somersault", "a person does a forward flip")]
+    [InlineData("backflip", "a person does a backflip")]
+    [InlineData("يتدحرج", "a person rolls forward on the ground")]
+    [InlineData("يتدحرج على الأرض", "a person rolls forward on the ground")]
+    public void Somersault_Is_A_Flip_And_Rolling_Stays_On_The_Ground(string text, string caption)
+    {
+        var t = MotionPromptPlanner.Translate(text);
+        Assert.Equal(caption, t.Caption);
+        Assert.Empty(t.Suggestions); // the common misspelling «يتشقبل» is accepted without a "corrected" note
+        Assert.Equal(1, t.Confidence);
+    }
+
+    [Theory]
+    [InlineData("خليه")]
+    [InlineData("خلوه")]
+    [InlineData("اجعله")]
+    [InlineData("خليني")]
+    public void Causatives_Never_Produce_A_Did_You_Mean(string word)
+    {
+        var p = MotionPromptPlanner.Plan(word + " يمشي", 3);
+        Assert.All(p.Segments, s => Assert.Empty(s.Suggestions));
+    }
+
+    [Fact]
+    public void Short_Words_Get_No_Far_Fetched_Hints()
+    {
+        // A 4-letter word one unrelated letter away from a dictionary word is another word, not a typo: no hint.
+        var t = MotionPromptPlanner.Translate("يمشي خلبه");
+        Assert.DoesNotContain(t.Suggestions, s => s.Candidates.Contains("خلسه"));
+        // Real typos are still repaired.
+        Assert.Equal("run", MotionPromptPlanner.Translate("يركظ").Action);
+        Assert.Equal("run", MotionPromptPlanner.Translate("runing").Action);
+    }
+
+    [Fact]
     public void UsersSentence_IsLookBack_Run_Die_InOrder()
     {
         var p = MotionPromptPlanner.Plan("في واحد وراك اجري وبعدها موت", 6);
@@ -130,6 +212,7 @@ public class MotionPromptPlannerTests
             ("يتثاءب", "yawn"), ("يتمطى", "stretch"), ("يومئ", "nod"), ("يرفض", "shake_head"), ("يهز كتفيه", "shrug"), ("يحضن", "hug"), ("يتصل", "phone_call"), ("يتكلم", "talk"), ("يصفع", "slap"),
             ("يطعن", "stab"), ("يضرب بالسيف", "slash"), ("يصد", "block"), ("يمسك", "catch"), ("يدفع", "push"), ("يسحب", "pull"), ("يحمل", "carry"), ("يحتفل", "celebrate"), ("يهتف", "cheer"),
             ("يؤدي التحية العسكرية", "salute"), ("ينحني احتراما", "bow"), ("headbutt", "headbutt"),
+            ("يتشقلب", "flip"), ("somersault", "flip"), ("يتشقلب للخلف", "backflip"), ("backflip", "backflip"),
         };
         foreach (var (text, action) in cases)
         {
@@ -147,10 +230,10 @@ public class MotionPromptPlannerTests
     [Fact]
     public void Unknown_English_IsKeptAsWritten_UnknownArabic_IsFlagged()
     {
-        var e = MotionPromptPlanner.Plan("do a backflip", 3).Segments[0];
+        var e = MotionPromptPlanner.Plan("do a handstand", 3).Segments[0];
         Assert.True(e.Understood);
         Assert.Null(e.Action);
-        Assert.Equal("do a backflip", e.Caption);
+        Assert.Equal("do a handstand", e.Caption);
         Assert.Equal("a person walks to the door", MotionPromptPlanner.Plan("a person walks to the door for 3 seconds", 3).Segments[0].Caption);
 
         var p = MotionPromptPlanner.Plan("يمشي ثم يطبخ الرز", 4);
@@ -239,7 +322,7 @@ public class MotionPromptPlannerTests
     // Egyptian
     [InlineData("بيجري وبعدين بيقع", "run,fall")]
     [InlineData("هيجري وبعد كده هيموت", "run,die")]
-    [InlineData("ينط ثم يتشقلب", "jump,roll")]
+    [InlineData("ينط ثم يتشقلب", "jump,flip")]
     [InlineData("اتخض وبعدين جري", "startle,run")]
     [InlineData("يسقف ويهلل", "clap,cheer")]
     [InlineData("يوطي ويشيل حاجة", "crouch,pick_up")]
@@ -433,7 +516,7 @@ public class MotionPromptPlannerTests
         Assert.True(partial.Understood);
         Assert.InRange(partial.Confidence, 0.4, 0.95);
         Assert.NotEmpty(partial.Unrecognized);
-        var english = MotionPromptPlanner.Plan("do a backflip", 3).Segments[0];
+        var english = MotionPromptPlanner.Plan("do a handstand", 3).Segments[0];
         Assert.InRange(english.Confidence, 0.1, 0.7);
     }
 
