@@ -154,6 +154,8 @@ stage_vcruntime() { # source dir, runner stage dir
   local src="$1" dst="$2" f low v
   [ -d "$src" ] || die "kimodo-runner is bundled but the Visual C++ runtime folder $src is missing (release.yml's vcruntime job, or VC_RUNTIME_WIN=<folder with msvcp140.dll ... vcomp140.dll and SHA256SUMS-vcruntime.txt>)"
   [ -f "$src/SHA256SUMS-vcruntime.txt" ] || die "Visual C++ runtime: $src/SHA256SUMS-vcruntime.txt missing"
+  # The list is written on Windows (CRLF, maybe a BOM): normalise it before reading it line by line.
+  sed -i -e 's/\r$//' -e '1s/^\xEF\xBB\xBF//' "$src/SHA256SUMS-vcruntime.txt"
   (cd "$src" && sha256sum -c --quiet SHA256SUMS-vcruntime.txt) || die "Visual C++ runtime: checksum mismatch in $src"
   # Checksum lists that came with the runner must not name the runtime files (a runner build may have carried its own copy).
   for sums in "$dst"/SHA256SUMS*.txt; do
